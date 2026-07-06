@@ -1,0 +1,17 @@
+# Copyrighted Ambrosia game data — never commit (see README "Legal shape")
+EV_data/
+
+# Generated from EV_data by the pipeline; contain copyrighted content
+evdata.json
+evassets/
+galaxy.html
+flight.html
+
+# C++ build artifacts
+cpp/evflight
+cpp/evflight_dbg
+cpp/test_frame.png
+
+# Editor/OS noise
+*.swp
+.DS_Store
