@@ -1,0 +1,66 @@
+{
+  "name": "spöb",
+  "source": "TMPL 129 (\"spöb\") in EV Data.rsrc",
+  "fields": [
+    [
+      "xPos",
+      "i16"
+    ],
+    [
+      "yPos",
+      "i16"
+    ],
+    [
+      "Type",
+      "i16"
+    ],
+    [
+      "Flags",
+      "u32"
+    ],
+    [
+      "System",
+      "i16"
+    ],
+    [
+      "TechLevel",
+      "i16"
+    ],
+    [
+      "SpecialTech1",
+      "i16"
+    ],
+    [
+      "SpecialTech2",
+      "i16"
+    ],
+    [
+      "SpecialTech3",
+      "i16"
+    ],
+    [
+      "Govt",
+      "i16"
+    ],
+    [
+      "MinCoolness",
+      "i16"
+    ],
+    [
+      "CustPicID",
+      "i16"
+    ],
+    [
+      "CustSndID",
+      "i16"
+    ],
+    [
+      "DefDude",
+      "i16"
+    ],
+    [
+      "DefCount",
+      "i16"
+    ]
+  ]
+}

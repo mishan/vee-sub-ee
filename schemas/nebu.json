@@ -1,0 +1,22 @@
+{
+  "name": "nëbu",
+  "source": "TMPL 140 (\"nëbu\") in EV Data.rsrc",
+  "fields": [
+    [
+      "XPos",
+      "i16"
+    ],
+    [
+      "YPos",
+      "i16"
+    ],
+    [
+      "XSize",
+      "i16"
+    ],
+    [
+      "YSize",
+      "i16"
+    ]
+  ]
+}

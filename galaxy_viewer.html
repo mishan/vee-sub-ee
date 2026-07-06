@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>EV Galaxy Map</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #05060d; color: #cfd6e4;
+    font: 13px/1.45 -apple-system, "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+  #map { display: block; cursor: grab; }
+  #map.dragging { cursor: grabbing; }
+  #panel { position: fixed; top: 0; right: 0; width: 320px; max-height: 100vh;
+    overflow-y: auto; background: rgba(10,14,26,.94); border-left: 1px solid #26304a;
+    padding: 14px 16px; box-sizing: border-box; display: none; }
+  #panel h2 { margin: 0 0 2px; font-size: 17px; color: #fff; }
+  #panel h3 { margin: 14px 0 4px; font-size: 13px; color: #8fa3c8;
+    border-bottom: 1px solid #26304a; padding-bottom: 3px; }
+  #panel .govt { font-size: 12px; }
+  #panel .desc { font-size: 12px; color: #9aa7bd; white-space: pre-wrap; margin: 4px 0 10px; }
+  #panel .meta { color: #6b7a96; font-size: 11px; }
+  #hud { position: fixed; left: 10px; bottom: 8px; color: #4d5b76; font-size: 11px; }
+  #drop { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 8px; color: #8fa3c8; }
+  #drop.hidden, #panel .hidden { display: none; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+    margin-right: 5px; vertical-align: baseline; }
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+<div id="panel"></div>
+<div id="hud">scroll: zoom · drag: pan · click: system details</div>
+<div id="drop" class="hidden">
+  <div style="font-size:18px">EV Galaxy Map</div>
+  <div>Drop <code>evdata.json</code> here (or build with <code>evexport.js --map</code>)</div>
+  <input type="file" id="file" accept=".json">
+</div>
+<script>
+'use strict';
+let DATA = /*__EVDATA__*/null;
+
+const canvas = document.getElementById('map');
+const ctx = canvas.getContext('2d');
+const panel = document.getElementById('panel');
+const drop = document.getElementById('drop');
+
+// Distinct hues per govt id; -1 (independent) gets grey.
+const PALETTE = ['#e5c07b','#61afef','#e06c75','#98c379','#c678dd','#56b6c2',
+  '#d19a66','#f38ba8','#8bd5a0','#7aa2f7','#eba0ac','#94e2d5','#f9e2af'];
+function govtColor(id) {
+  if (id == null || id < 0) return '#7a8499';
+  return PALETTE[(id - 128) % PALETTE.length];
+}
+function govtName(id) {
+  const g = DATA.types.govt && DATA.types.govt[id];
+  return g ? g.name : (id < 0 ? 'Independent' : 'govt ' + id);
+}
+
+const view = { x: 0, y: 0, scale: 3.2 };
+function resize() {
+  canvas.width = innerWidth * devicePixelRatio;
+  canvas.height = innerHeight * devicePixelRatio;
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+  draw();
+}
+function toScreen(x, y) {
+  return [innerWidth / 2 + (x - view.x) * view.scale,
+          innerHeight / 2 + (y - view.y) * view.scale];
+}
+
+let selected = null, hovered = null;
+
+function draw() {
+  if (!DATA) return;
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  ctx.clearRect(0, 0, innerWidth, innerHeight);
+  const systems = DATA.types.syst;
+
+  // hyperlinks
+  ctx.lineWidth = 1;
+  for (const [id, s] of Object.entries(systems)) {
+    for (let i = 1; i <= 16; i++) {
+      const c = s['Con' + i];
+      if (c == null || c < 128 || !systems[c] || +id > c) continue; // draw each edge once
+      const [x1, y1] = toScreen(s.xPos, s.yPos);
+      const [x2, y2] = toScreen(systems[c].xPos, systems[c].yPos);
+      const active = selected === +id || selected === c;
+      ctx.strokeStyle = active ? 'rgba(180,200,255,.9)' : 'rgba(90,110,160,.28)';
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    }
+  }
+  // systems
+  for (const [id, s] of Object.entries(systems)) {
+    const [x, y] = toScreen(s.xPos, s.yPos);
+    const r = (selected === +id) ? 6 : (hovered === +id) ? 5 : 3.5;
+    ctx.fillStyle = govtColor(s.Govt);
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+    if (selected === +id) {
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(x, y, 9, 0, 7); ctx.stroke();
+    }
+    if (view.scale > 2.2 || hovered === +id || selected === +id) {
+      ctx.fillStyle = (hovered === +id || selected === +id) ? '#fff' : 'rgba(200,212,235,.75)';
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.fillText(s.name ?? id, x + 8, y + 3.5);
+    }
+  }
+}
+
+function systemAt(mx, my) {
+  if (!DATA) return null;
+  let best = null, bd = 12;
+  for (const [id, s] of Object.entries(DATA.types.syst)) {
+    const [x, y] = toScreen(s.xPos, s.yPos);
+    const d = Math.hypot(mx - x, my - y);
+    if (d < bd) { bd = d; best = +id; }
+  }
+  return best;
+}
+
+function showPanel(id) {
+  const s = DATA.types.syst[id];
+  if (!s) { panel.style.display = 'none'; return; }
+  const spobs = Object.entries(DATA.types.spob || {})
+    .filter(([, p]) => p.System === id);
+  let html = `<h2>${s.name ?? id}</h2>
+    <div class="govt"><span class="dot" style="background:${govtColor(s.Govt)}"></span>
+      ${govtName(s.Govt)} <span class="meta">· syst ${id} · (${s.xPos}, ${s.yPos})</span></div>`;
+  const links = [];
+  for (let i = 1; i <= 16; i++) {
+    const c = s['Con' + i];
+    if (c >= 128 && DATA.types.syst[c]) links.push(DATA.types.syst[c].name ?? c);
+  }
+  if (links.length) html += `<h3>Hyperlinks (${links.length})</h3><div>${links.join(', ')}</div>`;
+  if (spobs.length) {
+    html += `<h3>Planets &amp; stations (${spobs.length})</h3>`;
+    for (const [pid, p] of spobs) {
+      const d = DATA.types.desc && DATA.types.desc[pid];
+      html += `<div><b>${p.name ?? pid}</b> <span class="meta">tech ${p.TechLevel}</span></div>`;
+      const m = p.$sem;
+      if (m) {
+        const svc = [m.station ? 'station' : 'planet',
+          m.stellarType && m.stellarType.replace(/[()]/g, ''),
+          !m.canLand && 'no landing', m.uninhabited && 'uninhabited',
+          m.shipyard && 'shipyard', m.outfitter && 'outfitter', m.bar && 'bar']
+          .filter(Boolean).join(' · ');
+        const pr = Object.entries(m.prices)
+          .map(([c, l]) => `${c} ${l === 'low' ? '▼' : l === 'high' ? '▲' : '·'}`).join('  ');
+        html += `<div class="meta">${svc}</div>` + (pr ? `<div class="meta">${pr}</div>` : '');
+      }
+      if (d && d.Description) html += `<div class="desc">${d.Description}</div>`;
+    }
+  } else {
+    html += `<h3>Planets &amp; stations</h3><div class="meta">none (empty system)</div>`;
+  }
+  panel.innerHTML = html;
+  panel.style.display = 'block';
+}
+
+let dragging = false, moved = false, lx = 0, ly = 0;
+canvas.addEventListener('mousedown', e => { dragging = true; moved = false; lx = e.clientX; ly = e.clientY; canvas.classList.add('dragging'); });
+addEventListener('mouseup', e => {
+  canvas.classList.remove('dragging');
+  if (dragging && !moved) {
+    selected = systemAt(e.clientX, e.clientY);
+    if (selected != null) showPanel(selected); else panel.style.display = 'none';
+    draw();
+  }
+  dragging = false;
+});
+addEventListener('mousemove', e => {
+  if (dragging) {
+    if (Math.abs(e.clientX - lx) + Math.abs(e.clientY - ly) > 2) moved = true;
+    view.x -= (e.clientX - lx) / view.scale;
+    view.y -= (e.clientY - ly) / view.scale;
+    lx = e.clientX; ly = e.clientY;
+    draw();
+  } else {
+    const h = systemAt(e.clientX, e.clientY);
+    if (h !== hovered) { hovered = h; draw(); }
+  }
+});
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const f = Math.exp(-e.deltaY * 0.0015);
+  view.scale = Math.min(30, Math.max(0.8, view.scale * f));
+  draw();
+}, { passive: false });
+addEventListener('resize', resize);
+
+function boot(data) {
+  DATA = data;
+  drop.classList.add('hidden');
+  resize();
+}
+document.getElementById('file').addEventListener('change', e => {
+  e.target.files[0].text().then(t => boot(JSON.parse(t)));
+});
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (f) f.text().then(t => boot(JSON.parse(t)));
+});
+
+if (DATA) boot(DATA);
+else {
+  drop.classList.remove('hidden');
+  fetch('evdata.json').then(r => r.ok ? r.json() : null).then(d => d && boot(d)).catch(() => {});
+}
+</script>
+</body>
+</html>

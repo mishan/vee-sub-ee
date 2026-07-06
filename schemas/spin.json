@@ -1,0 +1,30 @@
+{
+  "name": "spïn",
+  "source": "TMPL 144 (\"spïn\") in EV Data.rsrc",
+  "fields": [
+    [
+      "SpritesID",
+      "i16"
+    ],
+    [
+      "MasksID",
+      "i16"
+    ],
+    [
+      "xSize",
+      "i16"
+    ],
+    [
+      "ySize",
+      "i16"
+    ],
+    [
+      "xTiles",
+      "i16"
+    ],
+    [
+      "yTiles",
+      "i16"
+    ]
+  ]
+}

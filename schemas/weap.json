@@ -1,0 +1,66 @@
+{
+  "name": "wëap",
+  "source": "TMPL 132 (\"wëap\") in EV Data.rsrc",
+  "fields": [
+    [
+      "Reload",
+      "i16"
+    ],
+    [
+      "Count",
+      "i16"
+    ],
+    [
+      "MassDmg",
+      "i16"
+    ],
+    [
+      "EnergyDmg",
+      "i16"
+    ],
+    [
+      "Guidance",
+      "i16"
+    ],
+    [
+      "Speed",
+      "i16"
+    ],
+    [
+      "AmmoType",
+      "i16"
+    ],
+    [
+      "Graphic",
+      "i16"
+    ],
+    [
+      "Inaccuracy",
+      "i16"
+    ],
+    [
+      "Sound",
+      "i16"
+    ],
+    [
+      "Impact",
+      "i16"
+    ],
+    [
+      "ExplodType",
+      "i16"
+    ],
+    [
+      "ProxRadius",
+      "i16"
+    ],
+    [
+      "BlastRadius",
+      "i16"
+    ],
+    [
+      "MiscFlags",
+      "u16"
+    ]
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "dsïg",
+  "source": "TMPL 143 (\"dsïg\") in EV Data.rsrc",
+  "fields": [
+    [
+      "IDCode",
+      "i16"
+    ]
+  ]
+}

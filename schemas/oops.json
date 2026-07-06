@@ -1,0 +1,30 @@
+{
+  "name": "öops",
+  "source": "TMPL 139 (\"öops\") in EV Data.rsrc",
+  "fields": [
+    [
+      "Stellar",
+      "i16"
+    ],
+    [
+      "Commodity",
+      "i16"
+    ],
+    [
+      "PriceDelta",
+      "i16"
+    ],
+    [
+      "Duration",
+      "i16"
+    ],
+    [
+      "Freq",
+      "i16"
+    ],
+    [
+      "MissionBit",
+      "i16"
+    ]
+  ]
+}

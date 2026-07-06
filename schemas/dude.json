@@ -1,0 +1,32 @@
+{
+  "name": "düde",
+  "source": "TMPL 134 (\"düde\") in EV Data.rsrc",
+  "fields": [
+    [
+      "AIType",
+      "i16"
+    ],
+    [
+      "ShipTypes",
+      "i16",
+      4
+    ],
+    [
+      "Prob",
+      "i16",
+      4
+    ],
+    [
+      "Govt",
+      "i16"
+    ],
+    [
+      "Booty",
+      "u16"
+    ],
+    [
+      "InfoTypes",
+      "i16"
+    ]
+  ]
+}

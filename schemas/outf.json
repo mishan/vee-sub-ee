@@ -1,0 +1,38 @@
+{
+  "name": "oütf",
+  "source": "TMPL 133 (\"oütf\") in EV Data.rsrc",
+  "fields": [
+    [
+      "MissionBit",
+      "i16"
+    ],
+    [
+      "Mass",
+      "i16"
+    ],
+    [
+      "TechLevel",
+      "i16"
+    ],
+    [
+      "ModType",
+      "i16"
+    ],
+    [
+      "ModVal",
+      "i16"
+    ],
+    [
+      "Max",
+      "i16"
+    ],
+    [
+      "Flags",
+      "u16"
+    ],
+    [
+      "Cost",
+      "i32"
+    ]
+  ]
+}

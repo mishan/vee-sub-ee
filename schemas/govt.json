@@ -1,0 +1,50 @@
+{
+  "name": "gövt",
+  "source": "TMPL 135 (\"gövt\") in EV Data.rsrc",
+  "fields": [
+    [
+      "Unused",
+      "i16"
+    ],
+    [
+      "Flags",
+      "u16"
+    ],
+    [
+      "Ally",
+      "i16"
+    ],
+    [
+      "Enemy",
+      "i16"
+    ],
+    [
+      "CrimeTol",
+      "i16"
+    ],
+    [
+      "SmugPenalty",
+      "i16"
+    ],
+    [
+      "DisabPenalty",
+      "i16"
+    ],
+    [
+      "BoardPenalty",
+      "i16"
+    ],
+    [
+      "KillPenalty",
+      "i16"
+    ],
+    [
+      "ShootPenalty",
+      "i16"
+    ],
+    [
+      "InitialRec",
+      "i16"
+    ]
+  ]
+}

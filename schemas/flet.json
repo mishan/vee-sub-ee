@@ -1,0 +1,33 @@
+{
+  "name": "flët",
+  "source": "TMPL 141 (\"flët\") in EV Data.rsrc",
+  "fields": [
+    [
+      "LeadShipType",
+      "i16"
+    ],
+    [
+      "EscortType",
+      "i16",
+      4
+    ],
+    [
+      "Min",
+      "i16",
+      4
+    ],
+    [
+      "Max",
+      "i16",
+      4
+    ],
+    [
+      "Govt",
+      "i16"
+    ],
+    [
+      "LinkSyst",
+      "i16"
+    ]
+  ]
+}

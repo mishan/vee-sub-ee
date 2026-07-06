@@ -1,0 +1,35 @@
+{
+  "comment": "Golden-trace scenario (see ENGINE_SPEC.md). Self-contained: stats inline, no data files. Exercises thrust, turning while thrusting, retrograde autopilot, coasting, and the full AI trader state machine including brake and landing fade.",
+  "frames": 420,
+  "sampleEvery": 10,
+  "entities": [
+    {
+      "name": "player-shuttle",
+      "kind": "player",
+      "stats": { "Speed": 275, "Accel": 435, "Maneuver": 4 },
+      "x": 0, "y": 300, "heading": 0,
+      "script": [
+        { "until": 60,  "thrust": true },
+        { "until": 105, "right": true, "thrust": true },
+        { "until": 180, "retro": true, "thrust": true },
+        { "until": 240, "left": true },
+        { "until": 330, "thrust": true },
+        { "until": 420 }
+      ]
+    },
+    {
+      "name": "trader-frigate",
+      "kind": "trader",
+      "stats": { "Speed": 200, "Accel": 300, "Maneuver": 1 },
+      "x": 700, "y": -350, "heading": 180,
+      "target": { "x": 0, "y": 0 }
+    },
+    {
+      "name": "trader-courier-close",
+      "kind": "trader",
+      "stats": { "Speed": 350, "Accel": 600, "Maneuver": 6 },
+      "x": 120, "y": 80, "heading": 90,
+      "target": { "x": 60, "y": 40 }
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+#!/usr/bin/env node
+// Golden-trace comparator: runs the JS core and the C++ port on the same
+// scenario and requires agreement within TOL on every sampled value.
+//
+//   node engine/check_traces.js [scenario] [evflight-binary]
+'use strict';
+
+const { execFileSync } = require('child_process');
+const path = require('path');
+
+const scenario = process.argv[2] || path.join(__dirname, 'scenario.json');
+const binary = process.argv[3] || path.join(__dirname, '..', 'cpp', 'evflight');
+const TOL = 1e-6;
+
+const jsOut = JSON.parse(execFileSync(process.execPath,
+  [path.join(__dirname, 'run_trace.js'), scenario], { encoding: 'utf8' }));
+const cppOut = JSON.parse(execFileSync(binary, ['--trace', scenario],
+  { encoding: 'utf8' }));
+
+let checked = 0, worst = 0, failures = 0;
+const nSamples = Math.min(jsOut.samples.length, cppOut.samples.length);
+if (jsOut.samples.length !== cppOut.samples.length) {
+  console.error(`sample count differs: js=${jsOut.samples.length} cpp=${cppOut.samples.length}`);
+  failures++;
+}
+for (let i = 0; i < nSamples; i++) {
+  const a = jsOut.samples[i], b = cppOut.samples[i];
+  for (let e = 0; e < a.entities.length; e++)
+    for (const k of ['x', 'y', 'vx', 'vy', 'heading']) {
+      const d = Math.abs(a.entities[e][k] - b.entities[e][k]);
+      checked++;
+      worst = Math.max(worst, d);
+      if (d > TOL && failures++ < 10)
+        console.error(`frame ${a.frame} entity ${e} ${k}: js=${a.entities[e][k]} cpp=${b.entities[e][k]} (Δ${d.toExponential(2)})`);
+    }
+}
+console.log(`${checked} values compared, worst Δ = ${worst.toExponential(2)}, tolerance ${TOL}`);
+if (failures) { console.error(`FAIL (${failures} mismatches)`); process.exit(1); }
+console.log('PASS — JS core and C++ port agree');

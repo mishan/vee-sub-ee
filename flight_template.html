@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>EV Flight</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
+    font: 13px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif; color: #cfd6e4; }
+  canvas { display: block; }
+  #hud { position: fixed; top: 10px; left: 12px; color: #8fa3c8; font-size: 12px;
+    text-shadow: 0 1px 2px #000; user-select: none; }
+  #hud b { color: #fff; font-size: 14px; }
+  #hud .warn { color: #e06c75; }
+  #prompt { position: fixed; bottom: 96px; width: 100%; text-align: center;
+    color: #ffd479; font-size: 13px; text-shadow: 0 1px 3px #000; }
+  #msg { position: fixed; bottom: 120px; width: 100%; text-align: center;
+    color: #9fb4d8; font-size: 13px; text-shadow: 0 1px 3px #000;
+    transition: opacity .4s; opacity: 0; }
+  #target { position: fixed; top: 10px; right: 12px; min-width: 150px;
+    text-align: right; color: #8fa3c8; font-size: 12px;
+    text-shadow: 0 1px 2px #000; display: none; user-select: none; }
+  #target b { color: #fff; }
+  #landed, #service { position: fixed; inset: 0; display: none;
+    align-items: center; justify-content: center; background: rgba(0,0,0,.72); }
+  #service { background: rgba(0,0,0,.45); }
+  #landed .card, #service .card { width: 560px; max-height: 86vh; overflow-y: auto;
+    background: #0c1120; border: 1px solid #2a3550;
+    border-radius: 8px; padding: 20px 24px; }
+  #service .card { width: 540px; box-shadow: 0 12px 48px rgba(0,0,0,.8); }
+  #landed h2, #service h2 { margin: 0 0 4px; color: #fff; }
+  #landed .meta, #service .meta { color: #6b7a96; font-size: 12px; margin-bottom: 10px; }
+  #landed .desc { white-space: pre-wrap; color: #aab6cc; font-size: 13px; }
+  #landed .hint, #service .hint { margin-top: 14px; color: #ffd479; font-size: 12px; }
+  #landed img.scape { width: 100%; border-radius: 4px; margin-bottom: 10px; }
+  #service table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  #service th { text-align: left; color: #6b7a96; font-size: 11px;
+    font-weight: normal; border-bottom: 1px solid #26304a; padding: 2px 4px; }
+  #service td { padding: 4px; font-size: 13px; border-bottom: 1px solid #171f33; }
+  #service td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  #service td .sub { color: #6b7a96; font-size: 11px; }
+  #landed button, #service button { background: #1a2338; color: #cfd6e4;
+    border: 1px solid #2a3550; border-radius: 4px; padding: 2px 8px; margin: 0 1px;
+    cursor: pointer; font-size: 12px; }
+  #landed button.svc, #service button.svc { padding: 6px 12px; margin: 8px 6px 0 0; font-size: 13px; }
+  #landed button:disabled, #service button:disabled { opacity: .35; cursor: default; }
+  #landed button:hover:not(:disabled), #service button:hover:not(:disabled) { background: #24304d; }
+  #landed .wallet, #service .wallet { margin-top: 10px; color: #8fa3c8; font-size: 12px; }
+  #landed .wallet b, #service .wallet b { color: #fff; }
+  /* classic shop layout: thumbnail grid (sliced from the original menu
+     sheets, PICT 5100/6100) + detail pane with the 100×100 dialog art */
+  .shop { display: flex; gap: 16px; margin-top: 10px; }
+  .shopgrid { display: grid; grid-template-columns: repeat(8, 34px); gap: 2px; align-content: start; }
+  .shopgrid .cell { width: 32px; height: 32px; border: 1px solid #26304a; border-radius: 3px;
+    background-color: #000; cursor: pointer; image-rendering: pixelated; padding: 0; }
+  .shopgrid .cell:hover { border-color: #4a5b82; }
+  .shopgrid .cell.sel { border-color: #ffd479; box-shadow: 0 0 6px rgba(255,212,121,.5); }
+  .shopgrid .cell.dim { opacity: .3; cursor: default; }
+  .shoppane { flex: 1; min-width: 200px; }
+  .shoppane img { width: 100px; height: 100px; image-rendering: pixelated;
+    border: 1px solid #26304a; border-radius: 4px; background: #000; float: right; margin: 0 0 8px 10px; }
+  .shoppane h3 { margin: 0 0 4px; color: #fff; font-size: 15px; }
+  .shoppane .row { color: #aab6cc; font-size: 12px; margin: 2px 0; }
+  .shoppane .row b { color: #fff; }
+  #help { position: fixed; bottom: 8px; left: 12px; color: #4d5b76; font-size: 11px; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud"></div>
+<div id="target"></div>
+<div id="prompt"></div>
+<div id="msg"></div>
+<div id="landed"><div class="card" id="landedCard"></div></div>
+<div id="service"><div class="card" id="serviceCard"></div></div>
+<div id="help">← → turn · ↑ thrust · ↓ retrograde · L target/land · N planets · Tab ships · Y hail · M map · J jump · Esc cancel</div>
+<script>/*__ENGINE__*/</script>
+<script>
+'use strict';
+
+const DATA = /*__EVDATA__*/null;
+const MANIFEST = /*__MANIFEST__*/null;
+
+/* ---------------- configuration ---------------- */
+
+const params = new URLSearchParams(location.search);
+let SYSTEM_ID = +(params.get('syst') || 128);   // Levo — the classic start
+let playerShipId = +(params.get('ship') || 128); // Shuttlecraft
+
+/* player economy state (spec: "Trading") — the seed of the pilot file */
+const COMMODITIES = ['food', 'industrial', 'medical', 'luxury', 'metal', 'equipment'];
+const PRICE_MULT = { low: 0.80, medium: 1.00, high: 1.25 };
+let credits = 10000;
+const cargo = Object.fromEntries(COMMODITIES.map(c => [c, 0]));
+const explored = new Set();
+
+const ships = DATA.types.ship;
+const dudes = DATA.types.dude;
+const systs = DATA.types.syst;
+
+const SHIP_SPIN_BASE = 128, STELLAR_SPIN_BASE = 300;
+const spinOfShip = shipId => SHIP_SPIN_BASE + (shipId - 128);
+const spinOfSpob = p => STELLAR_SPIN_BASE + p.Type;
+
+/* ---------------- sprites ---------------- */
+
+const sprites = new Map(); // spinId -> {img, meta, ready}
+function preloadSprites(spinIds) {
+  for (const id of spinIds) {
+    const meta = MANIFEST.spins[id];
+    if (!meta || sprites.has(+id)) continue;
+    const img = document.createElement('img');
+    img.src = 'evassets/sprites/spin_' + id + '.png';
+    img.style.display = 'none';
+    document.body.appendChild(img);
+    const entry = { img, meta, ready: img.complete };
+    img.onload = () => { entry.ready = true; };
+    sprites.set(+id, entry);
+  }
+}
+function drawSpin(ctx, spinId, x, y, headingDeg) {
+  const s = sprites.get(spinId);
+  if (!s || !s.ready) return;
+  const { frameW, frameH, xTiles, frames } = s.meta;
+  const fi = EV.frameIndex(headingDeg, frames);
+  ctx.drawImage(s.img, (fi % xTiles) * frameW, Math.floor(fi / xTiles) * frameH,
+    frameW, frameH, x - frameW / 2, y - frameH / 2, frameW, frameH);
+}
+
+/* ---------------- world (per-system state) ---------------- */
+
+let syst, spobs, aiShips, systEpoch = 0;
+
+function spinsNeededFor(systId) {
+  const s = systs[systId];
+  const need = new Set([spinOfShip(playerShipId)]);
+  for (const [id, p] of Object.entries(DATA.types.spob))
+    if (p.System === +systId) need.add(spinOfSpob(p));
+  for (let i = 1; i <= 4; i++) {
+    const d = dudes[s['DudeTypes' + i]];
+    if (d) for (let j = 1; j <= 4; j++)
+      if (d['ShipTypes' + j] >= 128) need.add(spinOfShip(d['ShipTypes' + j]));
+  }
+  return need;
+}
+
+function loadSystem(systId) {
+  SYSTEM_ID = +systId;
+  syst = systs[SYSTEM_ID];
+  explored.add(SYSTEM_ID);
+  systEpoch++;
+  spobs = Object.entries(DATA.types.spob)
+    .filter(([, p]) => p.System === SYSTEM_ID)
+    .map(([id, p]) => ({ id: +id, x: p.xPos, y: p.yPos, ...p }));
+  aiShips = [];
+  navTarget = null; shipTarget = null;
+  preloadSprites(spinsNeededFor(SYSTEM_ID));
+  // Landscapes for this system's spobs (default 10000+Type and custom),
+  // so the planet screen never shows without its picture.
+  for (const p of spobs)
+    for (const id of [10000 + p.Type, p.CustPicID].filter(v => v >= 0)) {
+      if (document.getElementById('scape' + id)) continue;
+      const img = document.createElement('img');
+      img.id = 'scape' + id;
+      img.src = 'evassets/titles/PICT_' + id + '.png';
+      img.style.display = 'none';
+      img.onerror = () => img.remove();
+      document.body.appendChild(img);
+    }
+  const n = Math.min(Math.max(syst.AvgShips, 2), 8);
+  for (let i = 0; i < n; i++) spawnAI(false);
+}
+
+/* ---------------- AI spawning (shell; see spec "Spawning") ------------- */
+
+function weighted(pairs) {
+  if (!pairs.length) return null;
+  let r = Math.random() * pairs.reduce((n, [, w]) => n + w, 0);
+  for (const [v, w] of pairs) { if ((r -= w) <= 0) return v; }
+  return pairs[0][0];
+}
+function spawnAI(atEdge) {
+  const pairsD = [];
+  for (let i = 1; i <= 4; i++) {
+    const d = syst['DudeTypes' + i], w = syst['Prob' + i];
+    if (d >= 128 && dudes[d] && w > 0) pairsD.push([d, w]);
+  }
+  const dudeId = weighted(pairsD);
+  if (dudeId == null) return;
+  const pairsS = [];
+  for (let j = 1; j <= 4; j++) {
+    const s = dudes[dudeId]['ShipTypes' + j], w = dudes[dudeId]['Prob' + j];
+    if (s >= 128 && ships[s] && w > 0) pairsS.push([s, w]);
+  }
+  const shipId = weighted(pairsS);
+  if (shipId == null) return;
+  const a = Math.random() * Math.PI * 2;
+  const r = atEdge ? 2400 : 400 + Math.random() * 1200;
+  const e = EV.makeShip(ships[shipId], Math.cos(a) * r, Math.sin(a) * r, Math.random() * 360);
+  e.shipId = shipId;
+  e.govt = dudes[dudeId].Govt;
+  e.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
+  aiShips.push(e);
+}
+
+/* ---------------- player ---------------- */
+
+const player = EV.makeShip(ships[playerShipId],
+  +(params.get('x') || 0), +(params.get('y') || 300), +(params.get('heading') || 0));
+player.shipId = playerShipId;
+let fuel = ships[playerShipId].Fuel;
+let fuelMax = ships[playerShipId].Fuel;
+let holds = ships[playerShipId].Holds;
+let landedAt = null;
+
+/* ---- outfits (spec-adjacent; oütf ModType effects from semantics.js) ----
+ * outfits: outf id -> count. Effective ship stats = base shïp record plus
+ * every owned outfit's effect; outfit Mass consumes the hull's FreeMass. */
+const outfits = {};
+function effectiveShip() {
+  const rec = { ...ships[playerShipId] };
+  let h = rec.Holds, fm = rec.Fuel, massUsed = 0;
+  for (const [id, n] of Object.entries(outfits)) {
+    const o = DATA.types.outf[id];
+    if (!o || !n) continue;
+    massUsed += o.Mass * n;
+    switch (o.$sem && o.$sem.modType) {
+      case 'cargoSpace':     h += o.ModVal * n; break;
+      case 'fuelCapacity':   fm += o.ModVal * n; break;
+      case 'shieldCapacity': rec.Shield += o.ModVal * n; break;
+      case 'armor':          rec.Armor += o.ModVal * n; break;
+      case 'accelBoost':     rec.Accel += o.ModVal * n; break;
+      case 'speedBoost':     rec.Speed += o.ModVal * n; break;
+      case 'turnBoost':      rec.Maneuver += o.ModVal * n; break;
+    }
+  }
+  return { rec, holds: h, fuelMax: fm, massUsed,
+           freeMass: ships[playerShipId].FreeMass - massUsed };
+}
+function applyShipStats() {
+  const s = effectiveShip();
+  player.rec = s.rec;
+  player.maxSpeed = EV.maxSpeedOf(s.rec);
+  player.accel = EV.accelOf(s.rec);
+  player.turn = EV.turnOf(s.rec);
+  holds = s.holds;
+  fuelMax = s.fuelMax;
+  fuel = Math.min(fuel, fuelMax);
+}
+
+/* jump state: null | {destId, phase:'engage'|'streak', t} */
+let jump = null;
+let mapOpen = false;
+let jumpDest = null; // selected destination system id
+
+function linkedSystems() {
+  const out = [];
+  for (let i = 1; i <= 16; i++) {
+    const c = syst['Con' + i];
+    if (c >= 128 && systs[c]) out.push(c);
+  }
+  return out;
+}
+
+function mapBearingTo(destId) {
+  const a = systs[SYSTEM_ID], b = systs[destId];
+  return EV.bearing(b.xPos - a.xPos, b.yPos - a.yPos);
+}
+
+function beginJump() {
+  if (jump || landedAt) return;
+  if (jumpDest == null || !linkedSystems().includes(jumpDest)) return;
+  if (fuel < EV.JUMP_FUEL) return;
+  jump = { destId: jumpDest, phase: 'engage', t: 0 };
+}
+function completeJump() {
+  const from = SYSTEM_ID;
+  loadSystem(jump.destId);
+  // placeAtArrival wants the inbound bearing (origin → dest); from the
+  // destination, mapBearingTo(origin) is the reverse bearing, so flip it.
+  EV.placeAtArrival(player, EV.norm(mapBearingTo(from) + 180));
+  fuel -= EV.JUMP_FUEL;
+  jump = null; jumpDest = null;
+}
+
+/* ---------------- input ---------------- */
+
+const keys = {};
+addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  const k = e.key.toLowerCase();
+  if (k === 'l') tryLand();
+  if (k === 'm') { mapOpen = !mapOpen; }
+  if (k === 'j') { if (mapOpen) mapOpen = false; beginJump(); }
+  if (k === 'n' && !landedAt) cyclePlanetTarget();
+  if (k === 'y' && !landedAt) hail();
+  if (e.key === 'Tab') { e.preventDefault(); if (!landedAt) cycleShipTarget(); }
+  if (e.key === 'Escape') {
+    if (serviceOpen) closeService();
+    else if (mapOpen) mapOpen = false;
+    else if (jump && jump.phase === 'engage') jump = null;
+    else if (landedAt) takeOff();
+    else if (shipTarget) { shipTarget = null; showMsg('Target cleared.'); }
+    else if (navTarget) { navTarget = null; showMsg('Navigation target cleared.'); }
+  }
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
+});
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+/* ---------------- landing ---------------- */
+
+/* ---- targeting & messages ---- */
+
+let navTarget = null;   // spob (landing/nav target)
+let shipTarget = null;  // AI entity (comm/targeting)
+let msgTimer = null;
+
+let lastMsg = '';
+function showMsg(text) {
+  lastMsg = text;
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.style.opacity = 1;
+  clearTimeout(msgTimer);
+  msgTimer = setTimeout(() => { el.style.opacity = 0; }, 3500);
+}
+
+const distTo = o => Math.hypot(o.x - player.x, o.y - player.y);
+
+function nearestLandable() {
+  let best = null, bd = Infinity;
+  for (const p of spobs) {
+    if (p.$sem && !p.$sem.canLand) continue;
+    const d = distTo(p);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best; // any distance — targeting decides what to do with it
+}
+/* Cycling past the farthest target clears the selection (un-target). */
+function cyclePlanetTarget() {
+  if (!spobs.length) { showMsg('No stellar objects in this system.'); return; }
+  const sorted = [...spobs].sort((a, b) => distTo(a) - distTo(b));
+  const i = navTarget ? sorted.indexOf(navTarget) : -1;
+  navTarget = (i + 1 < sorted.length) ? sorted[i + 1] : null;
+  if (!navTarget) showMsg('Navigation target cleared.');
+}
+function cycleShipTarget() {
+  if (!aiShips.length) { showMsg('No ships on scope.'); shipTarget = null; return; }
+  const sorted = [...aiShips].sort((a, b) => distTo(a) - distTo(b));
+  const i = shipTarget ? sorted.indexOf(shipTarget) : -1;
+  shipTarget = (i + 1 < sorted.length) ? sorted[i + 1] : null;
+  if (!shipTarget) showMsg('Target cleared.');
+}
+
+/* hail (Y): govt greeting lists live at STR# 7000+(govt-128), generic at
+ * 6999; stellar comm strings at 3002. Lines of "*" or "" mean silence. */
+function pickLine(listId) {
+  const l = DATA.strings[listId] && DATA.strings[listId].list
+    .filter(s => s && s !== '*');
+  return l && l.length ? l[Math.floor(Math.random() * l.length)] : null;
+}
+function hail() {
+  if (shipTarget) {
+    const line = pickLine(7000 + (shipTarget.govt - 128)) || pickLine(6999);
+    const name = ships[shipTarget.shipId].name;
+    showMsg(line ? `${name}: “${line}”` : `${name} does not respond.`);
+  } else if (navTarget) {
+    const m = navTarget.$sem || {};
+    if (m.uninhabited || !m.canLand) showMsg(`${navTarget.name} does not respond.`);
+    else showMsg(`${navTarget.name}: “${pickLine(3002) || 'Communications channel open.'}”`);
+  } else showMsg('No target to hail. (Tab: ships, N: planets)');
+}
+/* ---- trading (spec: "Trading") ---- */
+
+const cargoNames = DATA.strings[4000].list.slice(0, 6);
+const basePrices = DATA.strings[4004].list.slice(0, 6).map(Number);
+const cargoUsed = () => COMMODITIES.reduce((n, c) => n + cargo[c], 0);
+
+function priceAt(spob, i) {
+  const lvl = spob.$sem && spob.$sem.prices[COMMODITIES[i]];
+  return lvl && PRICE_MULT[lvl] ? Math.round(basePrices[i] * PRICE_MULT[lvl]) : null;
+}
+function trade(i, qty) {
+  if (!landedAt) return;
+  const price = priceAt(landedAt, i);
+  if (price == null) return;
+  if (qty > 0) qty = Math.min(qty, holds - cargoUsed(), Math.floor(credits / price));
+  else qty = Math.max(qty, -cargo[COMMODITIES[i]]);
+  cargo[COMMODITIES[i]] += qty;
+  credits -= qty * price;
+  rerenderService();
+}
+
+/* ---- service dialogs: exchange / outfitter / shipyard ---- */
+
+let serviceOpen = null; // 'exchange' | 'outfitter' | 'shipyard' | null
+const SERVICE_RENDER = {};
+function openService(kind) {
+  const gate = { exchange: 'commodityExchange', outfitter: 'outfitter', shipyard: 'shipyard' }[kind];
+  if (!landedAt || !(landedAt.$sem && landedAt.$sem[gate])) return;
+  serviceOpen = kind;
+  SERVICE_RENDER[kind]();
+  document.getElementById('service').style.display = 'flex';
+}
+function closeService() {
+  serviceOpen = null;
+  document.getElementById('service').style.display = 'none';
+  renderPlanetScreen(); // refresh wallet line
+}
+function rerenderService() { if (serviceOpen) SERVICE_RENDER[serviceOpen](); }
+const walletHtml = () => {
+  const fm = effectiveShip().freeMass;
+  return `<div class="wallet"><b>${credits.toLocaleString('en-US')}</b> credits ·
+    cargo ${cargoUsed()}/${holds} tons · ${fm} tons outfit space</div>
+    <div style="margin-top:12px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
+};
+
+/* tech availability (spec: spöb TechLevel gate + SpecialTech exact match) */
+function techAvailable(itemTech, p) {
+  if (itemTech <= p.TechLevel) return true;
+  return [p.SpecialTech1, p.SpecialTech2, p.SpecialTech3].includes(itemTech);
+}
+
+SERVICE_RENDER.exchange = function () {
+  const p = landedAt, m = p.$sem || {};
+  let html = `<h2>Commodity Exchange</h2>
+    <div class="meta">${p.name} · prices per ton</div>
+    <table><tr><th>Commodity</th><th style="text-align:right">Price</th>
+    <th style="text-align:right">Held</th><th></th></tr>`;
+  for (let i = 0; i < 6; i++) {
+    const price = priceAt(p, i);
+    const held = cargo[COMMODITIES[i]];
+    if (price == null && !held) continue;
+    const lvl = m.prices[COMMODITIES[i]];
+    html += `<tr><td>${cargoNames[i]}${lvl ? ` <span class="meta" style="margin:0">(${lvl})</span>` : ''}</td>
+      <td class="num">${price != null ? price + ' cr' : '—'}</td>
+      <td class="num">${held}</td><td style="text-align:right">` +
+      (price != null ? `
+        <button onclick="trade(${i},-10)" ${held < 1 ? 'disabled' : ''}>-10</button>
+        <button onclick="trade(${i},-1)"  ${held < 1 ? 'disabled' : ''}>-1</button>
+        <button onclick="trade(${i},1)"   ${cargoUsed() >= holds || credits < price ? 'disabled' : ''}>+1</button>
+        <button onclick="trade(${i},10)"  ${cargoUsed() >= holds || credits < price ? 'disabled' : ''}>+10</button>`
+      : '') + `</td></tr>`;
+  }
+  html += `</table>` + walletHtml();
+  document.getElementById('serviceCard').innerHTML = html;
+};
+
+/* ---- outfitter ---- */
+
+const outfitName = id => DATA.strings[5000].list[id - 128] ||
+  (DATA.types.outf[id] ? 'outfit ' + id : null);
+
+function buyOutfit(id, qty) {
+  const o = DATA.types.outf[id];
+  if (!o) return;
+  const s = effectiveShip();
+  if (qty > 0) {
+    if (o.Max > 0 && (outfits[id] || 0) + qty > o.Max) qty = o.Max - (outfits[id] || 0);
+    if (o.Mass > 0) qty = Math.min(qty, Math.floor(s.freeMass / o.Mass));
+    if (o.Cost > 0) qty = Math.min(qty, Math.floor(credits / o.Cost));
+    if (qty <= 0) return;
+  } else {
+    qty = Math.max(qty, -(outfits[id] || 0));
+    if (qty === 0) return;
+  }
+  outfits[id] = (outfits[id] || 0) + qty;
+  if (!outfits[id]) delete outfits[id];
+  credits -= qty * o.Cost;
+  applyShipStats();
+  // cargo can't exceed a shrunken hold: dump overflow (paid nothing for it)
+  while (cargoUsed() > holds) {
+    const c = COMMODITIES.find(c => cargo[c] > 0);
+    if (!c) break;
+    cargo[c]--;
+  }
+  rerenderService();
+}
+
+/* Classic shop layout. Menu-sheet thumbnails: outfit i (id−128) lives at
+ * cell (i%8, ⌊i/8⌋) of PICT 6100; ships likewise in PICT 5100. Large
+ * 100×100 dialog art: outfit → PICT 6000+i, ship → PICT 5000+i. */
+let selOutfitId = null, selShipId = null;
+
+function shopGrid(sheet, items, selId, clickFn) {
+  let html = `<div class="shopgrid">`;
+  for (const { id, avail } of items) {
+    const i = id - 128, cx = (i % 8) * 34, cy = Math.floor(i / 8) * 34;
+    html += `<button class="cell${id === selId ? ' sel' : ''}${avail ? '' : ' dim'}"
+      style="background-image:url(evassets/graphics/${sheet});
+             background-position:-${(i % 8) * 32}px -${Math.floor(i / 8) * 32}px"
+      ${avail ? `onclick="${clickFn}(${id})"` : ''} title="${avail ? '' : 'not available here'}"></button>`;
+  }
+  return html + `</div>`;
+}
+
+function selectOutfit(id) { selOutfitId = id; rerenderService(); }
+function selectShip(id) { selShipId = id; rerenderService(); }
+
+SERVICE_RENDER.outfitter = function () {
+  const p = landedAt;
+  const s = effectiveShip();
+  const items = Object.entries(DATA.types.outf)
+    .filter(([, o]) => o.MissionBit < 0) // mission-gated: no mission system yet
+    .map(([id, o]) => ({ id: +id, o, avail: techAvailable(o.TechLevel, p) || (outfits[id] || 0) > 0 }));
+  if (selOutfitId == null || !items.some(x => x.id === selOutfitId && x.avail))
+    selOutfitId = (items.find(x => x.avail) || {}).id ?? null;
+
+  let pane = '';
+  if (selOutfitId != null) {
+    const o = DATA.types.outf[selOutfitId];
+    const own = outfits[selOutfitId] || 0;
+    const canBuy = techAvailable(o.TechLevel, p) &&
+      credits >= o.Cost && (o.Max <= 0 || own < o.Max) &&
+      (o.Mass <= 0 || s.freeMass >= o.Mass);
+    pane = `<div class="shoppane">
+      <img src="evassets/graphics/PICT_${6000 + (selOutfitId - 128)}.png" onerror="this.style.visibility='hidden'">
+      <h3>${outfitName(selOutfitId)}</h3>
+      <div class="row">${o.$sem ? o.$sem.modType : ''}${o.Max > 0 ? ` · max ${o.Max}` : ''}</div>
+      <div class="row">Cost: <b>${o.Cost.toLocaleString('en-US')}</b> cr</div>
+      <div class="row">Mass: <b>${o.Mass}</b> tons</div>
+      <div class="row">Owned: <b>${own}</b></div>
+      <div style="margin-top:10px">
+        <button class="svc" onclick="buyOutfit(${selOutfitId},1)" ${canBuy ? '' : 'disabled'}>Buy</button>
+        <button class="svc" onclick="buyOutfit(${selOutfitId},-1)" ${own < 1 ? 'disabled' : ''}>Sell</button>
+      </div></div>`;
+  }
+  document.getElementById('serviceCard').innerHTML =
+    `<h2>Outfitter</h2><div class="meta">${p.name} · tech ${p.TechLevel}</div>
+     <div class="shop">${shopGrid('PICT_6100.png', items, selOutfitId, 'selectOutfit')}${pane}</div>` +
+    walletHtml();
+};
+
+/* ---- shipyard ---- */
+
+const shipyardName = id => DATA.strings[5001].list[id - 128] ||
+  (ships[id] ? ships[id].name : null);
+
+/* Trade-in per the resource bible: "the cost of buying a ship is always
+ * the cost of the new ship minus 25% of the original cost of your current
+ * ship and upgrades." */
+function tradeInValue() {
+  return Math.round(0.25 * (ships[playerShipId].Cost +
+    Object.entries(outfits).reduce((n, [oid, c]) =>
+      n + (DATA.types.outf[oid] ? DATA.types.outf[oid].Cost * c : 0), 0)));
+}
+function buyShip(id) {
+  const rec = ships[id];
+  if (!rec || id === playerShipId) return;
+  const refund = tradeInValue();
+  const price = rec.Cost - refund;
+  if (credits < price) return;
+  if (cargoUsed() > rec.Holds) { showMsg('Your cargo would not fit aboard.'); return; }
+  credits -= price;
+  playerShipId = id;
+  player.shipId = id;
+  for (const k of Object.keys(outfits)) delete outfits[k];
+  applyShipStats();
+  fuel = fuelMax;
+  preloadSprites(new Set([spinOfShip(id)]));
+  showMsg(`${shipyardName(id)} purchased. Old hull and outfits traded in.`);
+  rerenderService();
+}
+
+SERVICE_RENDER.shipyard = function () {
+  const p = landedAt;
+  const refund = tradeInValue();
+  const items = Object.entries(ships)
+    .filter(([, r]) => r.MissionBit < 0)
+    .map(([id, r]) => ({ id: +id, r, avail: techAvailable(r.TechLevel, p) }));
+  if (selShipId == null || !items.some(x => x.id === selShipId && x.avail))
+    selShipId = (items.find(x => x.avail) || {}).id ?? null;
+
+  let pane = '';
+  if (selShipId != null) {
+    const r = ships[selShipId];
+    const own = selShipId === playerShipId;
+    const net = r.Cost - refund;
+    pane = `<div class="shoppane">
+      <img src="evassets/graphics/PICT_${5000 + (selShipId - 128)}.png" onerror="this.style.visibility='hidden'">
+      <h3>${shipyardName(selShipId)}${own ? ' <span class="meta" style="margin:0">(current)</span>' : ''}</h3>
+      <div class="row">Cost: <b>${r.Cost.toLocaleString('en-US')}</b> cr` +
+      (own ? '' : ` · net <b>${net.toLocaleString('en-US')}</b>`) + `</div>
+      <div class="row">Shield <b>${r.Shield}</b> · Armor <b>${r.Armor}</b></div>
+      <div class="row">Speed <b>${r.Speed}</b> · Accel <b>${r.Accel}</b> · Turn <b>${r.Maneuver}</b></div>
+      <div class="row">Cargo <b>${r.Holds}</b>t · Outfit space <b>${r.FreeMass}</b>t</div>
+      <div class="row">Fuel <b>${r.Fuel / 100}</b> jumps · Crew <b>${r.Crew}</b></div>
+      <div class="row">Guns <b>${r.MaxGun}</b> · Turrets <b>${r.MaxTur}</b></div>
+      <div style="margin-top:10px">
+        <button class="svc" onclick="buyShip(${selShipId})" ${own || credits < net ? 'disabled' : ''}>Buy</button>
+      </div></div>`;
+  }
+  document.getElementById('serviceCard').innerHTML =
+    `<h2>Shipyard</h2><div class="meta">${p.name} · tech ${p.TechLevel} ·
+       trade-in: 25% of hull + upgrades (${refund.toLocaleString('en-US')} cr)</div>
+     <div class="shop">${shopGrid('PICT_5100.png', items, selShipId, 'selectShip')}${pane}</div>` +
+    walletHtml();
+};
+
+function renderPlanetScreen() {
+  const p = landedAt;
+  const m = p.$sem || {};
+  const desc = DATA.types.desc[p.id];
+  const svc = ['commodityExchange', 'outfitter', 'shipyard', 'bar']
+    .filter(k => m[k]).map(k => ({ commodityExchange: 'trade center', outfitter: 'outfitter',
+      shipyard: 'shipyard', bar: 'bar' }[k])).join(' · ');
+  // Landscape: CustPicID overrides; standard is PICT (10000 + Type) in EV
+  // Titles — 34 landscapes matching the 34 stellar types. If a custom PICT
+  // is missing from the data (e.g. Darkstar's 11001 in 1.0.5), fall back
+  // to the standard, then give up.
+  const scape = p.CustPicID >= 0 ? p.CustPicID : 10000 + p.Type;
+  let html = `<img class="scape" src="evassets/titles/PICT_${scape}.png"
+    data-fb="${10000 + p.Type}" onerror="
+      if (this.dataset.fb && !this.src.endsWith('PICT_' + this.dataset.fb + '.png'))
+        this.src = 'evassets/titles/PICT_' + this.dataset.fb + '.png';
+      else this.remove()">`;
+  html += `<h2>${p.name}</h2>
+    <div class="meta">${(m.stellarType || '').replace(/[()]/g, '')}` +
+    `${m.govt ? ' · ' + m.govt : ''}${svc ? ' · ' + svc : ''} · fuel topped up</div>
+    <div class="desc">${desc && desc.Description ? desc.Description : ''}</div>`;
+  // services row — exchange is live; the rest are queued milestones
+  html += `<div>` +
+    (m.commodityExchange ? `<button class="svc" onclick="openService('exchange')">Commodity Exchange</button>` : '') +
+    (m.outfitter ? `<button class="svc" onclick="openService('outfitter')">Outfitter</button>` : '') +
+    (m.shipyard ? `<button class="svc" onclick="openService('shipyard')">Shipyard</button>` : '') +
+    (m.bar ? `<button class="svc" disabled title="coming soon">Bar</button>` : '') +
+    `</div>`;
+  html += `<div class="wallet"><b>${credits.toLocaleString('en-US')}</b> credits ·
+    cargo ${cargoUsed()}/${holds} tons</div>
+    <div class="hint">Press Esc to take off</div>`;
+  document.getElementById('landedCard').innerHTML = html;
+}
+
+/* L: select the nearest landable planet (brackets show it), or — if it's
+ * already the target and we're in range and slow — land. Denials explain
+ * themselves, like the original. */
+function tryLand() {
+  if (landedAt || jump) return;
+  const p = (navTarget && (!navTarget.$sem || navTarget.$sem.canLand))
+    ? navTarget : nearestLandable();
+  if (!p) { showMsg('There is nowhere to land in this system.'); return; }
+  if (navTarget !== p) { navTarget = p; showMsg(`Targeting ${p.name}.`); return; }
+  if (distTo(p) >= EV.LAND_DIST) { showMsg(`Landing on ${p.name}: too far away.`); return; }
+  if (Math.hypot(player.vx, player.vy) > EV.LAND_SPEED) {
+    showMsg('You are moving too fast to land.'); return;
+  }
+  landedAt = p;
+  player.vx = player.vy = 0;
+  fuel = fuelMax; // landing refuels (spec)
+  renderPlanetScreen();
+  document.getElementById('landed').style.display = 'flex';
+}
+function takeOff() {
+  if (!landedAt) return;
+  if (serviceOpen) closeService();
+  EV.placeAtTakeoff(player, landedAt);
+  navTarget = null; // fresh start off the pad — no stale landing target
+  landedAt = null;
+  document.getElementById('landed').style.display = 'none';
+}
+
+/* ---------------- logic step (30Hz) ---------------- */
+
+function step() {
+  if (!landedAt) {
+    if (jump && jump.phase === 'engage') {
+      if (EV.stepJumpEngage(player, mapBearingTo(jump.destId)))
+        jump = { ...jump, phase: 'streak', t: 0 };
+    } else if (jump && jump.phase === 'streak') {
+      EV.thrust(player); EV.integrate(player);
+      if (++jump.t >= EV.JUMP_STREAK_FRAMES) completeJump();
+    } else {
+      EV.stepPlayer(player, {
+        left: keys['arrowleft'] || keys['a'],
+        right: keys['arrowright'] || keys['d'],
+        retro: keys['arrowdown'] || keys['s'],
+        thrust: keys['arrowup'] || keys['w'],
+      });
+    }
+  }
+  for (const s of [...aiShips]) {
+    if (!EV.stepTrader(s, s.target)) {
+      aiShips.splice(aiShips.indexOf(s), 1);
+      if (shipTarget === s) shipTarget = null;
+      const epoch = systEpoch;
+      setTimeout(() => { if (epoch === systEpoch) spawnAI(Math.random() < 0.5); },
+        2000 + Math.random() * 6000);
+    }
+  }
+}
+
+/* ---------------- rendering ---------------- */
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+function resize() {
+  canvas.width = innerWidth * devicePixelRatio;
+  canvas.height = innerHeight * devicePixelRatio;
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+}
+addEventListener('resize', resize); resize();
+
+function starsIn(cx, cy, layer) {
+  let h = (cx * 73856093) ^ (cy * 19349663) ^ (layer * 83492791);
+  const out = [];
+  for (let i = 0; i < 5; i++) {
+    h = (h * 1103515245 + 12345) & 0x7fffffff;
+    const x = (h % 512); h = (h * 1103515245 + 12345) & 0x7fffffff;
+    const y = (h % 512); h = (h * 1103515245 + 12345) & 0x7fffffff;
+    out.push([x, y, (h % 3) === 0 ? 2 : 1]);
+  }
+  return out;
+}
+function drawStars(camX, camY, w, h, streak) {
+  for (const [layer, par, alpha] of [[1, 0.3, 0.5], [2, 0.6, 0.9]]) {
+    const ox = camX * par, oy = camY * par;
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    ctx.strokeStyle = `rgba(200,220,255,${alpha})`;
+    const c0x = Math.floor((ox - w / 2) / 512), c1x = Math.floor((ox + w / 2) / 512);
+    const c0y = Math.floor((oy - h / 2) / 512), c1y = Math.floor((oy + h / 2) / 512);
+    for (let cx = c0x; cx <= c1x; cx++)
+      for (let cy = c0y; cy <= c1y; cy++)
+        for (const [sx, sy, r] of starsIn(cx, cy, layer)) {
+          const x = cx * 512 + sx - ox + w / 2, y = cy * 512 + sy - oy + h / 2;
+          if (x < -20 || x > w + 20 || y < -20 || y > h + 20) continue;
+          if (streak > 0) {
+            const a = EV.rad(player.heading);
+            const len = streak * 6 * par;
+            ctx.beginPath(); ctx.moveTo(x, y);
+            ctx.lineTo(x - Math.sin(a) * len, y + Math.cos(a) * len);
+            ctx.stroke();
+          } else ctx.fillRect(x, y, r, r);
+        }
+  }
+}
+
+function radarColor(govtId) {
+  if (govtId == null || govtId < 0) return '#9aa5b8';
+  const hues = ['#e5c07b', '#61afef', '#e06c75', '#98c379', '#c678dd', '#56b6c2'];
+  return hues[(govtId - 128) % hues.length];
+}
+
+function drawFlame(ship, x, y) {
+  if (!ship.thrusting) return;
+  const a = EV.rad(ship.heading);
+  const meta = (sprites.get(spinOfShip(ship.shipId)) || {}).meta;
+  const off = ((meta ? meta.frameH : 24) / 2) + 3;
+  ctx.save();
+  ctx.translate(x - Math.sin(a) * off, y + Math.cos(a) * off);
+  ctx.rotate(a);
+  ctx.fillStyle = 'rgba(255,170,60,.85)';
+  ctx.beginPath();
+  ctx.moveTo(-3, 0); ctx.lineTo(3, 0); ctx.lineTo(0, 7 + Math.random() * 4);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+// Classic-style corner brackets around a target.
+function drawBrackets(x, y, half, color) {
+  const arm = Math.max(6, half * 0.45);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    ctx.beginPath();
+    ctx.moveTo(x + sx * half, y + sy * (half - arm));
+    ctx.lineTo(x + sx * half, y + sy * half);
+    ctx.lineTo(x + sx * (half - arm), y + sy * half);
+    ctx.stroke();
+  }
+}
+function spriteHalf(spinId, fallback) {
+  const m = (sprites.get(spinId) || {}).meta;
+  return (m ? Math.max(m.frameW, m.frameH) : fallback) / 2 + 6;
+}
+
+/* ---- classic sidebar: PICT 128 "Game Panel" (144×480) from EV Titles.
+ * Box geometry measured from the asset: radar y3–138, shield/fuel bar
+ * slots at x60–134 / y154 & y170, message box y190–227, status strip
+ * y235–254, target display y262–378, cargo box y386–476; content x5–138. */
+const panelImg = (() => {
+  const i = document.createElement('img');
+  i.src = 'evassets/titles/PICT_128_Game Panel.png';
+  i.style.display = 'none';
+  document.body.appendChild(i);
+  return i;
+})();
+
+/* shop art: menu sheets + 100×100 dialog pictures, preloaded at parse so
+ * the shop dialogs render complete on first open */
+{
+  const files = ['PICT_5100.png', 'PICT_6100.png'];
+  for (const id of Object.keys(ships)) files.push(`PICT_${5000 + (id - 128)}.png`);
+  for (const id of Object.keys(DATA.types.outf)) files.push(`PICT_${6000 + (id - 128)}.png`);
+  for (const f of files) {
+    const img = document.createElement('img');
+    img.src = 'evassets/graphics/' + f;
+    img.style.display = 'none';
+    img.onerror = () => img.remove();
+    document.body.appendChild(img);
+  }
+}
+
+const GREEN = '#3ce052', DIMGREEN = '#1d7a2e';
+function panelText(x, y, text, color = GREEN, align = 'left', font = '10px Geneva, Verdana, sans-serif') {
+  ctx.fillStyle = color; ctx.font = font; ctx.textAlign = align;
+  ctx.fillText(text, x, y);
+  ctx.textAlign = 'left';
+}
+
+function drawPanel(w, h) {
+  const pw = 144, ph = 480;
+  const px = w - pw, py = Math.max(0, Math.round((h - ph) / 2));
+  if (panelImg.complete && panelImg.naturalWidth) ctx.drawImage(panelImg, px, py);
+  else { ctx.fillStyle = '#041004'; ctx.fillRect(px, py, pw, ph); }
+
+  /* radar — square, like the original */
+  const rx = px + 5, ry = py + 4, rw = 134, rh = 133;
+  const rcx = rx + rw / 2, rcy = ry + rh / 2, scale = (rw / 2) / 2600;
+  ctx.save(); ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.clip();
+  const blip = (o, color, sz) => {
+    const x = rcx + (o.x - player.x) * scale, y = rcy + (o.y - player.y) * scale;
+    if (x < rx || x > rx + rw || y < ry || y > ry + rh) return null;
+    ctx.fillStyle = color; ctx.fillRect(x - sz / 2, y - sz / 2, sz, sz);
+    return [x, y];
+  };
+  for (const p of spobs) blip(p, '#7fd0ff', 3);
+  for (const s of aiShips) {
+    const at = blip(s, radarColor(s.govt), 2);
+    if (at && s === shipTarget) {
+      ctx.strokeStyle = '#ffd479'; ctx.strokeRect(at[0] - 3, at[1] - 3, 6, 6);
+    }
+  }
+  ctx.fillStyle = '#fff'; ctx.fillRect(rcx - 1.5, rcy - 1.5, 3, 3);
+  ctx.restore();
+
+  /* shield & fuel bars (no damage model yet — shields read full) */
+  ctx.fillStyle = GREEN;
+  ctx.fillRect(px + 60, py + 154, Math.round(74 * 1), 6);
+  ctx.fillRect(px + 60, py + 170, Math.round(74 * (fuel / fuelMax)), 6);
+
+  /* message box */
+  if (lastMsg) {
+    const words = lastMsg.split(' ');
+    let line = '', lines = [];
+    for (const wd of words) {
+      if (ctx.measureText(line + ' ' + wd).width > 120 && line) { lines.push(line); line = wd; }
+      else line += (line ? ' ' : '') + wd;
+    }
+    lines.push(line);
+    lines.slice(0, 3).forEach((l, i) => panelText(px + 9, py + 202 + i * 11, l));
+  }
+
+  /* status strip: hyperspace destination */
+  const destName = jumpDest != null && systs[jumpDest] ? systs[jumpDest].name : null;
+  panelText(px + 9, py + 248,
+    jump ? `Hyperspace: ${systs[jump.destId].name}` :
+    destName ? `Dest: ${destName} (J)` : syst.name);
+
+  /* target display */
+  const tb = { x: px + 5, y: py + 262, w: 134, h: 117 };
+  if (shipTarget) {
+    drawSpin(ctx, spinOfShip(shipTarget.shipId), tb.x + tb.w / 2, tb.y + 40, shipTarget.heading);
+    const govtName = shipTarget.govt >= 128 && DATA.types.govt[shipTarget.govt]
+      ? DATA.types.govt[shipTarget.govt].name : 'Independent';
+    panelText(tb.x + tb.w / 2, tb.y + 86, ships[shipTarget.shipId].name, '#fff', 'center');
+    panelText(tb.x + tb.w / 2, tb.y + 98, govtName, radarColor(shipTarget.govt), 'center');
+    panelText(tb.x + tb.w / 2, tb.y + 110, `Shields 100% · ${Math.round(distTo(shipTarget))}px`, GREEN, 'center');
+  } else if (navTarget) {
+    drawSpin(ctx, spinOfSpob(navTarget), tb.x + tb.w / 2, tb.y + 44, 0);
+    panelText(tb.x + tb.w / 2, tb.y + 98, navTarget.name, '#fff', 'center');
+    panelText(tb.x + tb.w / 2, tb.y + 110, `${Math.round(distTo(navTarget))}px`, GREEN, 'center');
+  } else {
+    panelText(tb.x + tb.w / 2, tb.y + 62, 'No target', DIMGREEN, 'center');
+  }
+
+  /* cargo / wallet box */
+  const cb = { x: px + 9, y: py + 398 };
+  panelText(cb.x, cb.y, `Credits: ${credits.toLocaleString('en-US')}`);
+  panelText(cb.x, cb.y + 13, `Jumps left: ${Math.floor(fuel / EV.JUMP_FUEL)}`);
+  let cy = cb.y + 30;
+  const held = COMMODITIES.map((c, i) => [cargoNames[i], cargo[c]]).filter(([, q]) => q > 0);
+  if (held.length === 0) panelText(cb.x, cy, `Cargo: ${holds} tons free`, DIMGREEN);
+  else for (const [name, q] of held.slice(0, 4)) { panelText(cb.x, cy, `${q}t ${name}`); cy += 12; }
+}
+
+/* ---- galaxy map overlay ---- */
+
+let mapHit = []; // clickable {x, y, id} in screen coords
+function drawMap(w, h) {
+  mapHit = [];
+  const mw = Math.min(w * 0.72, 900), mh = Math.min(h * 0.72, 620);
+  const mx = (w - mw) / 2, my = (h - mh) / 2;
+  ctx.fillStyle = 'rgba(4,6,12,.93)';
+  ctx.strokeStyle = '#2a3550';
+  ctx.fillRect(mx, my, mw, mh); ctx.strokeRect(mx, my, mw, mh);
+
+  const all = Object.entries(systs);
+  const xs = all.map(([, s]) => s.xPos), ys = all.map(([, s]) => s.yPos);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const sc = Math.min((mw - 60) / (x1 - x0), (mh - 60) / (y1 - y0));
+  const px = s => mx + 30 + (s.xPos - x0) * sc, py = s => my + 30 + (s.yPos - y0) * sc;
+
+  ctx.lineWidth = 1;
+  for (const [id, s] of all)
+    for (let i = 1; i <= 16; i++) {
+      const c = s['Con' + i];
+      if (c >= 128 && systs[c] && +id < c &&
+          (explored.has(+id) || explored.has(c))) { // fog: known links only
+        ctx.strokeStyle = 'rgba(90,110,160,.3)';
+        ctx.beginPath(); ctx.moveTo(px(s), py(s)); ctx.lineTo(px(systs[c]), py(systs[c])); ctx.stroke();
+      }
+    }
+  const linked = linkedSystems();
+  for (const [id, s] of all) {
+    const x = px(s), y = py(s);
+    const known = explored.has(+id), adjacent = linked.includes(+id);
+    // fog of war (spec: "Map knowledge"): unexplored = dim anonymous dot
+    ctx.fillStyle = known ? radarColor(s.Govt) : 'rgba(120,130,150,.35)';
+    ctx.beginPath(); ctx.arc(x, y, known ? 3 : 2, 0, 7); ctx.fill();
+    if (+id === SYSTEM_ID) {
+      ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.stroke();
+    }
+    if (+id === jumpDest) {
+      ctx.strokeStyle = '#ffd479'; ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.stroke();
+    }
+    if (adjacent) mapHit.push({ x, y, id: +id });
+    if (known || adjacent) {
+      ctx.fillStyle = known ? '#cfd6e4' : '#7a869c';
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.fillText(s.name ?? id, x + 8, y + 4);
+    }
+  }
+  ctx.fillStyle = '#8fa3c8';
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.fillText(`${syst.name} — click a linked system, then J to jump` +
+    (fuel < EV.JUMP_FUEL ? '  (out of fuel!)' : ''), mx + 14, my + mh - 12);
+}
+canvas.addEventListener('mousedown', e => {
+  if (!mapOpen) return;
+  for (const t of mapHit)
+    if (Math.hypot(e.clientX - t.x, e.clientY - t.y) < 12) { jumpDest = t.id; return; }
+});
+
+function render() {
+  const w = innerWidth, h = innerHeight;
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.imageSmoothingEnabled = false;
+
+  const streak = jump && jump.phase === 'streak' ? jump.t : 0;
+  drawStars(player.x, player.y, w, h, streak);
+  const toScreen = (x, y) => [x - player.x + w / 2, y - player.y + h / 2];
+
+  for (const p of spobs) {
+    const [x, y] = toScreen(p.x, p.y);
+    drawSpin(ctx, spinOfSpob(p), x, y, 0);
+    ctx.fillStyle = 'rgba(190,205,230,.55)';
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(p.name, x, y + 50);
+    ctx.textAlign = 'left';
+    if (p === navTarget) {
+      const ok = !p.$sem || p.$sem.canLand;
+      drawBrackets(x, y, spriteHalf(spinOfSpob(p), 48),
+        ok ? 'rgba(120,230,140,.9)' : 'rgba(150,160,180,.7)');
+    }
+  }
+  for (const s of aiShips) {
+    const [x, y] = toScreen(s.x, s.y);
+    if (x < -100 || x > w + 100 || y < -100 || y > h + 100) continue;
+    if (s.fade != null) ctx.globalAlpha = Math.max(s.fade, 0);
+    drawSpin(ctx, spinOfShip(s.shipId), x, y, s.heading);
+    drawFlame(s, x, y);
+    ctx.globalAlpha = 1;
+    if (s === shipTarget)
+      drawBrackets(x, y, spriteHalf(spinOfShip(s.shipId), 32), 'rgba(255,212,121,.9)');
+  }
+  if (!landedAt) {
+    drawSpin(ctx, spinOfShip(player.shipId), w / 2, h / 2, player.heading);
+    drawFlame(player, w / 2, h / 2);
+  }
+  drawPanel(w, h);
+  if (mapOpen) drawMap(w, h);
+
+  const speed = Math.hypot(player.vx, player.vy);
+  document.getElementById('hud').innerHTML =
+    `<b>${syst.name}</b><br>${ships[playerShipId].name}<br>` +
+    `speed ${(speed * EV.FPS).toFixed(0)} px/s`;
+
+  const near = (landedAt || jump || !navTarget ||
+    (navTarget.$sem && !navTarget.$sem.canLand) ||
+    distTo(navTarget) >= EV.LAND_DIST) ? null : navTarget;
+  document.getElementById('prompt').textContent =
+    jump && jump.phase === 'engage' ? 'Jump autopilot engaged — Esc to abort' :
+    near ? (speed > EV.LAND_SPEED ? `Slow down to land on ${near.name}`
+                                  : `Press L to land on ${near.name}`) : '';
+}
+
+/* ---------------- main loop ---------------- */
+
+loadSystem(SYSTEM_ID);
+
+// Test/dev affordances (mirror the SDL flags): ?map=1 opens the map,
+// ?dest=<systId> preselects a destination, ?jump=1 engages the jump
+// autopilot, ?ff=N fast-forwards N logic frames before the first render.
+if (params.has('map')) mapOpen = true;
+if (params.has('dest')) jumpDest = +params.get('dest');
+if (params.has('jump')) beginJump();
+const FF = +(params.get('ff') || 0);
+
+let last = performance.now(), acc = 0;
+function frame(now) {
+  acc += Math.min(now - last, 250); last = now;
+  const dt = 1000 / EV.FPS;
+  while (acc >= dt) { step(); acc -= dt; }
+  render();
+  requestAnimationFrame(frame);
+}
+addEventListener('load', () => {
+  for (let i = 0; i < FF; i++) step();
+  if (params.has('land')) { tryLand(); tryLand(); } // select, then land
+  for (const svc of ['exchange', 'outfitter', 'shipyard'])
+    if (params.has(svc)) openService(svc);
+  if (params.has('tab')) cycleShipTarget();
+  if (params.has('nav')) cyclePlanetTarget();
+  last = performance.now(); render(); requestAnimationFrame(frame);
+});
+</script>
+</body>
+</html>

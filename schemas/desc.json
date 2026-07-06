@@ -1,0 +1,10 @@
+{
+  "name": "dësc",
+  "source": "TMPL 131 (\"dësc\") in EV Data.rsrc",
+  "fields": [
+    [
+      "Description",
+      "cstr"
+    ]
+  ]
+}

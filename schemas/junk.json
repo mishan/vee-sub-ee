@@ -1,0 +1,22 @@
+{
+  "name": "jünk",
+  "source": "TMPL 142 (\"jünk\") in EV Data.rsrc",
+  "fields": [
+    [
+      "SoldAt",
+      "i16"
+    ],
+    [
+      "BoughtAt",
+      "i16"
+    ],
+    [
+      "BasePrice",
+      "i16"
+    ],
+    [
+      "Flags",
+      "u16"
+    ]
+  ]
+}

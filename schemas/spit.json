@@ -1,0 +1,10 @@
+{
+  "name": "spït",
+  "source": "TMPL 145 (\"spït\") in EV Data.rsrc",
+  "fields": [
+    [
+      "TotalSprites",
+      "i16"
+    ]
+  ]
+}
