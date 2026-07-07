@@ -914,7 +914,9 @@ function subst(text, A) {
     RST: (A && stel(A.returnStel)) || (A && stel(A.travelStel)) || 'your destination',
     RSY: (A && sysOf(A.returnStel)) || (A && sysOf(A.travelStel)) || 'the target system',
     CT:  (A && A.cargoName) || 'cargo',
-    CQ:  A && A.cargoQty ? String(A.cargoQty) : 'the',
+    // null-check, not truthiness: a legitimate quantity of 0 must render as
+    // "0", not fall through to "the".
+    CQ:  A && A.cargoQty != null ? String(A.cargoQty) : 'the',
     DL:  A && A.deadline != null ? formatDate(A.deadline) : 'the deadline',
     PN:  'Captain',
     PSN: ships[playerShipId] ? ships[playerShipId].name : 'your ship',
@@ -1122,9 +1124,14 @@ function goalMet(A) {
   if (A.shipGoal === 0 || A.shipGoal === 6) return A.shipsLeft <= 0;
   if (A.shipGoal === 1) return A.shipsLeft <= 0 && !A.captureLost;
   if (A.shipGoal === 2 || A.shipGoal === 5) return A.shipsLeft <= 0 && !A.captureLost;
-  if (A.shipGoal === 3) return !A.escortFailed;
+  if (A.shipGoal === 3) return escortArrived(A); // all escorts must arrive, not just survive
   if (A.shipGoal === 4) return A.observed;
   return true; // cargo / go-to: arriving at returnStel is the goal
+}
+/* An unwinnable goal (target killed / escort lost) should fail at ReturnStel
+ * even without a time limit, rather than stranding the mission forever. */
+function goalFailed(A) {
+  return !!A.captureLost || !!A.escortFailed;
 }
 
 /* Handle landing on spob p for every active mission: cargo pickup/dropoff
@@ -1150,13 +1157,13 @@ function missionLandingEvents(p) {
                      (A.returnStel == null && A.travelStel === p.id);
     if (isReturn) {
       const expired = A.timeLimit > 0 && gameDay - A.accepted > A.timeLimit;
-      if (!expired && goalMet(A)) {
+      if (!expired && !goalFailed(A) && goalMet(A)) {
         notes.push(descText(m.CompText, A) || `Mission complete: ${misnName(m, A)}.`);
         payMission(m);
         setBitCode(m.CompBitSet); setBitCode(m.CompBitSet2); setBitCode(m.CompBitSet4);
         adjustRep(m.CompGovt, m.CompReward);
         removeMission(A.id);
-      } else if (expired || m.CanAbort) {
+      } else if (expired || goalFailed(A) || m.CanAbort) {
         notes.push(descText(m.FailText, A) || `Mission failed: ${misnName(m, A)}.`);
         setBitCode(m.FailBitSet); setBitCode(m.FailBitSet2);
         adjustRep(m.CompGovt, -Math.round(m.CompReward / 2));
