@@ -75,9 +75,13 @@
   .shoppane .row { color: #aab6cc; font-size: 12px; margin: 2px 0; }
   .shoppane .row b { color: #fff; }
   #help { position: fixed; bottom: 8px; left: 12px; color: #4d5b76; font-size: 11px; }
-  #ff { display: none; position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+  #ff { position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
     color: #ffd479; font-size: 13px; font-weight: 600; letter-spacing: .1em;
-    text-shadow: 0 1px 3px #000; user-select: none; }
+    text-shadow: 0 1px 3px #000; user-select: none; cursor: pointer; opacity: .32;
+    padding: 2px 9px; border: 1px solid transparent; border-radius: 6px; }
+  #ff:hover { opacity: .6; }
+  #ff.on { opacity: 1; border-color: rgba(255,212,121,.45); background: rgba(255,212,121,.12); }
+  body.touch #ff { display: none; }   /* mobile uses the action-bar 2× button */
   #dead { position: fixed; inset: 0; display: none; align-items: center;
     justify-content: center; text-align: center; background: rgba(0,0,0,.6); }
   #dead h1 { color: #e06c75; font-size: 24px; margin-bottom: 8px; }
@@ -180,6 +184,8 @@
     border: 1px solid rgba(90,120,170,.4); background: rgba(26,35,56,.7); color: #cfd6e4;
     font: 600 12px system-ui, sans-serif; user-select: none; opacity: .85; }
   #touchBar button:active { background: rgba(60,90,140,.85); opacity: 1; }
+  #touchBar button.on { background: rgba(255,212,121,.28); color: #ffd479;
+    border-color: rgba(255,212,121,.5); opacity: 1; } /* 2× active */
   /* keyboard hint bar is meaningless on touch */
   body.touch #help { display: none; }
   /* rotate-to-landscape nudge (portrait on a touch device) */
@@ -209,6 +215,7 @@
     <button data-act="map">Map</button>
     <button data-act="jump">Jump</button>
     <button data-act="missions">Msn</button>
+    <button data-act="ff">2×</button>
     <button data-act="sound">♪</button>
   </div>
 </div>
@@ -242,7 +249,7 @@
   <div id="titleHint">select a menu option · original EV title theme</div>
 </div>
 <div id="about"><div class="card" id="aboutCard"></div></div>
-<div id="ff">» 2×</div>
+<div id="ff" onclick="toggleFastForward()" title="Toggle double speed (Caps Lock)">» 2×</div>
 <div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · B board · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · CapsLock 2× · Esc</div>
 <script>/*__ENGINE__*/</script>
 <script>
@@ -954,17 +961,22 @@ function completeJump() {
 /* ---------------- input ---------------- */
 
 const keys = {};
-/* Caps Lock runs the sim at double speed, like the original. It's a toggle,
- * so we read its state off keyboard events rather than tracking a held key. */
-let fastForward = false;
-function syncFastForward(e) {
-  if (!e.getModifierState) return;
-  const on = e.getModifierState('CapsLock');
+/* Double speed (like the original's Caps Lock). Driven by either Caps Lock —
+ * a toggle, so read off the event's modifier state — or an on-screen button
+ * (usable when Caps Lock is disabled, and on mobile). The effective flag is
+ * the OR of the two so a keypress can't undo a manual toggle. */
+let fastForward = false, capsFF = false, manualFF = false;
+function applyFF() {
+  const on = capsFF || manualFF;
   if (on === fastForward) return;
   fastForward = on;
-  document.getElementById('ff').style.display = on ? 'block' : 'none';
-  showMsg(on ? 'Fast forward (2×) — Caps Lock' : 'Fast forward off');
+  document.getElementById('ff').classList.toggle('on', on);
+  const bar = document.querySelector('#touchBar [data-act="ff"]');
+  if (bar) bar.classList.toggle('on', on);
+  showMsg(on ? 'Fast forward (2×) on' : 'Fast forward off');
 }
+function syncFastForward(e) { if (e.getModifierState) { capsFF = e.getModifierState('CapsLock'); applyFF(); } }
+function toggleFastForward() { manualFF = !manualFF; applyFF(); }
 /* Touch control state (mobile). The joystick doesn't drive the engine
  * directly — it synthesizes the same left/right/thrust the keyboard produces
  * (see step's player branch), so the flight core and golden trace are
@@ -1068,6 +1080,7 @@ function touchAction(act) {
     case 'map': mapOpen = !mapOpen; break;
     case 'jump': if (mapOpen) mapOpen = false; beginJump(); break;
     case 'missions': showMissionBriefing(); break;
+    case 'ff': toggleFastForward(); break;
     case 'sound':
       soundOn = !soundOn;
       if (!soundOn) stopAllLoops();

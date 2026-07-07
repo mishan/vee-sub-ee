@@ -85,11 +85,15 @@ repopulated each time you launch. (Shell behavior; SDL leg deferred.)
 
 ## Time controls (shell; browser leg)
 
-**Caps Lock toggles double speed** (classic EV), read off keyboard events'
-`getModifierState('CapsLock')` since it's a toggle, not a held key. The
-fixed-step loop runs two sim ticks per real tick while on (a `» 2×`
-indicator shows). It only changes how many `step()`s run per frame, not the
-per-step math, so the flight core and golden trace are untouched.
+**Double speed** (classic EV's Caps Lock): the fixed-step loop runs two sim
+ticks per real tick while on. Toggled by **either Caps Lock** (read off
+keyboard events' `getModifierState('CapsLock')`, since it's a toggle not a
+held key) **or an on-screen button** — the `» 2×` indicator top-centre on
+desktop (click to toggle) and a `2×` button in the mobile action bar — so it
+works with Caps Lock disabled and on touch. The effective flag is the OR of
+the Caps-Lock and manual states, so a keypress can't clobber a manual toggle.
+It only changes how many `step()`s run per frame, not the per-step math, so
+the flight core and golden trace are untouched.
 
 ## Hyperjump
 
