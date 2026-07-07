@@ -406,6 +406,31 @@ and no saving, so headless runs never touch a real pilot. Death: R
 returns to the last landing (reload restores the save), N abandons the
 pilot and starts fresh; `?new=1` does the same from a URL.
 
+## Title screen (shell responsibility; browser leg)
+
+On a normal load the classic title menu (PICT 8000 in EV Titles) is shown
+over the already-initialised game as a full-screen overlay, and the sim is
+paused until the player chooses an option. The art carries its own baked
+menu labels; the shell places transparent hotspots over them:
+
+- **New Pilot** — erases the saved pilot (after confirmation) and reloads
+  fresh (Levo, Shuttlecraft, 10 000 cr).
+- **Open Pilot** / **Enter Ship** — dismiss the title and resume the
+  loaded pilot (docked at the saved spöb, or a fresh start if none). Open
+  Pilot is dimmed when no save exists.
+- **Set Prefs** — toggles sound.
+- **About EV…** — shows the STR# 20000 intro text plus a clean-room note.
+- **Quit EV** — no-op in the browser (note to close the tab).
+
+The central viewscreen shows the player ship's spin sheet slowly rotating,
+echoing the original's animated panel. Title music (snd 30000, in the
+music/ set) loops while the menu is up; it is deferred to the first user
+gesture (browser autoplay policy) and tracks `masterVol`/`soundOn` like
+every other loop. Because `play()` is async, stopping the music re-pauses
+once the play promise settles, so entering the game never leaves the theme
+bleeding into flight. Any test-param run (see Persistence) skips the title
+so headless screenshots go straight to the game; `?title=1` forces it.
+
 ## Sprite ID conventions (from the EV bible, see semantics.js)
 
 ship spïn = 128 + (shïp − 128); stellar spïn = 300 + spöb.Type;

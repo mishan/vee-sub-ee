@@ -185,15 +185,25 @@ browser) deliberately undecided until sprites are on screen.
   record-gated missions were previously mishandled (rating-gated ones were
   always hidden; record-gated ones unchecked). Verified across all cases.
 
+- **Milestone: title screen + music** (browser). Classic PICT 8000 menu as
+  a full-screen overlay on normal load; sim paused until the player picks
+  an option. Transparent hotspots over the baked labels (New/Open Pilot,
+  Enter Ship, Set Prefs, About, Quit); player ship rotates in the centre
+  viewscreen; STR# 20000 intro text behind About. Title theme (snd 30000,
+  music/ set) loops, deferred to first gesture per autoplay policy, and is
+  race-safe on stop so it never bleeds into flight. Test params skip it;
+  `?title=1` forces it. Spec: "Title screen". Verified via headless
+  screenshots (art + hotspot alignment + spinning ship + gameplay intact).
+
 ## Next
 
 1. **Distribution loader** (deferred per Misha; see README "Distribution"):
    data-free hosted page that accepts a user-built asset bundle (zip of
    evdata.json + evassets), cached client-side. Add `evexport --bundle`.
 2. **Also open**: SDL parity catch-up (audio, combat UI, missions, legal
-   record), real Mac pilot-file read/write via `buildFork`, title screen +
-   music, ship-offered missions (AvailLoc 2, needs hail integration),
-   fighter bays (weap g99 + Voice Targ sound).
+   record), real Mac pilot-file read/write via `buildFork`, ship-offered
+   missions (AvailLoc 2, needs hail integration), fighter bays (weap g99 +
+   Voice Targ sound).
 
 ## Notes
 

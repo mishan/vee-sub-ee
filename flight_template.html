@@ -80,6 +80,32 @@
     margin: 4px 0; cursor: pointer; font-size: 13px; }
   #hail button:hover:not(:disabled) { background: #24304d; }
   #hail button:disabled { opacity: .4; cursor: default; }
+  /* title screen: PICT 8000 art with transparent hotspots over its baked menu */
+  #title { position: fixed; inset: 0; display: none; align-items: center;
+    justify-content: center; background: #000; z-index: 50; }
+  #titleFrame { position: relative; aspect-ratio: 832 / 624; max-width: 100vw;
+    max-height: 100vh; width: min(100vw, calc(100vh * 832 / 624));
+    background: url(evassets/titles/PICT_8000.png) center/contain no-repeat; }
+  #titleShip { position: absolute; left: 42.4%; top: 51.5%; width: 16.6%; height: 28.5%; }
+  #titleFrame .hot { position: absolute; background: transparent; border: 2px solid transparent;
+    border-radius: 6px; cursor: pointer; padding: 0; }
+  #titleFrame .hot:hover { border-color: rgba(120,255,140,.6); background: rgba(120,255,140,.08); }
+  #hotNew   { left: 13%; top: 50%;  width: 29%; height: 10%; }
+  #hotOpen  { left: 13%; top: 62%;  width: 29%; height: 8%; }
+  #hotQuit  { left: 13%; top: 73%;  width: 29%; height: 8%; }
+  #hotEnter { left: 60%; top: 50%;  width: 27%; height: 10%; }
+  #hotPrefs { left: 60%; top: 62%;  width: 27%; height: 8%; }
+  #hotAbout { left: 60%; top: 73%;  width: 27%; height: 8%; }
+  #titleHint { position: fixed; bottom: 10px; width: 100%; text-align: center;
+    color: #4d5b76; font-size: 12px; }
+  #about { position: fixed; inset: 0; display: none; align-items: center;
+    justify-content: center; background: rgba(0,0,0,.8); z-index: 60; }
+  #about .card { width: 520px; max-height: 80vh; overflow-y: auto; background: #0c1120;
+    border: 1px solid #2a3550; border-radius: 8px; padding: 22px 26px; }
+  #about h2 { margin: 0 0 8px; color: #7fff9a; }
+  #about p { color: #aab6cc; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+  #about button { margin-top: 14px; background: #1a2338; color: #cfd6e4;
+    border: 1px solid #2a3550; border-radius: 4px; padding: 6px 14px; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -95,6 +121,19 @@
   <div id="deadHint">Press R to try again</div>
 </div></div>
 <div id="hail"><div class="card" id="hailCard"></div></div>
+<div id="title">
+  <div id="titleFrame">
+    <canvas id="titleShip"></canvas>
+    <button class="hot" id="hotNew"   title="New Pilot"></button>
+    <button class="hot" id="hotOpen"  title="Open Pilot"></button>
+    <button class="hot" id="hotQuit"  title="Quit"></button>
+    <button class="hot" id="hotEnter" title="Enter Ship"></button>
+    <button class="hot" id="hotPrefs" title="Set Prefs"></button>
+    <button class="hot" id="hotAbout" title="About"></button>
+  </div>
+  <div id="titleHint">click a menu option · music: original EV title theme</div>
+</div>
+<div id="about"><div class="card" id="aboutCard"></div></div>
 <div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · B board · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · Esc</div>
 <script>/*__ENGINE__*/</script>
 <script>
@@ -392,7 +431,7 @@ function setVolume(delta) {
   masterVol = Math.max(0, Math.min(1, Math.round((masterVol + delta) * 10) / 10));
   try { localStorage.setItem('ve_volume', String(masterVol)); } catch {}
   // adjust every currently-playing long sound live
-  for (const a of [ambientSnd, warpSnd])
+  for (const a of [ambientSnd, warpSnd, titleMusic])
     if (a) a.volume = Math.min((a._baseVol ?? 1) * masterVol, 1);
   showMsg(`Volume ${Math.round(masterVol * 100)}%`);
   playSnd(150, 0.6); // audible reference beep at the new level
@@ -419,6 +458,29 @@ function loopSnd(id, vol = 1) {
   return a;
 }
 const stopSnd = a => { if (a) { a.pause(); a.currentTime = 0; } };
+
+/* Title theme (snd 30000) lives in evassets/music/, not sounds/. Looped
+ * while the title screen is up; deferred until a user gesture because
+ * browsers block autoplay. Volume tracks masterVol like every other loop. */
+let titleMusic = null;
+function startTitleMusic() {
+  if (titleMusic || !soundOn || masterVol <= 0 || !titleShown) return;
+  const a = new Audio('evassets/music/snd_30000.wav');
+  a._baseVol = 0.7;
+  a.volume = Math.min(0.7 * masterVol, 1);
+  a.loop = true;
+  titleMusic = a;
+  a._playP = a.play().catch(() => {});
+}
+function stopTitleMusic() {
+  const a = titleMusic; titleMusic = null;
+  if (!a) return;
+  const kill = () => { a.pause(); a.currentTime = 0; };
+  kill();
+  // play() is async; if it hadn't resolved yet, pausing now is a no-op and
+  // the track would start anyway — re-kill once the promise settles.
+  if (a._playP) a._playP.then(kill).catch(() => {});
+}
 const attenuate = (x, y) => Math.max(0, 1 - Math.hypot(x - player.x, y - player.y) / 1200);
 let ambientSnd = null, klaxxonArmed = true;
 function stopAllLoops() {
@@ -1936,7 +1998,7 @@ function checkHostileAlert() {
 }
 
 function step() {
-  if (gameOver || hailOpen) return; // hail dialog pauses the sim
+  if (gameOver || hailOpen || titleShown) return; // dialogs/title pause the sim
   maybeSpawnBountyHunter();
   checkHostileAlert();
   if (!landedAt) {
@@ -2474,6 +2536,94 @@ function render() {
                                   : `Press L to land on ${near.name}`) : '';
 }
 
+/* ---------------- title screen (spec: "Title screen") ----------------
+ * On a normal load the classic EV title menu (PICT 8000) sits over the
+ * already-initialised game; the sim is paused (titleShown) until the
+ * player picks Enter Ship / Open Pilot. Test-param runs skip it so
+ * headless screenshots go straight to the game. ?title=1 forces it. */
+let titleShown = false;
+const titleEl = document.getElementById('title');
+
+function showTitle() {
+  titleShown = true;
+  titleEl.style.display = 'flex';
+  // Open Pilot only means something when there's a save to resume.
+  document.getElementById('hotOpen').style.opacity = SAVED ? '' : '0.35';
+  startTitleShipSpin();
+  // Music is deferred to the first gesture (autoplay policy). Any click
+  // on the menu counts, but arm keydown too so it can't be missed.
+  addEventListener('keydown', startTitleMusic, { once: true });
+}
+function enterGame() {
+  if (!titleShown) return;
+  titleShown = false;
+  titleEl.style.display = 'none';
+  stopTitleMusic();
+  stopTitleShipSpin();
+  render();
+}
+function titleAbout() {
+  startTitleMusic();
+  // STR# 20000 is the intro crawl; show it as flavour + a clean-room note.
+  const intro = (DATA.strings[20000] && DATA.strings[20000].list || [])
+    .join(' ').replace(/\s+/g, ' ').trim();
+  document.getElementById('aboutCard').innerHTML =
+    '<h2>Vₑ — Escape Velocity, recreated</h2>' +
+    '<p>' + escapeHtml(intro) + '</p>' +
+    '<p style="color:#6f7c94;margin-top:12px">A clean-room reimplementation of ' +
+    'Ambrosia Software’s Escape Velocity. Engine by Misha Nasledov. ' +
+    'Game data is the original publisher’s and is not distributed.</p>' +
+    '<button onclick="document.getElementById(\'about\').style.display=\'none\'">Close</button>';
+  document.getElementById('about').style.display = 'flex';
+}
+function titlePrefs() {
+  soundOn = !soundOn;
+  if (!soundOn) stopTitleMusic(); else startTitleMusic();
+  showMsg('Sound ' + (soundOn ? 'on' : 'off'));
+}
+function escapeHtml(s) {
+  return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+
+/* Little rotating ship in the title viewscreen, like the original's
+ * animated centre panel. Uses the player ship's spin sheet if ready. */
+let titleSpinRAF = 0, titleSpinAng = 0;
+function startTitleShipSpin() {
+  const cv = document.getElementById('titleShip');
+  const g = cv.getContext('2d');
+  const spinId = spinOfShip(playerShipId);
+  const draw = () => {
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== w) { cv.width = w; cv.height = h; }
+    g.clearRect(0, 0, cv.width, cv.height);
+    const sp = sprites.get(spinId);
+    if (sp && sp.ready) {
+      const { frameW, frameH, xTiles, frames } = sp.meta;
+      const fi = EV.frameIndex(titleSpinAng, frames);
+      const sc = Math.min(cv.width / frameW, cv.height / frameH) * 0.85;
+      const dw = frameW * sc, dh = frameH * sc;
+      g.drawImage(sp.img, (fi % xTiles) * frameW, Math.floor(fi / xTiles) * frameH,
+        frameW, frameH, (cv.width - dw) / 2, (cv.height - dh) / 2, dw, dh);
+    }
+    titleSpinAng = EV.norm(titleSpinAng + 1.2);
+    titleSpinRAF = requestAnimationFrame(draw);
+  };
+  cancelAnimationFrame(titleSpinRAF);
+  preloadSprites([spinId]);
+  draw();
+}
+function stopTitleShipSpin() { cancelAnimationFrame(titleSpinRAF); titleSpinRAF = 0; }
+
+document.getElementById('hotEnter').onclick = () => enterGame();
+document.getElementById('hotOpen').onclick  = () => { if (SAVED) enterGame(); };
+document.getElementById('hotNew').onclick   = () => {
+  if (!SAVED || confirm('Start a new pilot? Your saved pilot will be erased.')) newPilot();
+};
+document.getElementById('hotAbout').onclick = titleAbout;
+document.getElementById('hotPrefs').onclick = titlePrefs;
+document.getElementById('hotQuit').onclick  = () =>
+  showMsg('This is the browser edition — just close the tab to quit.');
+
 /* ---------------- main loop ---------------- */
 
 applyShipStats(); // arm the player (stats + loadout + shield/armor maxes)
@@ -2520,6 +2670,8 @@ addEventListener('load', () => {
   if (params.has('nav')) cyclePlanetTarget();
   last = performance.now(); render(); requestAnimationFrame(frame);
   if (TEST_MODE) showMsg('Test mode (URL params) — pilot will not be saved or restored.');
+  // Classic title menu on a normal load; ?title=1 forces it for testing.
+  if (!TEST_MODE || params.has('title')) showTitle();
 });
 </script>
 </body>
