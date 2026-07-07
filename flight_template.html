@@ -77,7 +77,7 @@
 <div id="service"><div class="card" id="serviceCard"></div></div>
 <div id="dead"><div>
   <h1>Your ship has been destroyed.</h1>
-  <div>Press R to try again</div>
+  <div id="deadHint">Press R to try again</div>
 </div></div>
 <div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · N/Tab target · Y hail · M map · J jump · V sound · [ ] volume · Esc</div>
 <script>/*__ENGINE__*/</script>
@@ -90,15 +90,46 @@ const MANIFEST = /*__MANIFEST__*/null;
 /* ---------------- configuration ---------------- */
 
 const params = new URLSearchParams(location.search);
-let SYSTEM_ID = +(params.get('syst') || 128);   // Levo — the classic start
-let playerShipId = +(params.get('ship') || 128); // Shuttlecraft
 
-/* player economy state (spec: "Trading") — the seed of the pilot file */
+/* ---- persistence (spec: "Persistence") ----
+ * The pilot auto-saves on landing and takeoff (classic saved when you
+ * landed) and restores on load. Any gameplay-affecting test param puts
+ * the session in test mode: no restore, no saving — your pilot is safe
+ * from headless screenshot runs. ?new=1 starts a fresh pilot. */
+const TEST_MODE = ['new', 'syst', 'ship', 'x', 'y', 'heading', 'ff', 'land',
+  'exchange', 'outfitter', 'shipyard', 'map', 'dest', 'jump', 'tab', 'nav',
+  'fire'].some(k => params.has(k));
+const SAVED = (() => {
+  if (TEST_MODE) return null;
+  try {
+    const p = JSON.parse(localStorage.getItem('ve_pilot'));
+    return p && p.v === 1 ? p : null;
+  } catch { return null; }
+})();
+
+let SYSTEM_ID = SAVED ? SAVED.syst : +(params.get('syst') || 128); // Levo — the classic start
+let playerShipId = SAVED ? SAVED.ship : +(params.get('ship') || 128); // Shuttlecraft
+
+/* player economy state (spec: "Trading") — the pilot file's contents */
 const COMMODITIES = ['food', 'industrial', 'medical', 'luxury', 'metal', 'equipment'];
 const PRICE_MULT = { low: 0.80, medium: 1.00, high: 1.25 };
-let credits = 10000;
-const cargo = Object.fromEntries(COMMODITIES.map(c => [c, 0]));
-const explored = new Set();
+let credits = SAVED ? SAVED.credits : 10000;
+const cargo = Object.fromEntries(COMMODITIES.map(c => [c, (SAVED && SAVED.cargo[c]) || 0]));
+const explored = new Set(SAVED ? SAVED.explored : []);
+
+function savePilot(spobId) {
+  if (TEST_MODE) return;
+  try {
+    localStorage.setItem('ve_pilot', JSON.stringify({
+      v: 1, syst: SYSTEM_ID, spob: spobId, ship: playerShipId,
+      credits, cargo, outfits, explored: [...explored],
+    }));
+  } catch {}
+}
+function newPilot() {
+  try { localStorage.removeItem('ve_pilot'); } catch {}
+  location.href = location.pathname;
+}
 
 const ships = DATA.types.ship;
 const dudes = DATA.types.dude;
@@ -418,6 +449,7 @@ function shipHalf(e) {
  * outfits: outf id -> count. Effective ship stats = base shïp record plus
  * every owned outfit's effect; outfit Mass consumes the hull's FreeMass. */
 const outfits = {};
+if (SAVED && SAVED.outfits) Object.assign(outfits, SAVED.outfits);
 function effectiveShip() {
   const rec = { ...ships[playerShipId] };
   let h = rec.Holds, fm = rec.Fuel, massUsed = 0;
@@ -516,6 +548,7 @@ addEventListener('keydown', e => {
   if (k === 'l') tryLand();
   if (k === 'm') { mapOpen = !mapOpen; }
   if (k === 'j') { if (mapOpen) mapOpen = false; beginJump(); }
+  if (k === 'n' && gameOver) { newPilot(); return; }
   if (k === 'n' && !landedAt) cyclePlanetTarget();
   if (k === 'y' && !landedAt) hail();
   if (k === 'r' && gameOver) location.reload();
@@ -911,12 +944,14 @@ function tryLand() {
   rebuildPlayerWeapons(); // rearm (simplification: ammo refills on landing)
   stopAllLoops();
   if (p.CustSndID >= 0) ambientSnd = loopSnd(p.CustSndID, 0.6); // planet ambient
+  savePilot(p.id); // classic: the game saves when you land
   renderPlanetScreen();
   document.getElementById('landed').style.display = 'flex';
 }
 function takeOff() {
   if (!landedAt) return;
   if (serviceOpen) closeService();
+  savePilot(landedAt.id); // captures docked purchases/trades
   stopAllLoops();
   EV.placeAtTakeoff(player, landedAt);
   navTarget = null; // fresh start off the pad — no stale landing target
@@ -958,6 +993,11 @@ function step() {
         playSnd(303);
         stopAllLoops();
         gameOver = true;
+        let hasPilot = false;
+        try { hasPilot = !TEST_MODE && !!localStorage.getItem('ve_pilot'); } catch {}
+        document.getElementById('deadHint').textContent = hasPilot
+          ? 'R: return to your last landing \u00b7 N: new pilot'
+          : 'Press R to try again';
         document.getElementById('dead').style.display = 'flex';
       }
     } else {
@@ -1410,6 +1450,19 @@ function render() {
 
 applyShipStats(); // arm the player (stats + loadout + shield/armor maxes)
 loadSystem(SYSTEM_ID);
+if (SAVED && SAVED.spob != null) {
+  const p = spobs.find(sp => sp.id === SAVED.spob);
+  if (p) { // resume docked where you last saved, like the original
+    player.x = p.x; player.y = p.y;
+    landedAt = p;
+    fuel = fuelMax;
+    player.shields = player.shieldMax; player.armor = player.armorMax;
+    if (p.CustSndID >= 0) ambientSnd = loopSnd(p.CustSndID, 0.6);
+    renderPlanetScreen();
+    document.getElementById('landed').style.display = 'flex';
+    showMsg('Pilot restored.');
+  }
+}
 if (params.has('fire')) keys[' '] = true; // test affordance: hold the trigger
 
 // Test/dev affordances (mirror the SDL flags): ?map=1 opens the map,

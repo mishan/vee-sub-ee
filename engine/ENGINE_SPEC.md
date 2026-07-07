@@ -234,6 +234,20 @@ a master volume (10% steps, multiplied into every event volume,
 persisted in localStorage as `ve_volume`); `?mute=1` starts muted. Title music (snd 30000+, EV Music) is deferred
 until there's a title screen.
 
+## Persistence (shell responsibility; browser leg)
+
+The pilot auto-saves **on landing and on takeoff** (classic saved when
+you landed; the takeoff save captures docked trades and refits) to
+localStorage key `ve_pilot`: version, current system, docked spöb, ship,
+credits, cargo, outfits, explored set. Fuel/shields/armor are not saved —
+landing restores them anyway. On load with no gameplay-affecting URL
+params, the pilot restores docked at the saved spöb. Any test param
+(`?syst ?ship ?x ?y ?heading ?ff ?land ?exchange ?outfitter ?shipyard
+?map ?dest ?jump ?tab ?nav ?fire ?new`) enters **test mode**: no restore
+and no saving, so headless runs never touch a real pilot. Death: R
+returns to the last landing (reload restores the save), N abandons the
+pilot and starts fresh; `?new=1` does the same from a URL.
+
 ## Sprite ID conventions (from the EV bible, see semantics.js)
 
 ship spïn = 128 + (shïp − 128); stellar spïn = 300 + spöb.Type;
