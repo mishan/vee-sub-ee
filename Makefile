@@ -10,6 +10,7 @@
 # recipes and never used as a prerequisite. RAW is the asset-conversion source
 # dir, ASSETS the converted PNG/WAV + sprite manifest output dir.
 DATA    ?= EV_data/EV Data.rsrc
+APP     ?= EV_data/EV_1.0.5/Escape Velocity.rsrc
 RAW     ?= EV_data
 ASSETS  ?= evassets
 SCHEMAS := $(wildcard schemas/*.json)
@@ -25,8 +26,10 @@ GALAXY_DEPS := galaxy_viewer.html evexport.js evrsrc.js semantics.js $(SCHEMAS)
 .DEFAULT_GOAL := flight.html
 
 ## flight.html   – build the browser game (default)
+# --app supplies the EV application rsrc for name suggestions (STR# 128);
+# evexport ignores it gracefully if the file is absent.
 flight.html: $(FLIGHT_DEPS)
-	node evexport.js "$(DATA)" --flight $@
+	node evexport.js "$(DATA)" --app "$(APP)" --flight $@
 
 ## galaxy.html   – build the galaxy map viewer
 galaxy.html: $(GALAXY_DEPS)

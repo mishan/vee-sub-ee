@@ -73,6 +73,7 @@ function main() {
   const outPath = opt('-o');
   const mapPath = opt('--map');
   const flightPath = opt('--flight');
+  const appPath = opt('--app'); // EV application rsrc, for name suggestions (STR# 128)
   const assetDir = opt('--assets') || path.join(__dirname, 'evassets');
   const schemaDir = opt('--schemas') || path.join(__dirname, 'schemas');
   const semanticIdx = args.indexOf('--semantic');
@@ -107,10 +108,28 @@ function main() {
     const engine = fs.readFileSync(path.join(__dirname, 'engine', 'core.js'), 'utf8');
     const tpl = fs.readFileSync(path.join(__dirname, 'flight_template.html'), 'utf8');
     if (!tpl.includes('/*__EVDATA__*/null')) throw new Error('flight template missing __EVDATA__ placeholder');
+    // Name suggestions (STR# 128 "Default Names") live in the EV application's
+    // resource fork, not the game data. If the app rsrc is supplied, split the
+    // list in half — pilot names, then ship names — and inject it. Otherwise
+    // leave null; the template falls back to generic defaults (data-free).
+    let names = 'null';
+    if (appPath) {
+      try {
+        const { loadFork, parseFork, decodeStrList } = require('./evrsrc.js');
+        const t = parseFork(loadFork(appPath).fork).find(x => x.typeName === 'STR#');
+        const r = t && t.resources.find(x => x.id === 128);
+        const list = r ? decodeStrList(r.data()) : [];
+        if (list.length >= 2) {
+          const h = Math.ceil(list.length / 2);
+          names = JSON.stringify({ pilots: list.slice(0, h), ships: list.slice(h) });
+        }
+      } catch (e) { console.error('⚠ name suggestions: ' + e.message); }
+    }
     fs.writeFileSync(flightPath, tpl
       .replace('/*__ENGINE__*/', () => engine)
       .replace('/*__EVDATA__*/null', JSON.stringify(out))
-      .replace('/*__MANIFEST__*/null', manifest.trim()));
+      .replace('/*__MANIFEST__*/null', manifest.trim())
+      .replace('/*__NAMES__*/null', () => names));
     console.error(`wrote ${flightPath}`);
   }
 }

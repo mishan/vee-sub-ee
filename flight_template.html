@@ -141,6 +141,26 @@
   #about p { color: #aab6cc; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
   #about button { margin-top: 14px; background: #1a2338; color: #cfd6e4;
     border: 1px solid #2a3550; border-radius: 4px; padding: 6px 14px; cursor: pointer; }
+  /* New Pilot dialogs — a classic light system-dialog look over the title */
+  #npilot { display: none; position: fixed; inset: 0; z-index: 65; align-items: center;
+    justify-content: center; background: rgba(0,0,0,.45); }
+  #npilot .card { width: 340px; background: #e8e8ec; color: #111; border-radius: 6px;
+    border: 1px solid #000; padding: 16px 18px; box-shadow: 0 10px 40px rgba(0,0,0,.7);
+    font: 13px/1.4 system-ui, sans-serif; }
+  #npilot .nprow { display: flex; gap: 12px; align-items: flex-start; }
+  #npilot .npicon { width: 44px; height: 44px; object-fit: contain; image-rendering: pixelated;
+    background: #000; border: 1px solid #888; border-radius: 3px; flex: none; }
+  #npilot .npmsg { font-weight: 600; padding-top: 2px; }
+  #npilot input[type=text] { width: 100%; box-sizing: border-box; margin: 12px 0 4px;
+    padding: 5px 7px; border: 1px solid #7a7a7a; border-radius: 3px; background: #fff;
+    color: #111; font: 14px system-ui, sans-serif; }
+  #npilot .npstrict { display: flex; align-items: center; gap: 6px; margin-top: 10px; cursor: pointer; }
+  #npilot .npnote { color: #444; font-size: 12px; margin: 3px 0 0 22px; }
+  #npilot .npbtns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+  #npilot .npbtns button { padding: 5px 16px; border-radius: 6px; border: 1px solid #7a7a7a;
+    background: #f4f4f6; color: #111; cursor: pointer; font: 600 13px system-ui, sans-serif; }
+  #npilot .npbtns button.primary { border: 2px solid #2a5db0; background: #eaf1fb; }
+  #npilot .npbtns button:hover { background: #dfe3ea; }
 
   /* ---- touch controls (mobile only; shown when body.touch) ---- */
   #touch { display: none; }
@@ -249,7 +269,7 @@
   <div id="titleHint">select a menu option · original EV title theme</div>
 </div>
 <div id="about"><div class="card" id="aboutCard"></div></div>
-<div id="ff" onclick="toggleFastForward()" title="Toggle double speed (Caps Lock)">» 2×</div>
+<div id="npilot"><div class="card"></div></div>
 <div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · B board · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · CapsLock 2× · Esc</div>
 <script>/*__ENGINE__*/</script>
 <script>
@@ -257,6 +277,10 @@
 
 const DATA = /*__EVDATA__*/null;
 const MANIFEST = /*__MANIFEST__*/null;
+// Pilot/ship name suggestions from the EV app's STR# 128, injected at build if
+// the app rsrc is available; generic fallbacks keep the committed template
+// data-free. {pilots:[...], ships:[...]}.
+const NAMES = /*__NAMES__*/null;
 
 /* ---------------- configuration ---------------- */
 
@@ -295,6 +319,10 @@ let gameDay = SAVED ? (SAVED.day || 0) : 0;
 // Real-world epoch the pilot was created, so the displayed in-game date is
 // stable across sessions (legacy saves without it fall back to now).
 let pilotBorn = SAVED && SAVED.born ? SAVED.born : Date.now();
+// Pilot & ship names (set at New Pilot) and Strict Play (permadeath) flag.
+let pilotName = SAVED && SAVED.name || '';
+let shipName = SAVED && SAVED.shipName || '';
+let strictPlay = SAVED ? !!SAVED.strict : false;
 /* legal record per govt (spec: "Legal record") — negative = evil, positive
  * = good; defaults to each govt's InitialRec. Missions and combat move it. */
 const reputation = SAVED && SAVED.rep ? { ...SAVED.rep } : {}; // govtId -> record
@@ -311,7 +339,7 @@ function savePilot(spobId) {
     credits, cargo, outfits, explored: [...explored],
     bits: [...missionBits.keys()].filter(b => missionBits[b]),
     day: gameDay, born: pilotBorn, rep: reputation, kills, missions: activeMissions,
-    dominated: [...dominated],
+    dominated: [...dominated], name: pilotName, shipName, strict: strictPlay,
   });
   let ok = false;
   try {
@@ -323,9 +351,65 @@ function savePilot(spobId) {
     showMsg('Warning: browser storage unavailable — your pilot will not be saved.');
   }
 }
-function newPilot() {
+function newPilot() { // abandon the current pilot → back to the title
   try { localStorage.removeItem('ve_pilot'); } catch {}
   location.href = location.pathname;
+}
+/* ---- New Pilot creation (spec: "New pilot") ---- */
+const nameSuggest = kind => { // a random default, from the app's STR# 128 or a generic
+  const list = NAMES && NAMES[kind];
+  if (list && list.length) return list[Math.floor(Math.random() * list.length)];
+  return kind === 'pilots' ? 'New Pilot' : 'Star Voyager';
+};
+const shipLongName = () => (DATA.strings[5002] && DATA.strings[5002].list[playerShipId - 128])
+  || (ships[playerShipId] && ships[playerShipId].name) || 'ship';
+/* Two-step New Pilot flow, echoing the original: name yourself (with the
+ * Strict Play permadeath option), then christen the starting Shuttlecraft. */
+function startNewPilot() {
+  openNameDialog({
+    prompt: "What's your name, pilot?", value: nameSuggest('pilots'), strict: true,
+    onOk: (name, strict) => openNameDialog({
+      prompt: `Christen your new ${shipLongName()}:`,
+      value: nameSuggest('ships'), strict: false,
+      onOk: ship => createPilot(name.trim() || nameSuggest('pilots'),
+                                ship.trim() || nameSuggest('ships'), strict),
+    }),
+  });
+}
+function createPilot(name, ship, strict) {
+  const blob = JSON.stringify({
+    v: 1, syst: 128, spob: null, ship: 128, credits: 10000,
+    cargo: Object.fromEntries(COMMODITIES.map(c => [c, 0])), outfits: {},
+    explored: [128], bits: [], day: 0, born: Date.now(),
+    rep: {}, kills: 0, missions: [], dominated: [],
+    name, shipName: ship, strict: !!strict,
+  });
+  try { localStorage.setItem('ve_pilot', blob); sessionStorage.setItem('ve_newpilot', '1'); } catch {}
+  location.reload(); // reload restores the new pilot; the flag jumps to the menu
+}
+function openNameDialog(cfg) {
+  const el = document.getElementById('npilot');
+  const strictHtml = cfg.strict
+    ? `<label class="npstrict"><input type="checkbox" id="npStrict"><b>Strict Play</b></label>
+       <div class="npnote">Permadeath: if this pilot dies, it's gone for good — no restoring from a save.</div>`
+    : '';
+  el.querySelector('.card').innerHTML =
+    `<div class="nprow">
+       <img class="npicon" src="evassets/graphics/PICT_${5000 + (playerShipId - 128)}.png" onerror="this.style.display='none'">
+       <div class="npmsg">${escapeHtml(cfg.prompt)}</div>
+     </div>
+     <input type="text" id="npName" value="${escapeHtml(cfg.value)}" maxlength="63" spellcheck="false" autocomplete="off">
+     ${strictHtml}
+     <div class="npbtns"><button id="npCancel">Cancel</button><button id="npOk" class="primary">OK</button></div>`;
+  el.style.display = 'flex';
+  const input = document.getElementById('npName');
+  input.focus(); input.select();
+  const close = () => { el.style.display = 'none'; };
+  const ok = () => { const v = input.value, s = document.getElementById('npStrict'); close(); cfg.onOk(v, s ? s.checked : false); };
+  document.getElementById('npOk').onclick = ok;
+  document.getElementById('npCancel').onclick = close;
+  // keep typing from reaching the title's global key-swallow
+  input.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') ok(); else if (e.key === 'Escape') close(); };
 }
 
 const ships = DATA.types.ship;
@@ -2452,11 +2536,13 @@ function step() {
         playSnd(303);
         stopAllLoops();
         gameOver = true;
+        if (strictPlay) try { localStorage.removeItem('ve_pilot'); } catch {} // permadeath \u2014 the pilot is gone
         let hasPilot = false;
         try { hasPilot = !TEST_MODE && !!localStorage.getItem('ve_pilot'); } catch {}
-        document.getElementById('deadHint').textContent = hasPilot
-          ? 'R: return to your last landing \u00b7 N: new pilot'
-          : 'Press R to try again';
+        document.getElementById('deadHint').textContent =
+          strictPlay ? 'Strict Play: this pilot is gone for good. N: new pilot' :
+          hasPilot ? 'R: return to your last landing \u00b7 N: new pilot'
+                   : 'Press R to try again';
         document.getElementById('dead').style.display = 'flex';
       }
     } else {
@@ -3112,14 +3198,13 @@ function renderTitleSummary() {
     g.textAlign = 'left';
     return;
   }
-  const shipName = ships[playerShipId] ? ships[playerShipId].name : 'Shuttlecraft';
-  const sysName = syst ? syst.name : '';
+  const shipTypeName = ships[playerShipId] ? ships[playerShipId].name : 'Shuttlecraft';
   const fields = [
-    ['Ship', shipName],
-    ['System', sysName],
+    ['Pilot', pilotName || 'Pilot'],
+    ['Ship name', shipName || shipTypeName],
+    ['Ship type', shipTypeName],
     ['Legal status', legalStatus(systemGovt())],
     ['Combat rating', combatRating()],
-    ['Credits', credits.toLocaleString('en-US')],
     ['Date', gameDate()],
   ];
   const pad = Math.round(cv.width * 0.07);
@@ -3141,10 +3226,12 @@ function renderTitleSummary() {
 // re-render on resize while the title is up (the canvas is sized from layout)
 let titleSummaryResize = null;
 
-document.getElementById('hotEnter').onclick = () => enterGame();
-document.getElementById('hotOpen').onclick  = () => { if (SAVED) enterGame(); };
+// Enter Ship / Open Pilot need a loaded pilot; otherwise nudge toward New Pilot.
+const needPilot = () => { showMsg('No pilot loaded — choose New Pilot to begin.'); };
+document.getElementById('hotEnter').onclick = () => { if (SAVED) enterGame(); else needPilot(); };
+document.getElementById('hotOpen').onclick  = () => { if (SAVED) enterGame(); else needPilot(); };
 document.getElementById('hotNew').onclick   = () => {
-  if (!SAVED || confirm('Start a new pilot? Your saved pilot will be erased.')) newPilot();
+  if (!SAVED || confirm('Start a new pilot? Your saved pilot will be erased.')) startNewPilot();
 };
 document.getElementById('hotAbout').onclick = titleAbout;
 document.getElementById('hotPrefs').onclick = titlePrefs;
@@ -3203,8 +3290,12 @@ addEventListener('load', () => {
   try { resuming = sessionStorage.getItem('ve_resume') === '1'; if (resuming) sessionStorage.removeItem('ve_resume'); } catch {}
   // Classic boot on a normal load: loading splash → title menu. Test flags
   // skip it; ?title/?splash force the splash, ?titlemenu jumps to the menu.
-  if (params.has('titlemenu')) showTitle();
-  else if (!resuming && (!TEST_MODE || params.has('title') || params.has('splash'))) showSplash();
+  // After creating a pilot, the reload jumps straight to the menu (skip the
+  // splash) so you can Enter Ship — like the original.
+  let newPilotJustMade = false;
+  try { newPilotJustMade = sessionStorage.getItem('ve_newpilot') === '1'; if (newPilotJustMade) sessionStorage.removeItem('ve_newpilot'); } catch {}
+  if (params.has('titlemenu') || newPilotJustMade) showTitle();
+  else if (!resuming && !TEST_MODE || params.has('title') || params.has('splash')) showSplash();
 });
 </script>
 </body>
