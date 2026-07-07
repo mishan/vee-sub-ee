@@ -106,6 +106,8 @@ function placeAtTakeoff(s, spob) {
 
 /* ---- hyperjump (spec: "Hyperjump") ---- */
 const JUMP_FUEL = 100, JUMP_STREAK_FRAMES = 30, ARRIVE_DIST = 700;
+const JUMP_WARMUP_FRAMES = 220;  // hyperdrive spin-up before the streak
+const JUMP_MIN_DIST = 800;       // no jumping this close to a spöb (approx.)
 /* Autopilot one frame of jump engagement toward mapBearing (galaxy-map
  * bearing to destination). Returns true once ship is ready to enter
  * hyperspace: aligned within one turn-step and at ≥95% max speed. */
@@ -215,7 +217,8 @@ const EV = {
   makeShip, thrust, steerToward, retrograde, integrate,
   stepPlayer, stepTrader,
   LAND_DIST, LAND_SPEED, canLand, placeAtTakeoff,
-  JUMP_FUEL, JUMP_STREAK_FRAMES, ARRIVE_DIST, stepJumpEngage, placeAtArrival,
+  JUMP_FUEL, JUMP_STREAK_FRAMES, ARRIVE_DIST, JUMP_WARMUP_FRAMES,
+  JUMP_MIN_DIST, stepJumpEngage, placeAtArrival,
   HOMING_TURN, shotSpeedOf, makeShot, stepShot, applyDamage, stepShields,
   stepWarship, stepFlee,
 };

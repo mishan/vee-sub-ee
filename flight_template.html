@@ -54,7 +54,6 @@
     background-color: #000; cursor: pointer; image-rendering: pixelated; padding: 0; }
   .shopgrid .cell:hover { border-color: #4a5b82; }
   .shopgrid .cell.sel { border-color: #ffd479; box-shadow: 0 0 6px rgba(255,212,121,.5); }
-  .shopgrid .cell.dim { opacity: .3; cursor: default; }
   .shoppane { flex: 1; min-width: 200px; }
   .shoppane img { width: 100px; height: 100px; image-rendering: pixelated;
     border: 1px solid #26304a; border-radius: 4px; background: #000; float: right; margin: 0 0 8px 10px; }
@@ -470,11 +469,31 @@ function mapBearingTo(destId) {
   return EV.bearing(b.xPos - a.xPos, b.yPos - a.yPos);
 }
 
+function nearestSpobInfo() {
+  let best = null, bd = Infinity;
+  for (const p of spobs) {
+    const d = Math.hypot(p.x - player.x, p.y - player.y);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return { spob: best, dist: bd };
+}
+let warpSnd = null;
 function beginJump() {
   if (jump || landedAt) return;
   if (jumpDest == null || !linkedSystems().includes(jumpDest)) return;
-  if (fuel < EV.JUMP_FUEL) return;
+  if (fuel < EV.JUMP_FUEL) { showMsg('Not enough fuel to jump.'); return; }
+  const near = nearestSpobInfo();
+  if (near.spob && near.dist < EV.JUMP_MIN_DIST) {
+    showMsg(`You are too close to ${near.spob.name} to engage your hyperdrive.`);
+    return;
+  }
   jump = { destId: jumpDest, phase: 'engage', t: 0 };
+  warpSnd = soundOn ? sndEl(128).cloneNode() : null; // Warp Up: 8.3s spin-up
+  if (warpSnd) { warpSnd.play().catch(() => {}); }
+}
+function abortJump() {
+  jump = null;
+  stopSnd(warpSnd); warpSnd = null;
 }
 function completeJump() {
   const from = SYSTEM_ID;
@@ -484,6 +503,7 @@ function completeJump() {
   EV.placeAtArrival(player, EV.norm(mapBearingTo(from) + 180));
   fuel -= EV.JUMP_FUEL;
   jump = null; jumpDest = null;
+  warpSnd = null; // Warp Up ends naturally as the streak completes
   playSnd(130); // Warp Out
 }
 
@@ -519,7 +539,7 @@ addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (serviceOpen) closeService();
     else if (mapOpen) mapOpen = false;
-    else if (jump && jump.phase === 'engage') jump = null;
+    else if (jump && jump.phase === 'engage') abortJump();
     else if (landedAt) takeOff();
     else if (shipTarget) { shipTarget = null; showMsg('Target cleared.'); }
     else if (navTarget) { navTarget = null; showMsg('Navigation target cleared.'); }
@@ -621,6 +641,8 @@ const SERVICE_RENDER = {};
 function openService(kind) {
   const gate = { exchange: 'commodityExchange', outfitter: 'outfitter', shipyard: 'shipyard' }[kind];
   if (!landedAt || !(landedAt.$sem && landedAt.$sem[gate])) return;
+  if (kind === 'outfitter' && !outfitterStock(landedAt).length) return;
+  if (kind === 'shipyard' && !shipyardStock(landedAt).length) return;
   serviceOpen = kind;
   SERVICE_RENDER[kind]();
   document.getElementById('service').style.display = 'flex';
@@ -705,16 +727,30 @@ function buyOutfit(id, qty) {
  * 100×100 dialog art: outfit → PICT 6000+i, ship → PICT 5000+i. */
 let selOutfitId = null, selShipId = null;
 
+/* Only items actually available here are shown — no empty or grayed
+ * slots (the grid compacts; each thumbnail is still sliced from the
+ * item's fixed cell in the original menu sheet). */
 function shopGrid(sheet, items, selId, clickFn) {
   let html = `<div class="shopgrid">`;
-  for (const { id, avail } of items) {
-    const i = id - 128, cx = (i % 8) * 34, cy = Math.floor(i / 8) * 34;
-    html += `<button class="cell${id === selId ? ' sel' : ''}${avail ? '' : ' dim'}"
+  for (const { id } of items) {
+    const i = id - 128;
+    html += `<button class="cell${id === selId ? ' sel' : ''}"
       style="background-image:url(evassets/graphics/${sheet});
              background-position:-${(i % 8) * 32}px -${Math.floor(i / 8) * 32}px"
-      ${avail ? `onclick="${clickFn}(${id})"` : ''} title="${avail ? '' : 'not available here'}"></button>`;
+      onclick="${clickFn}(${id})"></button>`;
   }
   return html + `</div>`;
+}
+
+/* Would this spob's shop have anything to show? Gates both the dialog
+ * and the button on the landing screen. */
+function outfitterStock(p) {
+  return Object.entries(DATA.types.outf).filter(([id, o]) =>
+    o.MissionBit < 0 && (techAvailable(o.TechLevel, p) || (outfits[id] || 0) > 0));
+}
+function shipyardStock(p) {
+  return Object.entries(ships).filter(([, r]) =>
+    r.MissionBit < 0 && techAvailable(r.TechLevel, p));
 }
 
 function selectOutfit(id) { selOutfitId = id; rerenderService(); }
@@ -723,11 +759,9 @@ function selectShip(id) { selShipId = id; rerenderService(); }
 SERVICE_RENDER.outfitter = function () {
   const p = landedAt;
   const s = effectiveShip();
-  const items = Object.entries(DATA.types.outf)
-    .filter(([, o]) => o.MissionBit < 0) // mission-gated: no mission system yet
-    .map(([id, o]) => ({ id: +id, o, avail: techAvailable(o.TechLevel, p) || (outfits[id] || 0) > 0 }));
-  if (selOutfitId == null || !items.some(x => x.id === selOutfitId && x.avail))
-    selOutfitId = (items.find(x => x.avail) || {}).id ?? null;
+  const items = outfitterStock(p).map(([id]) => ({ id: +id }));
+  if (selOutfitId == null || !items.some(x => x.id === selOutfitId))
+    selOutfitId = items.length ? items[0].id : null;
 
   let pane = '';
   if (selOutfitId != null) {
@@ -788,11 +822,9 @@ function buyShip(id) {
 SERVICE_RENDER.shipyard = function () {
   const p = landedAt;
   const refund = tradeInValue();
-  const items = Object.entries(ships)
-    .filter(([, r]) => r.MissionBit < 0)
-    .map(([id, r]) => ({ id: +id, r, avail: techAvailable(r.TechLevel, p) }));
-  if (selShipId == null || !items.some(x => x.id === selShipId && x.avail))
-    selShipId = (items.find(x => x.avail) || {}).id ?? null;
+  const items = shipyardStock(p).map(([id]) => ({ id: +id }));
+  if (selShipId == null || !items.some(x => x.id === selShipId))
+    selShipId = items.length ? items[0].id : null;
 
   let pane = '';
   if (selShipId != null) {
@@ -825,7 +857,10 @@ function renderPlanetScreen() {
   const m = p.$sem || {};
   const desc = DATA.types.desc[p.id];
   const svc = ['commodityExchange', 'outfitter', 'shipyard', 'bar']
-    .filter(k => m[k]).map(k => ({ commodityExchange: 'trade center', outfitter: 'outfitter',
+    .filter(k => m[k])
+    .filter(k => k !== 'outfitter' || outfitterStock(p).length)  // flags lie on
+    .filter(k => k !== 'shipyard' || shipyardStock(p).length)    // low-tech worlds
+    .map(k => ({ commodityExchange: 'trade center', outfitter: 'outfitter',
       shipyard: 'shipyard', bar: 'bar' }[k])).join(' · ');
   // Landscape: CustPicID overrides; standard is PICT (10000 + Type) in EV
   // Titles — 34 landscapes matching the 34 stellar types. If a custom PICT
@@ -841,11 +876,11 @@ function renderPlanetScreen() {
     <div class="meta">${(m.stellarType || '').replace(/[()]/g, '')}` +
     `${m.govt ? ' · ' + m.govt : ''}${svc ? ' · ' + svc : ''} · fuel topped up</div>
     <div class="desc">${desc && desc.Description ? desc.Description : ''}</div>`;
-  // services row — exchange is live; the rest are queued milestones
+  // services row — a shop with nothing to show doesn't get a button
   html += `<div>` +
     (m.commodityExchange ? `<button class="svc" onclick="openService('exchange')">Commodity Exchange</button>` : '') +
-    (m.outfitter ? `<button class="svc" onclick="openService('outfitter')">Outfitter</button>` : '') +
-    (m.shipyard ? `<button class="svc" onclick="openService('shipyard')">Shipyard</button>` : '') +
+    (m.outfitter && outfitterStock(p).length ? `<button class="svc" onclick="openService('outfitter')">Outfitter</button>` : '') +
+    (m.shipyard && shipyardStock(p).length ? `<button class="svc" onclick="openService('shipyard')">Shipyard</button>` : '') +
     (m.bar ? `<button class="svc" disabled title="coming soon">Bar</button>` : '') +
     `</div>`;
   html += `<div class="wallet"><b>${credits.toLocaleString('en-US')}</b> credits ·
@@ -903,11 +938,14 @@ function maxWeaponRange(e) {
 function step() {
   if (gameOver) return;
   if (!landedAt) {
+    if (jump && player.deathT >= 0) abortJump(); // no jumping out of a fireball
     if (jump && jump.phase === 'engage') {
-      if (EV.stepJumpEngage(player, mapBearingTo(jump.destId))) {
-        jump = { ...jump, phase: 'streak', t: 0 };
-        playSnd(128); // Warp Up
-      }
+      const ready = EV.stepJumpEngage(player, mapBearingTo(jump.destId));
+      jump.t++;
+      // spec: aligned+fast AND drive spun up AND clear of stellars
+      if (ready && jump.t >= EV.JUMP_WARMUP_FRAMES &&
+          nearestSpobInfo().dist >= EV.JUMP_MIN_DIST)
+        jump = { destId: jump.destId, phase: 'streak', t: 0 };
     } else if (jump && jump.phase === 'streak') {
       EV.thrust(player); EV.integrate(player);
       if (++jump.t >= EV.JUMP_STREAK_FRAMES) completeJump();
@@ -1361,7 +1399,9 @@ function render() {
     (navTarget.$sem && !navTarget.$sem.canLand) ||
     distTo(navTarget) >= EV.LAND_DIST) ? null : navTarget;
   document.getElementById('prompt').textContent =
-    jump && jump.phase === 'engage' ? 'Jump autopilot engaged — Esc to abort' :
+    jump && jump.phase === 'engage'
+      ? (jump.t < EV.JUMP_WARMUP_FRAMES ? 'Hyperdrive spinning up — Esc to abort'
+                                        : 'Entering hyperspace…') :
     near ? (speed > EV.LAND_SPEED ? `Slow down to land on ${near.name}`
                                   : `Press L to land on ${near.name}`) : '';
 }
