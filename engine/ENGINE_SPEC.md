@@ -198,6 +198,24 @@ and every same-govt ship in the system — holds a grudge for the session.
 matching weapon). Space fires all primary weapons; W cycles secondary
 (MiscFlags 0x0002) weapons, X fires the selected one.
 
+## Audio (shell responsibility; browser leg only for now — SDL deferred)
+
+Sound IDs follow the classic files (names baked into the resources):
+weapon fire = snd **200 + wëap.Sound** (bible; −1 = silent), played once
+per weapon volley (not per barrel). Hyperspace: **128** "Warp Up" as the
+streak begins, **130** "Warp Out" on arrival. Explosions: shot impact →
+**301** (MedExplosion), or **300** (HeavyExplosion) when ExplodType ≥ 1;
+ship destruction → **302** "ShipBreaksUp" when disintegration starts,
+**303** "ShipExplodes" at the final fireball. Engine loop **223** while
+the player thrusts (with a ~6-frame release so per-frame flicker doesn't
+stutter it). Target-cycle beep **150**. Klaxxon **350** once when the
+player's shields first hit 0 (re-armed when they recover). Planet
+ambient: spöb `CustSndID` (bible: 11 kHz ambient) loops while landed.
+Distance attenuation (approximation): `volume × max(0, 1 − dist/1200)`
+from the player; events at the player are full volume. `V` toggles sound;
+`?mute=1` starts muted. Title music (snd 30000+, EV Music) is deferred
+until there's a title screen.
+
 ## Sprite ID conventions (from the EV bible, see semantics.js)
 
 ship spïn = 128 + (shïp − 128); stellar spïn = 300 + spöb.Type;
