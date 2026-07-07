@@ -56,20 +56,25 @@ States: CRUISE → BRAKE → LANDING. Deterministic given a fixed target
 (spawn-time randomness — dude/ship/target selection — lives outside the
 core; see "Spawning").
 
-- `stopDist = |v|² / (2 · accel) + 40`  (kinematic stopping distance + pad)
+- `stopDist = |v|²/(2·accel) + |v|·(180/turn) + 40` — kinematic stopping
+  distance, **plus the distance coasted while flipping 180° to face
+  retrograde** (`180/turn` frames at speed `|v|`), plus a pad. The
+  turn-around term is what stops slow-turning ships from sailing past the
+  planet before their brake burn bites.
 - CRUISE: steer toward target; if `dist > stopDist` and aligned, thrust;
   if `dist ≤ stopDist`, → BRAKE.
 - BRAKE: steer toward retrograde; if `|v| > 0.15`, thrust when aligned;
-  else if `dist < 60` → LANDING, otherwise → CRUISE (overshot; go around).
+  else if `dist < 80` → LANDING, otherwise → CRUISE (overshot; go around).
 - LANDING: fade −= 0.02 per frame (no motion changes); at fade ≤ 0 the
-  entity despawns (shell schedules a respawn).
+  entity despawns (shell schedules a respawn). The shell may dock the ship
+  instantly instead of fading — the core only reports arrival.
 
 ## Landing (player)
 
 Eligible: nearest spob with `$sem.canLand`, distance < 60 px, and
 `|v| ≤ 0.9 px/frame`. On takeoff the player is placed at
-`(spob.x, spob.y − 40)`, heading 0, velocity `(0, −0.4)`.
-Landing refuels the ship to capacity (see Hyperjump).
+`(spob.x, spob.y − 40)`, heading 0, **velocity 0** (launch stationary,
+not drifting). Landing refuels the ship to capacity (see Hyperjump).
 
 ## Hyperjump
 
@@ -315,6 +320,23 @@ from the player; events at the player are full volume. `V` toggles sound; `[`/`]
 a master volume (10% steps, multiplied into every event volume,
 persisted in localStorage as `ve_volume`); `?mute=1` starts muted. Title music (snd 30000+, EV Music) is deferred
 until there's a title screen.
+
+## Hailing (shell; browser leg)
+
+`Y` opens a modal hail dialog (pauses the sim) for the current ship or
+nav target; response text comes from the classic STR# comm lists (ship
+greetings 7000+govt / generic 6999; stellar comm 3002, whose groups are:
+0–4 channel-open, 5–14 tribute-refusal/threats, 15–24 no-information,
+25–26 tribute-agreed). **Ship** options: request assistance (a friendly
+ship tops up 100 fuel), demand surrender/plunder (only if the ship is
+disabled → loot credits), close. **Planet** options: request information
+(a 3002 no-info line), demand tribute, close. **Tribute/domination:**
+demanding tribute from a governed planet with a defense fleet
+(`DefDude`/`DefCount`; >1000 encodes waves, last digit = ships/wave)
+refuses and scrambles that fleet (hostile, tagged to the spöb). Once you
+destroy the fleet the spöb is *subdued*; demanding again pays a one-time
+tribute (`2000·(TechLevel+1)` cr — a convention, since classic spöb data
+has no tribute-amount field) and marks it *dominated* (persisted).
 
 ## Persistence (shell responsibility; browser leg)
 

@@ -65,6 +65,19 @@
     justify-content: center; text-align: center; background: rgba(0,0,0,.6); }
   #dead h1 { color: #e06c75; font-size: 24px; margin-bottom: 8px; }
   #dead div { color: #ffd479; }
+  #hail { position: fixed; inset: 0; display: none; align-items: center;
+    justify-content: center; background: rgba(0,0,0,.55); }
+  #hail .card { width: 460px; background: #0c1120; border: 1px solid #2a3550;
+    border-radius: 8px; padding: 20px 24px; box-shadow: 0 12px 48px rgba(0,0,0,.8); }
+  #hail h3 { margin: 0 0 2px; color: #fff; }
+  #hail .who { color: #6b7a96; font-size: 12px; margin-bottom: 10px; }
+  #hail .say { color: #aab6cc; font-size: 13px; font-style: italic; min-height: 34px;
+    border-left: 2px solid #2a3550; padding-left: 10px; margin: 8px 0 14px; }
+  #hail button { display: block; width: 100%; text-align: left; background: #1a2338;
+    color: #cfd6e4; border: 1px solid #2a3550; border-radius: 4px; padding: 7px 10px;
+    margin: 4px 0; cursor: pointer; font-size: 13px; }
+  #hail button:hover:not(:disabled) { background: #24304d; }
+  #hail button:disabled { opacity: .4; cursor: default; }
 </style>
 </head>
 <body>
@@ -79,6 +92,7 @@
   <h1>Your ship has been destroyed.</h1>
   <div id="deadHint">Press R to try again</div>
 </div></div>
+<div id="hail"><div class="card" id="hailCard"></div></div>
 <div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · B board · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · Esc</div>
 <script>/*__ENGINE__*/</script>
 <script>
@@ -122,6 +136,7 @@ const missionBits = new Uint8Array(256);
 if (SAVED && SAVED.bits) for (const b of SAVED.bits) missionBits[b] = 1;
 let gameDay = SAVED ? (SAVED.day || 0) : 0;
 const reputation = SAVED && SAVED.rep ? { ...SAVED.rep } : {}; // govtId -> number
+const dominated = new Set(SAVED ? SAVED.dominated : []); // spob ids you've subdued for tribute
 /* active missions: resolved, live copies (not the raw records) */
 let activeMissions = SAVED && SAVED.missions ? SAVED.missions.map(m => ({ ...m })) : [];
 
@@ -133,6 +148,7 @@ function savePilot(spobId) {
     credits, cargo, outfits, explored: [...explored],
     bits: [...missionBits.keys()].filter(b => missionBits[b]),
     day: gameDay, rep: reputation, missions: activeMissions,
+    dominated: [...dominated],
   });
   let ok = false;
   try {
@@ -278,6 +294,10 @@ function spawnAI(atEdge) {
     ? DATA.types.govt[e.govt].$sem.flags : [];
   if ((gf.includes('alwaysAttacksPlayer') || gf.includes('xenophobic')) && e.aiType >= 3)
     e.hostile = true;
+  // Warp-in: ships hyperspace into the system (a brief flash) rather than
+  // popping into existence. Arrivals near the player get the warp sound.
+  e.warpIn = 18;
+  if (atEdge) playSnd(130, attenuate(e.x, e.y) * 0.7); // Warp Out (arrival boom)
   aiShips.push(e);
 }
 
@@ -303,7 +323,9 @@ let masterVol = (() => {
 function setVolume(delta) {
   masterVol = Math.max(0, Math.min(1, Math.round((masterVol + delta) * 10) / 10));
   try { localStorage.setItem('ve_volume', String(masterVol)); } catch {}
-  if (ambientSnd) ambientSnd.volume = Math.min(ambientSnd._baseVol * masterVol, 1);
+  // adjust every currently-playing long sound live
+  for (const a of [ambientSnd, warpSnd])
+    if (a) a.volume = Math.min((a._baseVol ?? 1) * masterVol, 1);
   showMsg(`Volume ${Math.round(masterVol * 100)}%`);
   playSnd(150, 0.6); // audible reference beep at the new level
 }
@@ -556,8 +578,14 @@ function beginJump() {
     return;
   }
   jump = { destId: jumpDest, phase: 'engage', t: 0 };
-  warpSnd = soundOn ? sndEl(128).cloneNode() : null; // Warp Up: 8.3s spin-up
-  if (warpSnd) { warpSnd.play().catch(() => {}); }
+  // Warp Up (8.3s spin-up) — kept as a handle so it can be cut on abort;
+  // routed through masterVol like every other sound, and adjustable live.
+  if (soundOn && masterVol > 0) {
+    warpSnd = sndEl(128).cloneNode();
+    warpSnd._baseVol = 1;
+    warpSnd.volume = Math.min(masterVol, 1);
+    warpSnd.play().catch(() => {});
+  } else warpSnd = null;
 }
 function abortJump() {
   jump = null;
@@ -581,14 +609,21 @@ function completeJump() {
 
 const keys = {};
 addEventListener('keydown', e => {
-  keys[e.key.toLowerCase()] = true;
   const k = e.key.toLowerCase();
+  // The hail modal pauses the sim; swallow every hotkey but Escape so the
+  // game can't be driven into odd states behind the overlay.
+  if (hailOpen) {
+    if (e.key === 'Escape') closeHail();
+    e.preventDefault();
+    return;
+  }
+  keys[e.key.toLowerCase()] = true;
   if (k === 'l') tryLand();
   if (k === 'm') { mapOpen = !mapOpen; }
   if (k === 'j') { if (mapOpen) mapOpen = false; beginJump(); }
   if (k === 'n' && gameOver) { newPilot(); return; }
   if (k === 'n' && !landedAt) cyclePlanetTarget();
-  if (k === 'y' && !landedAt) hail();
+  if (k === 'y' && !landedAt && !hailOpen) hail();
   if (k === 'b' && !landedAt) boardTarget();
   if (k === 'i' && !landedAt) showMissionBriefing();
   if (k === 'r' && gameOver) location.reload();
@@ -610,7 +645,8 @@ addEventListener('keydown', e => {
   }
   if (e.key === 'Tab') { e.preventDefault(); if (!landedAt) cycleShipTarget(); }
   if (e.key === 'Escape') {
-    if (serviceOpen) closeService();
+    if (hailOpen) closeHail();
+    else if (serviceOpen) closeService();
     else if (mapOpen) mapOpen = false;
     else if (jump && jump.phase === 'engage') abortJump();
     else if (landedAt) takeOff();
@@ -675,15 +711,130 @@ function pickLine(listId) {
     .filter(s => s && s !== '*');
   return l && l.length ? l[Math.floor(Math.random() * l.length)] : null;
 }
+/* Pick a random line from a slice of a STR# list (used for the grouped
+ * stellar-comm responses in list 3002). */
+function pickFrom(listId, lo, hi) {
+  const l = DATA.strings[listId] && DATA.strings[listId].list;
+  if (!l) return null;
+  const opts = l.slice(lo, hi + 1).filter(s => s && s.trim() && s !== '*' && !s.startsWith('<'));
+  return opts.length ? opts[Math.floor(Math.random() * opts.length)] : null;
+}
+
+/* ---- hail dialog (Y): a modal that pauses the sim while open ---- */
+let hailOpen = false, hailTarget = null;
+const subdued = new Set(); // spob ids whose defense fleet you've just cleared (session)
+/* Called when any ship is destroyed; tracks defense-fleet defeat. */
+function onShipDestroyed(s) {
+  if (s.misnId != null) onMissionShipDestroyed(s);
+  if (s.defOf != null && !aiShips.some(x => x !== s && x.defOf === s.defOf)) {
+    subdued.add(s.defOf);
+    const p = spobById(s.defOf);
+    if (p) showMsg(`${p.name}'s defenses are broken — hail it to demand tribute.`);
+  }
+}
+function openHail(kind, obj) {
+  clearTimeout(hailCloseTimer); // don't let a pending auto-close hit a new hail
+  hailOpen = true; hailTarget = { kind, obj }; renderHail();
+}
+function closeHail() {
+  clearTimeout(hailCloseTimer);
+  hailOpen = false; hailTarget = null;
+  document.getElementById('hail').style.display = 'none';
+}
+function hailSay(text) { hailTarget.said = text; renderHail(); }
+
+// Defense fleet size per wave (DefCount>1000 encodes waves; last digit = ships/wave).
+const defWave = p => { const c = p.DefCount; return c > 1000 ? Math.max(1, c % 10) : Math.max(0, c); };
+
+function demandTribute(p) {
+  const govt = p.Govt;
+  if (govt < 128) { hailSay(pickFrom(3002, 5, 9) || 'They ignore you.'); return; }
+  if (dominated.has(p.id)) {
+    hailSay('They have already submitted to you.'); return;
+  }
+  // still defended? refuse and scramble the defense fleet.
+  const defendersHere = aiShips.some(s => s.defOf === p.id);
+  if (defWave(p) > 0 && !subdued.has(p.id)) {
+    hailSay(pickFrom(3002, 10, 14) || 'You will regret this.');
+    if (!defendersHere) spawnDefenseFleet(p);
+    closeHailSoon();
+    return;
+  }
+  // subdued: pay tribute (one-time). Amount is a convention (no tribute
+  // field in classic spöb data): scales with tech level.
+  dominated.add(p.id);
+  const amt = 2000 * (p.TechLevel + 1);
+  credits += amt;
+  hailSay(`${pickFrom(3002, 25, 26) || 'They agree to pay you tribute.'} (+${amt.toLocaleString('en-US')} cr)`);
+  playSnd(150, 0.5);
+}
+function spawnDefenseFleet(p) {
+  const dude = dudes[p.DefDude];
+  if (!dude) return;
+  const n = Math.min(defWave(p), 6);
+  for (let i = 0; i < n; i++) {
+    const shipId = weighted(dudeShipPairs(dude));
+    if (shipId == null) continue;
+    const a = Math.random() * Math.PI * 2, r = 500 + Math.random() * 300;
+    const e = EV.makeShip(ships[shipId], player.x + Math.cos(a) * r, player.y + Math.sin(a) * r, Math.random() * 360);
+    e.shipId = shipId; e.govt = dude.Govt; e.aiType = 3;
+    e.defOf = p.id; e.hostile = true; e.warpIn = 18;
+    e.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
+    armShip(e, ships[shipId]);
+    aiShips.push(e);
+  }
+  showMsg(`${p.name} launches its defense fleet!`);
+}
+let hailCloseTimer = null;
+function closeHailSoon() { clearTimeout(hailCloseTimer); hailCloseTimer = setTimeout(closeHail, 1400); }
+
+function requestAssistance(s) {
+  if (s.hostile) { hailSay(pickLine(3001) || 'They refuse and cut the channel.'); return; }
+  if (fuel < fuelMax) { fuel = Math.min(fuelMax, fuel + 100); hailSay('They spare you some fuel. (+100 fuel)'); playSnd(150, 0.4); }
+  else hailSay('“Safe travels, captain.”');
+}
+function demandSurrender(s) {
+  if (!s.disabled) { hailSay(pickFrom(3002, 7, 9) || '“Surrender? To you? Ha!”'); return; }
+  const loot = 500 + Math.floor(Math.random() * 2000);
+  credits += loot;
+  hailSay(`You plunder the disabled ship. (+${loot.toLocaleString('en-US')} cr)`);
+  playSnd(150, 0.5);
+}
+
+function renderHail() {
+  const t = hailTarget; if (!t) return;
+  let html;
+  if (t.kind === 'ship') {
+    const s = t.obj;
+    const govtName = s.govt >= 128 && govts[s.govt] ? govts[s.govt].name : 'Independent';
+    const greet = t.said || pickLine(7000 + (s.govt - 128)) || pickLine(6999) || 'Channel open.';
+    html = `<h3>${ships[s.shipId].name}</h3>
+      <div class="who">${govtName}${s.disabled ? ' · disabled' : s.hostile ? ' · hostile' : ''}</div>
+      <div class="say">“${greet}”</div>
+      <button onclick="requestAssistance(hailTarget.obj)">Request assistance</button>
+      <button onclick="demandSurrender(hailTarget.obj)"${s.disabled ? '' : ' disabled'}>Demand surrender / plunder</button>
+      <button onclick="closeHail()">Close channel</button>`;
+  } else {
+    const p = t.obj, m = p.$sem || {};
+    const greet = t.said || (pickFrom(3002, 0, 4) || 'Channel open to ') + p.name + '.';
+    const dom = dominated.has(p.id);
+    html = `<h3>${p.name}</h3>
+      <div class="who">${(m.govt || 'Independent')}${dom ? ' · paying tribute' : ''}</div>
+      <div class="say">“${greet}”</div>
+      <button onclick="hailSay(pickFrom(3002,15,24) || 'They have nothing to tell you.')">Request information</button>
+      <button onclick="demandTribute(hailTarget.obj)"${p.Govt < 128 ? ' disabled' : ''}>Demand tribute</button>
+      <button onclick="closeHail()">Close channel</button>`;
+  }
+  document.getElementById('hailCard').innerHTML = html;
+  document.getElementById('hail').style.display = 'flex';
+}
+
 function hail() {
-  if (shipTarget) {
-    const line = pickLine(7000 + (shipTarget.govt - 128)) || pickLine(6999);
-    const name = ships[shipTarget.shipId].name;
-    showMsg(line ? `${name}: “${line}”` : `${name} does not respond.`);
-  } else if (navTarget) {
+  if (shipTarget) openHail('ship', shipTarget);
+  else if (navTarget) {
     const m = navTarget.$sem || {};
     if (m.uninhabited || !m.canLand) showMsg(`${navTarget.name} does not respond.`);
-    else showMsg(`${navTarget.name}: “${pickLine(3002) || 'Communications channel open.'}”`);
+    else openHail('planet', navTarget);
   } else showMsg('No target to hail. (Tab: ships, N: planets)');
 }
 /* ---- trading (spec: "Trading") ---- */
@@ -940,19 +1091,27 @@ const misnCargoName = m => {
  * (classic EV fixes these when the mission is first shown). Cached by id,
  * per system visit (cleared alongside availRandom in loadSystem). */
 let resolvedOffers = {};
-function getOffer(m, here) {
-  if (resolvedOffers[m.id]) return resolvedOffers[m.id];
+/* id is passed explicitly: raw misn records (misns[id]) carry no `id`
+ * field, so keying off m.id silently collapsed every offer onto one
+ * cache slot — the bug where every briefing showed the same destination. */
+function getOffer(id, here) {
+  // Key by mission AND offering spöb: ReturnStel −4 ("return here") resolves
+  // relative to `here`, so the same mission offered at a second spöb in the
+  // same system must not reuse the first spöb's resolution.
+  const key = `${id}@${here ? here.id : ''}`;
+  if (resolvedOffers[key]) return resolvedOffers[key];
+  const m = misns[id];
   const qty = m.CargoQty <= -2 ? Math.round(Math.abs(m.CargoQty) * (0.5 + Math.random()))
             : Math.max(m.CargoQty, 0);
   const o = {
-    id: m.id,
+    id,
     travelStel: resolveStel(m.TravelStel, here),
     returnStel: m.ReturnStel === -1 ? null : resolveStel(m.ReturnStel, here),
     cargoName: misnCargoName(m),
     cargoQty: qty,
     deadline: m.TimeLimit > 0 ? gameDay + m.TimeLimit : null,
   };
-  resolvedOffers[m.id] = o;
+  resolvedOffers[key] = o;
   return o;
 }
 
@@ -960,7 +1119,7 @@ function getOffer(m, here) {
  * spawn any special ships if their system is the current one. */
 function acceptMission(id, here) {
   const m = misns[id];
-  const offer = getOffer(m, here); // reuse what the briefing showed
+  const offer = getOffer(id, here); // reuse what the briefing showed
   const A = {
     id, name: m.name,
     accepted: gameDay,
@@ -1373,12 +1532,12 @@ function renderMissionBoard(loc) { // loc 0 = computer, 1 = bar
   if (!offers.length) list += `<div class="sub">Nothing right now.</div>`;
   for (const o of offers)
     list += `<div class="row" style="cursor:pointer;color:${o.id === selMisnId ? '#ffd479' : '#cfd6e4'}"
-      onclick="selMisnId=${o.id};rerenderService()">${misnName(o, getOffer(o, p))}</div>`;
+      onclick="selMisnId=${o.id};rerenderService()">${misnName(o, getOffer(o.id, p))}</div>`;
   list += '</div>';
 
   let pane = '<div style="flex:1.3;min-width:240px">';
   if (sel) {
-    const offer = getOffer(sel, p);                      // resolved once, stable
+    const offer = getOffer(selMisnId, p);                // resolved once, stable
     const brief = descText(sel.BriefText, offer) || descText(sel.QuickBrief, offer)
       || 'No further details are offered.';
     const pay = sel.PayVal > 0 ? `${sel.PayVal.toLocaleString('en-US')} cr` :
@@ -1523,7 +1682,7 @@ function maxWeaponRange(e) {
 }
 
 function step() {
-  if (gameOver) return;
+  if (gameOver || hailOpen) return; // hail dialog pauses the sim
   if (!landedAt) {
     if (jump && player.deathT >= 0) abortJump(); // no jumping out of a fireball
     if (jump && jump.phase === 'engage') {
@@ -1575,7 +1734,7 @@ function step() {
       if (--s.deathT <= 0) {
         spawnExplosion(s.x, s.y, s.deathDelay >= 60 ? 2 : 1);
         playSnd(303, attenuate(s.x, s.y)); // the final boom
-        if (s.misnId != null) onMissionShipDestroyed(s);
+        onShipDestroyed(s);
         aiShips.splice(aiShips.indexOf(s), 1);
         if (shipTarget === s) shipTarget = null;
         const epoch = systEpoch;
@@ -1583,6 +1742,7 @@ function step() {
       }
       continue;
     }
+    if (s.warpIn > 0) s.warpIn--;
     if (s.disabled) { EV.integrate(s); continue; }
     EV.stepShields(s, s.shieldMax, s.shieldRe);
     for (const w of s.weapons) if (w.cool > 0) w.cool--;
@@ -1591,21 +1751,26 @@ function step() {
       if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, player, true);
     } else if (s.fleeing) {
       EV.stepFlee(s, player.x, player.y);
-    } else if (!EV.stepTrader(s, s.target)) {
-      // Reached its target spob and faded.
-      if (s.misnId != null && !s.escort) {
-        // A catch-goal target (board/disable/destroy) mustn't slip away by
-        // landing — loiter near the spob instead of despawning.
-        s.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
-        s.state = 'cruise'; s.fade = 1;
-      } else {
-        if (s.misnId != null && s.escort) onMissionEscortArrived(s);
-        aiShips.splice(aiShips.indexOf(s), 1);
-        if (shipTarget === s) shipTarget = null;
-        if (s.misnId == null) {
-          const epoch = systEpoch;
-          setTimeout(() => { if (epoch === systEpoch) spawnAI(Math.random() < 0.5); },
-            2000 + Math.random() * 6000);
+    } else {
+      const alive = EV.stepTrader(s, s.target);
+      // A plain trader that reaches its planet docks instantly (clean
+      // disappearance at the spob — no drawn-out ghost fade).
+      const docked = alive && !s.misnId && s.state === 'landing';
+      if (!alive || docked) {
+        if (s.misnId != null && !s.escort) {
+          // A catch-goal target (board/disable/destroy) mustn't slip away by
+          // landing — loiter near the spob instead of despawning.
+          s.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
+          s.state = 'cruise'; s.fade = 1;
+        } else {
+          if (s.misnId != null && s.escort) onMissionEscortArrived(s);
+          aiShips.splice(aiShips.indexOf(s), 1);
+          if (shipTarget === s) shipTarget = null;
+          if (s.misnId == null) {
+            const epoch = systEpoch;
+            setTimeout(() => { if (epoch === systEpoch) spawnAI(Math.random() < 0.5); },
+              2000 + Math.random() * 6000);
+          }
         }
       }
     }
@@ -1946,6 +2111,14 @@ function render() {
     const [x, y] = toScreen(s.x, s.y);
     if (x < -100 || x > w + 100 || y < -100 || y > h + 100) continue;
     if (s.deathT >= 0 && s.deathT % 4 < 2) continue; // disintegration flicker
+    if (s.warpIn > 0) {                               // hyperspace-in flash
+      const t = s.warpIn / 18, half = spriteHalf(spinOfShip(s.shipId), 24);
+      ctx.strokeStyle = `rgba(150,200,255,${t})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, half + t * 40, 0, 7); ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 1 - t;                        // fade the ship IN
+    }
     if (s.fade != null) ctx.globalAlpha = Math.max(s.fade, 0);
     if (s.disabled) ctx.globalAlpha = 0.6;
     drawSpin(ctx, spinOfShip(s.shipId), x, y, s.heading);
