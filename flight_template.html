@@ -901,13 +901,62 @@ function spawnDefenseFleet(p) {
 let hailCloseTimer = null;
 function closeHailSoon() { clearTimeout(hailCloseTimer); hailCloseTimer = setTimeout(closeHail, 1400); }
 
+const hailClick = () => playSnd(600, 0.4);       // UI click (snd 600)
+const FUEL_PRICE = 1500;                         // full refuel from a passing ship
+
+// Greeting depends on disposition — hostiles snarl, others are cordial.
+function shipGreeting(s) {
+  if (s.hostile) return pickFrom(3000, 10, 14) || 'What do you want?';
+  return pickLine(7000 + (s.govt - 128)) || pickFrom(3000, 20, 29) || 'Channel open.';
+}
+
 function requestAssistance(s) {
-  if (s.hostile) { hailSay(pickLine(3001) || 'They refuse and cut the channel.'); return; }
-  if (fuel < fuelMax) { fuel = Math.min(fuelMax, fuel + 100); hailSay('They spare you some fuel. (+100 fuel)'); playSnd(150, 0.4); }
-  else hailSay('“Safe travels, captain.”');
+  hailClick();
+  if (s.hostile) { hailSay(pickFrom(3000, 95, 99) || pickFrom(3000, 50, 59)); return; }
+  if (fuel >= fuelMax) { hailSay(pickFrom(3000, 70, 74) || 'You look fine to me.'); return; }
+  hailTarget.mode = 'fuel';                       // offer fuel for a price
+  hailSay(pickFrom(3000, 140, 144) || 'I can spare fuel, for a price.');
+}
+function payFuel(full) {
+  hailClick();
+  const price = full ? FUEL_PRICE : Math.round(FUEL_PRICE / 2);
+  // a low-ball offer only lands if the pilot is in a good mood
+  if (!full && Math.random() < 0.5) {
+    hailTarget.mode = 'main';
+    hailSay(pickFrom(3000, 120, 124) || 'Bad mood today — no deal.');
+    return;
+  }
+  if (credits < price) { hailSay(pickFrom(3000, 60, 64) || 'You can’t afford it.'); return; }
+  credits -= price;
+  fuel = fuelMax;
+  hailTarget.mode = 'main';
+  hailSay((full ? pickFrom(3000, 100, 104) : pickFrom(3000, 115, 119)) +
+    ` (−${price.toLocaleString('en-US')} cr, refuelled)`);
+  playSnd(150, 0.4);
+}
+function begForMercy(s) {
+  hailClick();
+  if (Math.random() < 0.45) {                     // they'll entertain a bribe
+    hailTarget.mode = 'mercy';
+    hailTarget.bribe = Math.max(500, Math.min(5000, Math.round(credits * 0.2)));
+    hailSay(`They'll let you go... for ${hailTarget.bribe.toLocaleString('en-US')} credits.`);
+  } else {
+    hailSay(pickFrom(3000, 15, 19) || 'Calling to beg for your life?');
+    closeHailSoon();
+  }
+}
+function payBribe(s) {
+  hailClick();
+  if (credits < hailTarget.bribe) { hailSay(pickFrom(3000, 60, 64) || 'You can’t afford it.'); return; }
+  credits -= hailTarget.bribe;
+  s.hostile = false; s.fleeing = true;            // breaks off and runs
+  hailSay(pickFrom(3000, 135, 139) || 'All right, I’ll leave you alone.');
+  playSnd(150, 0.4);
+  closeHailSoon();
 }
 function demandSurrender(s) {
-  if (!s.disabled) { hailSay(pickFrom(3002, 7, 9) || '“Surrender? To you? Ha!”'); return; }
+  hailClick();
+  if (!s.disabled) { hailSay(pickFrom(3002, 7, 9) || 'Surrender? To you? Ha!'); return; }
   const loot = 500 + Math.floor(Math.random() * 2000);
   credits += loot;
   hailSay(`You plunder the disabled ship. (+${loot.toLocaleString('en-US')} cr)`);
@@ -920,14 +969,29 @@ function renderHail() {
   if (t.kind === 'ship') {
     const s = t.obj;
     const govtName = s.govt >= 128 && govts[s.govt] ? govts[s.govt].name : 'Independent';
-    const greet = t.said || pickLine(7000 + (s.govt - 128)) || pickLine(6999) || 'Channel open.';
+    if (t.said == null) t.said = shipGreeting(s);   // first-time greeting
+    const label = s.bounty ? 'Bounty Hunter' : govtName;
+    const tag = s.disabled ? ' · <span style="color:#e06c75">DISABLED</span>'
+              : s.hostile ? ' · <span style="color:#e06c75">HOSTILE</span>' : '';
+    let buttons;
+    if (t.mode === 'fuel') {
+      buttons = `<button onclick="payFuel(true)">Pay ${FUEL_PRICE.toLocaleString('en-US')} cr for fuel</button>
+        <button onclick="payFuel(false)">Offer ${Math.round(FUEL_PRICE / 2).toLocaleString('en-US')} cr</button>
+        <button onclick="hailTarget.mode='main';renderHail()">Never mind</button>`;
+    } else if (t.mode === 'mercy') {
+      buttons = `<button onclick="payBribe(hailTarget.obj)">Pay ${t.bribe.toLocaleString('en-US')} cr to be spared</button>
+        <button onclick="hailTarget.mode='main';renderHail()">Never mind</button>`;
+    } else {
+      buttons = `<button onclick="requestAssistance(hailTarget.obj)">Request assistance</button>` +
+        (s.hostile ? `<button onclick="begForMercy(hailTarget.obj)">Beg for mercy</button>` : '') +
+        `<button onclick="demandSurrender(hailTarget.obj)"${s.disabled ? '' : ' disabled'}>Demand surrender / plunder</button>`;
+    }
     // classic ship comm portrait: PICT 5300 + ship index
     html = `<img class="commpic" src="evassets/graphics/PICT_${5300 + (s.shipId - 128)}.png" onerror="this.remove()">
       <h3>${s.misnName || ships[s.shipId].name}</h3>
-      <div class="who">${s.bounty ? 'Bounty Hunter' : govtName}${s.disabled ? ' · disabled' : s.hostile ? ' · hostile' : ''}</div>
-      <div class="say">“${greet}”</div>
-      <button onclick="requestAssistance(hailTarget.obj)">Request assistance</button>
-      <button onclick="demandSurrender(hailTarget.obj)"${s.disabled ? '' : ' disabled'}>Demand surrender / plunder</button>
+      <div class="who">${label}${tag}</div>
+      <div class="say">“${t.said}”</div>
+      ${buttons}
       <button onclick="closeHail()">Close channel</button>`;
   } else {
     const p = t.obj, m = p.$sem || {};
@@ -936,8 +1000,8 @@ function renderHail() {
     html = `<h3>${p.name}</h3>
       <div class="who">${(m.govt || 'Independent')}${dom ? ' · paying tribute' : ''}</div>
       <div class="say">“${greet}”</div>
-      <button onclick="hailSay(pickFrom(3002,15,24) || 'They have nothing to tell you.')">Request information</button>
-      <button onclick="demandTribute(hailTarget.obj)"${p.Govt < 128 ? ' disabled' : ''}>Demand tribute</button>
+      <button onclick="hailClick();hailSay(pickFrom(3002,15,24) || 'They have nothing to tell you.')">Request information</button>
+      <button onclick="hailClick();demandTribute(hailTarget.obj)"${p.Govt < 128 ? ' disabled' : ''}>Demand tribute</button>
       <button onclick="closeHail()">Close channel</button>`;
   }
   document.getElementById('hailCard').innerHTML = html;

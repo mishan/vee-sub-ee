@@ -353,13 +353,26 @@ combat rating.
 ## Hailing (shell; browser leg)
 
 `Y` opens a modal hail dialog (pauses the sim) for the current ship or
-nav target; response text comes from the classic STR# comm lists (ship
-greetings 7000+govt / generic 6999; stellar comm 3002, whose groups are:
-0–4 channel-open, 5–14 tribute-refusal/threats, 15–24 no-information,
-25–26 tribute-agreed). **Ship** options: request assistance (a friendly
-ship tops up 100 fuel), demand surrender/plunder (only if the ship is
-disabled → loot credits), close. **Planet** options: request information
-(a 3002 no-info line), demand tribute, close. **Tribute/domination:**
+nav target; buttons play a click (snd 600). Response text comes from the
+classic STR# comm lists. **Ship comm** (STR# 3000, grouped): 0–4
+channel-open, 5–9 no-response, 10–14 "What do you want?", 15–19
+beg-for-life, 20–29 cordial greeting, 50–59 rude, 60–64 can't-afford,
+70–74 no-danger, 90–94 pay-first, 95–99 refuse, 100–104 deal-done,
+115–119 good-mood accept, 120–124 bad-mood refuse, 135–139 I'll-leave-
+you-alone, 140–144 fuel-for-a-price. Greeting: a hostile ship snarls
+(10–14), otherwise the govt greeting (7000+govt) or cordial (20–29). The
+`.who` line shows the govt and **HOSTILE** (red) when hostile.
+
+**Ship options:** *Request assistance* — a hostile ship refuses (95–99);
+if you don't need fuel it says so (70–74); otherwise it offers to refuel
+for `FUEL_PRICE` (1500 cr) with a *Pay* / *Offer half* / *Never mind*
+sub-dialog (a low-ball lands only on a coin-flip "good mood", else it's
+refused). *Beg for mercy* (hostile only) — ~45% the pilot names a bribe
+(20% of your credits, clamped 500–5000) you can *Pay* to make it break
+off (hostile→false, flees), else it taunts you. *Demand surrender /
+plunder* (disabled only) → loot credits. **Planet** options: request
+information (a 3002 no-info line), demand tribute, close. **Tribute/
+domination:**
 demanding tribute from a governed planet with a defense fleet
 (`DefDude`/`DefCount`; >1000 encodes waves, last digit = ships/wave)
 refuses and scrambles that fleet (hostile, tagged to the spöb). Once you
