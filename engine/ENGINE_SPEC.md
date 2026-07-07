@@ -213,8 +213,9 @@ name describes the sound, not its role). Target-cycle beep **150**. Klaxxon **35
 player's shields first hit 0 (re-armed when they recover). Planet
 ambient: spöb `CustSndID` (bible: 11 kHz ambient) loops while landed.
 Distance attenuation (approximation): `volume × max(0, 1 − dist/1200)`
-from the player; events at the player are full volume. `V` toggles sound;
-`?mute=1` starts muted. Title music (snd 30000+, EV Music) is deferred
+from the player; events at the player are full volume. `V` toggles sound; `[`/`]` adjust
+a master volume (10% steps, multiplied into every event volume,
+persisted in localStorage as `ve_volume`); `?mute=1` starts muted. Title music (snd 30000+, EV Music) is deferred
 until there's a title screen.
 
 ## Sprite ID conventions (from the EV bible, see semantics.js)
