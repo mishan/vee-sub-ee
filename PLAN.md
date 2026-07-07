@@ -114,9 +114,11 @@ browser) deliberately undecided until sprites are on screen.
 - **Milestone: audio, browser leg** (SDL deferred per Misha). Spec'd
   ("Audio"): weapon fire snd 200+Sound per volley w/ distance attenuation
   (1 − d/1200), Warp Up/Out on jump, Med/HeavyExplosion on impacts,
-  ShipBreaksUp + ShipExplodes on kills, Engine loop while thrusting
-  (6-frame release), target beeps, shield-collapse Klaxxon, planet
-  ambient loops from CustSndID (Thunder/Seagull/Sandpiper are real!).
+  ShipBreaksUp + ShipExplodes on kills, target beeps, shield-collapse
+  Klaxxon, planet ambient loops from CustSndID (Thunder/Seagull/
+  Sandpiper are real!). No thrust sound — classic flight is silent
+  (review finding: snd 223 "Engine" is the Forklift's weapon sound,
+  200+Sound 23; the name fooled a first pass).
   V toggles, ?mute=1. Plain Audio elements — file:// safe, unlocked by
   first keypress. snd_<id>.wav aliases added to evconvert.sh. Title
   music (30000+) waits for a title screen.

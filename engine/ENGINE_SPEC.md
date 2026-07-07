@@ -209,9 +209,10 @@ per weapon volley (not per barrel). Hyperspace: **128** "Warp Up" as the
 streak begins, **130** "Warp Out" on arrival. Explosions: shot impact →
 **301** (MedExplosion), or **300** (HeavyExplosion) when ExplodType ≥ 1;
 ship destruction → **302** "ShipBreaksUp" when disintegration starts,
-**303** "ShipExplodes" at the final fireball. Engine loop **223** while
-the player thrusts (with a ~6-frame release so per-frame flicker doesn't
-stutter it). Target-cycle beep **150**. Klaxxon **350** once when the
+**303** "ShipExplodes" at the final fireball. There is **no thrust
+sound** — classic flight is silent, and snd 223 "Engine", despite the
+name, is a weapon sound (the Forklift's, weap 191 Sound 23 → 200+23; the
+name describes the sound, not its role). Target-cycle beep **150**. Klaxxon **350** once when the
 player's shields first hit 0 (re-armed when they recover). Planet
 ambient: spöb `CustSndID` (bible: 11 kHz ambient) loops while landed.
 Distance attenuation (approximation): `volume × max(0, 1 − dist/1200)`

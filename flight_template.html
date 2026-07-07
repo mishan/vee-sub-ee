@@ -254,9 +254,8 @@ function loopSnd(id, vol = 1) {
 }
 const stopSnd = a => { if (a) { a.pause(); a.currentTime = 0; } };
 const attenuate = (x, y) => Math.max(0, 1 - Math.hypot(x - player.x, y - player.y) / 1200);
-let engineSnd = null, engineHold = 0, ambientSnd = null, klaxxonArmed = true;
+let ambientSnd = null, klaxxonArmed = true;
 function stopAllLoops() {
-  stopSnd(engineSnd); engineSnd = null;
   stopSnd(ambientSnd); ambientSnd = null;
 }
 
@@ -919,13 +918,6 @@ function step() {
       for (const w of player.weapons) if (w.cool > 0) w.cool--;
       if (keys[' ']) fire(player, shipTarget, true);
       if (keys['x'] && player.selSecondary) fire(player, shipTarget, false);
-      /* engine loop with a short release so frame flicker doesn't stutter */
-      if (player.thrusting) {
-        engineHold = 6;
-        if (!engineSnd) engineSnd = loopSnd(223, 0.35);
-      } else if (engineSnd && --engineHold <= 0) {
-        stopSnd(engineSnd); engineSnd = null;
-      }
       /* klaxxon on shield collapse, re-armed on recovery */
       if (player.shields <= 0 && klaxxonArmed) { playSnd(350, 0.8); klaxxonArmed = false; }
       else if (player.shields > player.shieldMax * 0.25) klaxxonArmed = true;
