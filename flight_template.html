@@ -131,7 +131,7 @@
     <button class="hot" id="hotPrefs" title="Set Prefs"></button>
     <button class="hot" id="hotAbout" title="About"></button>
   </div>
-  <div id="titleHint">click a menu option · music: original EV title theme</div>
+  <div id="titleHint">click to begin · original EV title theme</div>
 </div>
 <div id="about"><div class="card" id="aboutCard"></div></div>
 <div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · B board · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · Esc</div>
@@ -2550,9 +2550,17 @@ function showTitle() {
   // Open Pilot only means something when there's a save to resume.
   document.getElementById('hotOpen').style.opacity = SAVED ? '' : '0.35';
   startTitleShipSpin();
-  // Music is deferred to the first gesture (autoplay policy). Any click
-  // on the menu counts, but arm keydown too so it can't be missed.
-  addEventListener('keydown', startTitleMusic, { once: true });
+  // Browsers block autoplay until a user gesture, so the theme can't start
+  // on load — kick it off on the very first pointer/key interaction
+  // anywhere (even empty space or a menu button). If that first gesture is
+  // Enter/Open, enterGame stops it again, race-safe.
+  const arm = () => {
+    startTitleMusic();
+    removeEventListener('pointerdown', arm, true);
+    removeEventListener('keydown', arm, true);
+  };
+  addEventListener('pointerdown', arm, true);
+  addEventListener('keydown', arm, true);
 }
 function enterGame() {
   if (!titleShown) return;
