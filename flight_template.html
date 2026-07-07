@@ -961,11 +961,13 @@ function completeJump() {
 /* ---------------- input ---------------- */
 
 const keys = {};
-/* Double speed (like the original's Caps Lock). Driven by either Caps Lock —
- * a toggle, so read off the event's modifier state — or an on-screen button
- * (usable when Caps Lock is disabled, and on mobile). The effective flag is
- * the OR of the two so a keypress can't undo a manual toggle. */
-let fastForward = false, capsFF = false, manualFF = false;
+/* Double speed (like the original's Caps Lock). Driven by either Caps Lock or
+ * an on-screen button (usable when Caps Lock is disabled, and on mobile). The
+ * effective flag is the OR of the two so a keypress can't undo a manual
+ * toggle. Caps Lock is a lock key: browsers fire keydown on engage and keyup
+ * on disengage (or a keydown/keyup pair), and getModifierState is stale on the
+ * event itself — so we flip on either event, debounced to one flip per press. */
+let fastForward = false, capsFF = false, manualFF = false, capsLatch = -1e9;
 function applyFF() {
   const on = capsFF || manualFF;
   if (on === fastForward) return;
@@ -975,7 +977,11 @@ function applyFF() {
   if (bar) bar.classList.toggle('on', on);
   showMsg(on ? 'Fast forward (2×) on' : 'Fast forward off');
 }
-function syncFastForward(e) { if (e.getModifierState) { capsFF = e.getModifierState('CapsLock'); applyFF(); } }
+function capsToggle() {
+  const t = performance.now();
+  if (t - capsLatch < 200) return; // absorb the keydown/keyup pair into one flip
+  capsLatch = t; capsFF = !capsFF; applyFF();
+}
 function toggleFastForward() { manualFF = !manualFF; applyFF(); }
 /* Touch control state (mobile). The joystick doesn't drive the engine
  * directly — it synthesizes the same left/right/thrust the keyboard produces
@@ -984,7 +990,7 @@ function toggleFastForward() { manualFF = !manualFF; applyFF(); }
 const touchCtl = { steer: false, heading: 0, thrust: false, fire: false };
 addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
-  syncFastForward(e); // Caps Lock → double speed (toggle read from the event)
+  if (e.key === 'CapsLock') capsToggle(); // Caps Lock → toggle double speed
   // Splash/title overlays pause the sim; swallow every gameplay hotkey so the
   // game can't be driven behind them. Any key advances the loading splash.
   if (splashShown) { advanceSplash(); e.preventDefault(); return; }
@@ -1037,7 +1043,7 @@ addEventListener('keydown', e => {
   }
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
 });
-addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; syncFastForward(e); });
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; if (e.key === 'CapsLock') capsToggle(); });
 
 /* ---------------- touch controls (mobile) ----------------
  * A floating joystick (left thumb) steers, dedicated Thrust and Fire buttons
