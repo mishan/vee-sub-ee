@@ -45,7 +45,54 @@ function simpleCrypt(buf, key = KEY_CLASSIC) {
   return buf;
 }
 
-module.exports = { simpleCrypt, KEY_CLASSIC, KEY_NOVA };
+/* ------------------------------------------------------------------ */
+/* Pilot struct — reverse-engineered from real samples (three pilots
+ * cross-checked against the original game's in-emulator readout). The pilot
+ * lives in two MpïL resources: 128 "Pilot Data" (the struct below) and 129,
+ * whose *resource name is the ship's name*. The pilot's own name is the file
+ * name. Confirmed fields in decrypted MpïL 128 so far:
+ *
+ *   0x0000  i16  docked spöb  (stored −128; gives current location + system)
+ *   0x0002  i16  ship type    (stored −128)
+ *   0x0014  i16  date: month
+ *   0x0016  i16  date: day
+ *   0x0018  i16  date: year
+ *   0x11ba  u32  credits
+ *
+ * Still mapping: legal record (per-govt array), combat rating / kills, cargo,
+ * outfits, mission bits, the per-system status array at ~0x1a. */
+const MP128 = {
+  spob:    { off: 0x0000, u32: false, add: 128 },
+  ship:    { off: 0x0002, u32: false, add: 128 },
+  month:   { off: 0x0014, u32: false },
+  day:     { off: 0x0016, u32: false },
+  year:    { off: 0x0018, u32: false },
+  credits: { off: 0x11ba, u32: true },
+};
+
+/* Decode the confirmed summary fields of a pilot file (resource fork). */
+function readPilotSummary(file) {
+  const path = require('path');
+  const { loadFork, parseFork } = require('./evrsrc.js');
+  const types = parseFork(loadFork(file).fork);
+  const t = types.find(x => /p.L$/i.test(x.typeName));
+  if (!t) throw new Error('no NpïL/MpïL pilot resource in ' + file);
+  const r128 = t.resources.find(r => r.id === 128);
+  const r129 = t.resources.find(r => r.id === 129);
+  if (!r128) throw new Error('no pilot-data (id 128) resource');
+  const b = Buffer.from(r128.data()); simpleCrypt(b);
+  const g = f => (f.u32 ? b.readUInt32BE(f.off) : b.readInt16BE(f.off)) + (f.add || 0);
+  return {
+    pilotName: path.basename(file).replace(/^\._/, '').replace(/\.rsrc$/i, ''),
+    shipName: r129 ? r129.name : null,
+    dockedSpob: g(MP128.spob),
+    shipType: g(MP128.ship),
+    date: { year: g(MP128.year), month: g(MP128.month), day: g(MP128.day) },
+    credits: g(MP128.credits),
+  };
+}
+
+module.exports = { simpleCrypt, readPilotSummary, MP128, KEY_CLASSIC, KEY_NOVA };
 
 /* ------------------------------------------------------------------ */
 /* CLI: node evpilot.js selftest
@@ -72,6 +119,13 @@ if (require.main === module) {
     console.log('keystream[0..7] =', [...ks].map(b => b.toString(16).padStart(2, '0')).join(' '));
     console.log(ok ? 'selftest: all round-trips passed ✓' : 'selftest: FAILED');
     process.exit(ok ? 0 : 1);
+  }
+
+  if (cmd === 'summary') {
+    const file = process.argv[3];
+    if (!file) { console.error('usage: node evpilot.js summary <pilot-resource-fork-file>'); process.exit(1); }
+    console.log(JSON.stringify(readPilotSummary(file), null, 2));
+    process.exit(0);
   }
 
   if (cmd === 'inspect') {
