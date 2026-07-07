@@ -178,14 +178,22 @@ browser) deliberately undecided until sprites are on screen.
   actually merged to main (only mission-plot / PR #8 was) — merge
   mission-polish before this branch.
 
+- **Milestone: mission rating/record gates** (browser). `AvailRating`
+  (combat rating ≥) and `AvailRecord` (legal record with the spöb's govt:
+  ≥ positive / ≤ negative / −32000 = dominated) now gate mission
+  availability against the tracked rating/record — 43 rating-gated and 32
+  record-gated missions were previously mishandled (rating-gated ones were
+  always hidden; record-gated ones unchecked). Verified across all cases.
+
 ## Next
 
 1. **Distribution loader** (deferred per Misha; see README "Distribution"):
    data-free hosted page that accepts a user-built asset bundle (zip of
    evdata.json + evassets), cached client-side. Add `evexport --bundle`.
-2. **Also open**: SDL parity catch-up (audio, combat UI, missions),
-   real Mac pilot-file read/write via `buildFork`, title screen + music.
-   AvailRating/AvailRecord mission gates can use the new legal/rating now.
+2. **Also open**: SDL parity catch-up (audio, combat UI, missions, legal
+   record), real Mac pilot-file read/write via `buildFork`, title screen +
+   music, ship-offered missions (AvailLoc 2, needs hail integration),
+   fighter bays (weap g99 + Voice Targ sound).
 
 ## Notes
 

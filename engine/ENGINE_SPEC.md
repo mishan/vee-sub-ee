@@ -143,9 +143,11 @@ accept; expiry fails the mission.
 per system arrival): `AvailLoc` 0 = mission computer, 1 = bar, 2 = from a
 ship (offered on hail — deferred). `AvailStel`: −1 any inhabited spöb, a
 specific ID, or govt-relative codes (9999+g govt's own, 15000+g ally's,
-20000+g anyone-but, 25000+g enemy's). `AvailRating`/`AvailRecord`
-(combat rating, legal record — not yet tracked, so treated as ignored
-unless they'd forbid; missions requiring a positive rating are skipped).
+20000+g anyone-but, 25000+g enemy's). `AvailRating` (−1 ignore, else the
+combat rating — total crew killed — must be ≥ it) and `AvailRecord` (0
+ignore; positive = legal record with the spöb's govt at least this good;
+negative = at least this criminal; −32000 = the spöb must be dominated)
+now gate on the tracked rating/record.
 Ship-type gates: Flags 0x2000 (not for cargo ships, player inherentAI
 1–2), 0x4000 (not for warships, 3–4), and `AvailShipType`
 (128–255 must fly / 1128–1255 must not / 2128–2255 must be govt).
