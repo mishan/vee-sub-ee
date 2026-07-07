@@ -1239,7 +1239,14 @@ function missionAvailable(m, p, loc) {
   if (!availStelMatch(m.AvailStel, p)) return false;
   if (!bitReq(m.AvailBitSet)) return false;
   if (m.AvailBitClr >= 0 && missionBits[m.AvailBitClr]) return false;
-  if (m.AvailRating > 0) return false;       // combat rating not tracked yet
+  // combat rating gate: -1 ignore, else kills must be at least AvailRating
+  if (m.AvailRating >= 0 && kills < m.AvailRating) return false;
+  // legal-record gate (record with this spöb's govt): 0 ignore, positive =
+  // at least this good, negative = at least this criminal, -32000 = must
+  // have dominated this spöb.
+  if (m.AvailRecord === -32000) { if (!dominated.has(p.id)) return false; }
+  else if (m.AvailRecord > 0) { if (legalOf(p.Govt) < m.AvailRecord) return false; }
+  else if (m.AvailRecord < 0) { if (legalOf(p.Govt) > m.AvailRecord) return false; }
   if (activeMissions.some(a => a.id === m.id)) return false;
   const ai = playerAI();
   if ((m.Flags & 0x2000) && ai <= 2) return false;
