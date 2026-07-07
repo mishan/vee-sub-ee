@@ -384,8 +384,11 @@ function createPilot(name, ship, strict) {
     rep: {}, kills: 0, missions: [], dominated: [],
     name, shipName: ship, strict: !!strict,
   });
-  try { localStorage.setItem('ve_pilot', blob); sessionStorage.setItem('ve_newpilot', '1'); } catch {}
-  location.reload(); // reload restores the new pilot; the flag jumps to the menu
+  let saved = false;
+  try { localStorage.setItem('ve_pilot', blob); saved = localStorage.getItem('ve_pilot') === blob; } catch {}
+  if (!saved) { showMsg('Could not create the pilot — browser storage is unavailable.'); return; }
+  try { sessionStorage.setItem('ve_newpilot', '1'); } catch {} // jump past the splash after reload
+  location.reload(); // reload restores the new pilot
 }
 function openNameDialog(cfg) {
   const el = document.getElementById('npilot');
@@ -398,11 +401,12 @@ function openNameDialog(cfg) {
        <img class="npicon" src="evassets/graphics/PICT_${5000 + (playerShipId - 128)}.png" onerror="this.style.display='none'">
        <div class="npmsg">${escapeHtml(cfg.prompt)}</div>
      </div>
-     <input type="text" id="npName" value="${escapeHtml(cfg.value)}" maxlength="63" spellcheck="false" autocomplete="off">
+     <input type="text" id="npName" maxlength="63" spellcheck="false" autocomplete="off">
      ${strictHtml}
      <div class="npbtns"><button id="npCancel">Cancel</button><button id="npOk" class="primary">OK</button></div>`;
   el.style.display = 'flex';
   const input = document.getElementById('npName');
+  input.value = cfg.value; // set as a property, not an HTML attribute — no quote/markup injection
   input.focus(); input.select();
   const close = () => { el.style.display = 'none'; };
   const ok = () => { const v = input.value, s = document.getElementById('npStrict'); close(); cfg.onOk(v, s ? s.checked : false); };
