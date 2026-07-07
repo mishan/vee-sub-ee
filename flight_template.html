@@ -940,19 +940,23 @@ const misnCargoName = m => {
  * (classic EV fixes these when the mission is first shown). Cached by id,
  * per system visit (cleared alongside availRandom in loadSystem). */
 let resolvedOffers = {};
-function getOffer(m, here) {
-  if (resolvedOffers[m.id]) return resolvedOffers[m.id];
+/* id is passed explicitly: raw misn records (misns[id]) carry no `id`
+ * field, so keying off m.id silently collapsed every offer onto one
+ * cache slot — the bug where every briefing showed the same destination. */
+function getOffer(id, here) {
+  if (resolvedOffers[id]) return resolvedOffers[id];
+  const m = misns[id];
   const qty = m.CargoQty <= -2 ? Math.round(Math.abs(m.CargoQty) * (0.5 + Math.random()))
             : Math.max(m.CargoQty, 0);
   const o = {
-    id: m.id,
+    id,
     travelStel: resolveStel(m.TravelStel, here),
     returnStel: m.ReturnStel === -1 ? null : resolveStel(m.ReturnStel, here),
     cargoName: misnCargoName(m),
     cargoQty: qty,
     deadline: m.TimeLimit > 0 ? gameDay + m.TimeLimit : null,
   };
-  resolvedOffers[m.id] = o;
+  resolvedOffers[id] = o;
   return o;
 }
 
@@ -960,7 +964,7 @@ function getOffer(m, here) {
  * spawn any special ships if their system is the current one. */
 function acceptMission(id, here) {
   const m = misns[id];
-  const offer = getOffer(m, here); // reuse what the briefing showed
+  const offer = getOffer(id, here); // reuse what the briefing showed
   const A = {
     id, name: m.name,
     accepted: gameDay,
@@ -1373,12 +1377,12 @@ function renderMissionBoard(loc) { // loc 0 = computer, 1 = bar
   if (!offers.length) list += `<div class="sub">Nothing right now.</div>`;
   for (const o of offers)
     list += `<div class="row" style="cursor:pointer;color:${o.id === selMisnId ? '#ffd479' : '#cfd6e4'}"
-      onclick="selMisnId=${o.id};rerenderService()">${misnName(o, getOffer(o, p))}</div>`;
+      onclick="selMisnId=${o.id};rerenderService()">${misnName(o, getOffer(o.id, p))}</div>`;
   list += '</div>';
 
   let pane = '<div style="flex:1.3;min-width:240px">';
   if (sel) {
-    const offer = getOffer(sel, p);                      // resolved once, stable
+    const offer = getOffer(selMisnId, p);                // resolved once, stable
     const brief = descText(sel.BriefText, offer) || descText(sel.QuickBrief, offer)
       || 'No further details are offered.';
     const pay = sel.PayVal > 0 ? `${sel.PayVal.toLocaleString('en-US')} cr` :
