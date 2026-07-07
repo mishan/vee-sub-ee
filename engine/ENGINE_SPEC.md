@@ -312,14 +312,19 @@ ship destruction → **302** "ShipBreaksUp" when disintegration starts,
 **303** "ShipExplodes" at the final fireball. There is **no thrust
 sound** — classic flight is silent, and snd 223 "Engine", despite the
 name, is a weapon sound (the Forklift's, weap 191 Sound 23 → 200+23; the
-name describes the sound, not its role). Target-cycle beep **150**;
-targeting a planet for landing plays **710** "Voice Targ"; touchdown on a
-planet plays **390** "Airlock". Hail dialog buttons (incl. Close channel)
-click with **600**. Red Alert **370** when the count of ships hostile to
-the player rises (grudge / bounty hunter / defense fleet), suppressed for
-the ambient population on system entry. Klaxxon **350** once when the
-player's shields first hit 0 (re-armed when they recover). Planet
-ambient: spöb `CustSndID` (bible: 11 kHz ambient) loops while landed.
+name describes the sound, not its role). Target-select beep **150**
+(cycling a target, and picking a planet to land on). **390** "Airlock" is
+the **boarding** sound (boarding/plundering a disabled ship — NOT
+landing, despite what its length suggested; Misha confirmed). Landing
+touchdown currently has no dedicated sound — none in the bank is clearly
+it. **710** "Voice Targ" is a 1.36 s fighter-command voice line, reserved
+for the (unimplemented) fighter-bay mechanic — not a UI blip. Hail dialog
+buttons beep with **153**. Red Alert **370** when the count of ships
+hostile to the player rises (grudge / bounty hunter / defense fleet),
+suppressed for the ambient population on system entry. Klaxxon **350**
+once when the player's shields first hit 0 (re-armed when they recover).
+Planet ambient: spöb `CustSndID` (bible: 11 kHz ambient) loops while
+landed.
 Distance attenuation (approximation): `volume × max(0, 1 − dist/1200)`
 from the player; events at the player are full volume. `V` toggles sound; `[`/`]` adjust
 a master volume (10% steps, multiplied into every event volume,

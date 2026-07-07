@@ -901,7 +901,7 @@ function spawnDefenseFleet(p) {
 let hailCloseTimer = null;
 function closeHailSoon() { clearTimeout(hailCloseTimer); hailCloseTimer = setTimeout(closeHail, 1400); }
 
-const hailClick = () => playSnd(600, 0.4);       // UI click (snd 600)
+const hailClick = () => playSnd(153, 0.5);       // comm-panel beep (snd 153)
 const FUEL_PRICE = 1500;                         // full refuel from a passing ship
 
 // Greeting depends on disposition — hostiles snarl, others are cordial.
@@ -967,7 +967,7 @@ function demandSurrender(s) {
   if (shipTarget === s) shipTarget = null;
   checkDefenseCleared(s.defOf, s);
   showMsg(`You plunder the disabled ship. (+${loot.toLocaleString('en-US')} cr)`);
-  playSnd(150, 0.5);
+  playSnd(390, 0.7); // Airlock — boarding
   closeHail();
 }
 
@@ -1487,6 +1487,7 @@ function boardTarget() {
   aiShips.splice(aiShips.indexOf(best), 1);
   if (best === shipTarget) shipTarget = null;
   checkDefenseCleared(best.defOf, best); // a boarded defender counts as defeated
+  playSnd(390, 0.7); // Airlock — the boarding sound
   if (!A) { // plunder a non-mission ship — piracy
     const loot = 500 + Math.floor(Math.random() * 2000);
     credits += loot;
@@ -1872,7 +1873,7 @@ function tryLand() {
   if (!p) { showMsg('There is nowhere to land in this system.'); return; }
   if (navTarget !== p) {
     navTarget = p; showMsg(`Targeting ${p.name}.`);
-    playSnd(710, 0.6); // Voice Targ — targeting acknowledgment
+    playSnd(150, 0.5); // target-select beep
     return;
   }
   if (distTo(p) >= EV.LAND_DIST) { showMsg(`Landing on ${p.name}: too far away.`); return; }
@@ -1880,7 +1881,6 @@ function tryLand() {
     showMsg('You are moving too fast to land.'); return;
   }
   landedAt = p;
-  playSnd(390, 0.7); // Airlock — the docking/landing sound
   player.vx = player.vy = 0;
   fuel = fuelMax; // landing refuels (spec)
   player.shields = player.shieldMax; // ...and repairs
