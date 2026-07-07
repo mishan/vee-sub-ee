@@ -61,9 +61,17 @@ the target — ship hails pull from the govt-specific STR# greeting lists
 original sidebar art (PICT 128 "Game Panel" from EV Titles, box geometry
 measured from the asset): square radar, shield/fuel bars in the panel's
 own slots, message box, hyperspace strip, target display with the
-target's live sprite, and the credits/cargo box. Dev/test URL params: `?map=1`, `?dest=<syst>`,
+target's live sprite, and the credits/cargo box. **Missions**: the
+landing screen has a Spaceport Bar and Mission BBS offering real mïsn
+missions (briefing text, accept/decline); **I** in flight shows your
+active briefings. Cargo runs, destroy/observe special-ship jobs, and
+plain deliveries work — fly to the destination, land, get paid. Mission
+bits, the day counter (advances each jump), and active missions persist
+in the pilot; only completable missions are offered, so nothing
+dead-ends. Dev/test URL params: `?map=1`, `?dest=<syst>`,
 `?jump=1`, `?land=1`, `?exchange=1`, `?tab=1`, `?nav=1`, `?ff=<frames>`,
-`?syst=`, `?ship=`, `?x/y/heading`.
+`?syst=`, `?ship=`, `?x/y/heading`, `?bar=1`, `?computer=1`,
+`?allmissions=1`.
 
 **Engine spec:** flight physics and AI behavior are normatively documented
 in `engine/ENGINE_SPEC.md` and implemented twice: `engine/core.js` (DOM-free,

@@ -133,6 +133,24 @@ browser) deliberately undecided until sprites are on screen.
   Note: the real Mac pilot-file format (via evrsrc buildFork) remains a
   future compatibility goal; this is the gameplay-persistence layer.
 
+- **Milestone: missions** (browser). The mïsn resource — a faithful,
+  completable subset. Mission bits (256, persisted), day counter (advances
+  per jump), availability (AvailStel incl. govt codes, AvailBitSet/Clr,
+  AvailRandom rerolled per arrival, ship-type Flags 0x2000/0x4000). Bar +
+  Mission-BBS boards on the landing screen with briefing text, accept/
+  decline. Goals: cargo delivery (pickup/dropoff modes, hold accounting),
+  destroy/chase-off/observe special ships (spawned from ShipDude, reuse
+  combat), plain go-to. Completion at ReturnStel pays PayVal (credits /
+  outfit grants / cash-%), sets CompBitSet, adjusts reputation; failure on
+  time-limit expiry. I-key briefing, <DST>/<RST> text substitution,
+  persistence of the whole mission state. Verified end-to-end headless
+  (accept → deliver → +50,000 cr, mission cleared). Only goals we can
+  complete are offered — nothing dead-ends. Classic-vs-Nova gotcha:
+  classic misn lacks CompBitSet4/FailBitSet2/AvailShipType (Nova fields);
+  missing fields treated as −1. Deferred: ship-offered missions (AvailLoc
+  2, needs hail integration), board/disable/escort/rescue goals, aux
+  ships, combat-rating/legal-record gates.
+
 ## Next
 
 1. **Distribution loader** (see README "Distribution"): data-free hosted
