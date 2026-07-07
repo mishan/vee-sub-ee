@@ -374,6 +374,7 @@ function spawnAI(atEdge) {
   e.shipId = shipId;
   e.govt = dudes[dudeId].Govt;
   e.aiType = dudes[dudeId].AIType;
+  e.booty = dudes[dudeId].Booty || 0; // what you can plunder when boarding (bible)
   e.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
   armShip(e, ships[shipId]);
   // hostility from govt flags (spec: "Hostility")
@@ -417,6 +418,7 @@ function maybeSpawnBountyHunter() {
   const a = Math.random() * Math.PI * 2, r = 2200;
   const e = EV.makeShip(ships[shipId], player.x + Math.cos(a) * r, player.y + Math.sin(a) * r, Math.random() * 360);
   e.shipId = shipId; e.govt = g; e.aiType = 3;
+  e.booty = dude.Booty || 0;
   e.hostile = true; e.bounty = true; e.warpIn = 18;
   e.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
   armShip(e, ships[shipId]);
@@ -979,6 +981,7 @@ function spawnDefenseFleet(p) {
     const a = Math.random() * Math.PI * 2, r = 500 + Math.random() * 300;
     const e = EV.makeShip(ships[shipId], player.x + Math.cos(a) * r, player.y + Math.sin(a) * r, Math.random() * 360);
     e.shipId = shipId; e.govt = dude.Govt; e.aiType = 3;
+    e.booty = dude.Booty || 0;
     e.defOf = p.id; e.hostile = true; e.warpIn = 18;
     e.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
     armShip(e, ships[shipId]);
@@ -1061,6 +1064,31 @@ function demandSurrender(s) {
 function renderHail() {
   const t = hailTarget; if (!t) return;
   let html;
+  if (t.kind === 'board') {
+    const s = t.obj;
+    const govtName = s.govt >= 128 && govts[s.govt] ? govts[s.govt].name : 'Independent';
+    const shipName = ships[s.shipId].name;
+    let buttons;
+    if (t.mode === 'result') { // capture/loot resolved — the ship is spent
+      buttons = `<button onclick="hailClick();closeHail()">Continue</button>`;
+    } else {
+      const canLoot = (s.booty || 0) !== 0;
+      buttons =
+        `<button onclick="captureVessel()">Capture vessel (~${Math.round(100 * captureOdds(s))}% chance)</button>` +
+        (canLoot ? `<button onclick="lootVessel()">Loot the hold</button>`
+                 : `<button disabled title="You are repelled — nothing to plunder">Nothing to loot</button>`) +
+        `<button onclick="hailClick();closeHail()">Leave it be</button>`;
+    }
+    const say = t.said || `You board the disabled ${shipName}. Your crew ${playerCrew()} vs theirs ${ships[s.shipId].Crew || 1}.`;
+    html = `<img class="commpic" src="evassets/graphics/PICT_${5300 + (s.shipId - 128)}.png" onerror="this.remove()">
+      <h3>${shipName}</h3>
+      <div class="who">${govtName} · <span style="color:#e06c75">DISABLED</span></div>
+      <div class="say">${say}</div>
+      ${buttons}`;
+    document.getElementById('hailCard').innerHTML = html;
+    document.getElementById('hail').style.display = 'flex';
+    return;
+  }
   if (t.kind === 'ship') {
     const s = t.obj;
     const govtName = s.govt >= 128 && govts[s.govt] ? govts[s.govt].name : 'Independent';
@@ -1567,10 +1595,10 @@ function onMissionShipDisabled(s) {
  * board/rescue targets count toward the goal; any other disabled ship is
  * plundered for cargo (a crime against its government). */
 function boardTarget() {
-  if (landedAt || gameOver) return;
+  if (landedAt || gameOver || hailOpen) return;
   let best = null, bd = 50;
   for (const s of aiShips) {
-    if (!s.disabled || s.deathT >= 0) continue;
+    if (!s.disabled || s.deathT >= 0 || s.looted) continue; // looted ships are done
     const d = Math.hypot(s.x - player.x, s.y - player.y);
     if (d < bd) { bd = d; best = s; }
   }
@@ -1578,23 +1606,86 @@ function boardTarget() {
   if (Math.hypot(player.vx, player.vy) > EV.LAND_SPEED * 2) { showMsg('Slow down to board.'); return; }
   const A = (best.misnGoal === 2 || best.misnGoal === 5)
     ? activeMissions.find(a => a.id === best.misnId) : null;
-  aiShips.splice(aiShips.indexOf(best), 1);
-  if (best === shipTarget) shipTarget = null;
-  checkDefenseCleared(best.defOf, best); // a boarded defender counts as defeated
   playSnd(390, 0.7); // Airlock — the boarding sound
-  if (!A) { // plunder a non-mission ship — piracy
-    const loot = 500 + Math.floor(Math.random() * 2000);
-    credits += loot;
-    commitCrime(best.govt, penaltyOf(best.govt, 'BoardPenalty'));
-    showMsg(`You plunder the ship's hold. (+${loot.toLocaleString('en-US')} cr)`);
-    return;
-  }
-  {
+  if (A) { // mission boarding: complete the objective, no plunder dialog
+    aiShips.splice(aiShips.indexOf(best), 1);
+    if (best === shipTarget) shipTarget = null;
+    checkDefenseCleared(best.defOf, best);
     A.shipsLeft--;
     showMsg(A.shipsLeft > 0
       ? `${misnName(misns[A.id], A)}: boarded (${A.shipsLeft} to go).`
       : `${misnName(misns[A.id], A)}: objective complete — return for payment.`);
+    return;
   }
+  openHail('board', best); // non-mission: the boarding dialog (loot / capture)
+}
+
+/* ---- boarding a disabled ship (spec: "Boarding") ----
+ * Effective crew for capture odds: the ship's own crew plus any Marines
+ * outfit (oütf ModType 25 adds ModVal to the crew complement, per bible). */
+function playerCrew() {
+  let c = ships[playerShipId].Crew || 1;
+  for (const [oid, n] of Object.entries(outfits)) {
+    const o = DATA.types.outf[oid];
+    if (o && o.$sem && o.$sem.modType === 'marines') c += (o.ModVal || 0) * (n || 0);
+  }
+  return c;
+}
+const captureOdds = s => { const my = playerCrew(), th = ships[s.shipId].Crew || 1; return my / (my + th); };
+
+function lootVessel() {
+  hailClick();
+  const s = hailTarget.obj, booty = s.booty || 0, rec = ships[s.shipId];
+  const got = [];
+  if (booty & 0x40) { // Money — a slice of the hull's purchase price (bible)
+    const money = Math.max(200, Math.round((rec.Cost || 0) * (0.03 + Math.random() * 0.07)));
+    credits += money; got.push(`${money.toLocaleString('en-US')} cr`);
+  }
+  let free = holds - cargoUsed();          // commodity flags 0x01..0x20 → the six goods
+  for (let i = 0; i < 6; i++) if ((booty & (1 << i)) && free > 0) {
+    const take = Math.min(1 + Math.floor(Math.random() * 4), free);
+    cargo[COMMODITIES[i]] += take; free -= take; got.push(`${take}t ${cargoNames[i]}`);
+  }
+  s.looted = true;                          // stays disabled but no longer boardable
+  commitCrime(s.govt, penaltyOf(s.govt, 'BoardPenalty'));
+  checkDefenseCleared(s.defOf, s);
+  hailTarget.mode = 'result';
+  hailTarget.said = got.length ? `You strip the hold — ${got.join(', ')}.` : 'The hold is bare.';
+  renderHail();
+}
+
+function captureVessel() {
+  hailClick();
+  const s = hailTarget.obj;
+  commitCrime(s.govt, penaltyOf(s.govt, 'BoardPenalty'));
+  hailTarget.mode = 'result';
+  if (Math.random() < captureOdds(s)) {
+    hailTarget.said = `Your boarding party seizes the ${ships[s.shipId].name}! You transfer to your new command.`;
+    takeCommand(s);
+    playSnd(150, 0.5);
+  } else {
+    hailTarget.said = 'The crew repel your party and scuttle the ship!';
+    beginDestruction(s);                    // failed capture → self-destruct
+    checkDefenseCleared(s.defOf, s);
+  }
+  renderHail();
+}
+
+/* Take command of a captured hull: you abandon your old ship (and its outfits,
+ * per classic) and fly the prize away, freshly repaired and fuelled. */
+function takeCommand(s) {
+  const i = aiShips.indexOf(s); if (i >= 0) aiShips.splice(i, 1);
+  if (shipTarget === s) shipTarget = null;
+  playerShipId = s.shipId; player.shipId = playerShipId;
+  preloadSprites([spinOfShip(playerShipId)]); // ensure the new hull's sprite is ready
+  player.x = s.x; player.y = s.y; player.heading = s.heading; player.vx = 0; player.vy = 0;
+  player.deathT = -1; player.disabled = false;
+  for (const k of Object.keys(outfits)) delete outfits[k]; // old ship & upgrades left behind
+  applyShipStats();                         // arm the stock captured hull
+  fuel = fuelMax;
+  player.shields = player.shieldMax; player.armor = player.armorMax;
+  for (const c of COMMODITIES) cargo[c] = Math.min(cargo[c], holds); // clamp to new hold
+  while (cargoUsed() > holds) { const c = COMMODITIES.find(x => cargo[x] > 0); if (!c) break; cargo[c]--; }
 }
 
 /* An escort ship reached its destination safely. */

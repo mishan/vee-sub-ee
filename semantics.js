@@ -122,6 +122,8 @@ const MOD_TYPES = {
   13: 'densityScanner', 14: 'iff', 15: 'afterburner', 16: 'map',
   17: 'cloakingDevice', 18: 'fuelScoop', 19: 'autoRefueller',
   20: 'autoEject', 21: 'cleanLegalRecord', 22: 'hyperspaceSpeedMod',
+  23: 'hyperspaceDistMod', 24: 'interferenceMod', 25: 'marines',
+  26: 'alterMissionBit',
 };
 
 const AI_TYPES = { 1: 'wimpyTrader', 2: 'braveTrader', 3: 'warship', 4: 'interceptor' };

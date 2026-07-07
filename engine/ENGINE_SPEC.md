@@ -395,6 +395,30 @@ destroy the fleet the spöb is *subdued*; demanding again pays a one-time
 tribute (`2000·(TechLevel+1)` cr — a convention, since classic spöb data
 has no tribute-amount field) and marks it *dominated* (persisted).
 
+## Boarding (shell; browser leg)
+
+`B` boards the nearest **disabled** ship within 50 px while nearly stopped
+(≤ `2·LAND_SPEED`). A mission board target (shipGoal 2/5) just completes the
+objective as before. Any other ship opens a modal boarding dialog (Airlock
+snd 390) with **Capture vessel**, **Loot the hold**, and **Leave**:
+
+- **Loot** yields the dude's `Booty` flags (bible): commodities
+  0x01–0x20 = food/industrial/medical/luxury/metal/equipment (a few tons
+  each, into free hold space) and 0x40 = money (a slice of the hull's
+  `Cost`). `Booty == 0` ⇒ "repelled", loot disabled. Looting applies the
+  govt's `BoardPenalty` and leaves the ship **disabled but flagged looted**,
+  so it can't be boarded again. (Booty is *only* goods + money — no fuel or
+  ammo, per the bible.)
+- **Capture** rolls `playerCrew / (playerCrew + targetCrew)` — crew from the
+  shïp `Crew` field, plus any Marines outfit (ModType 25, `ModVal` per unit;
+  none exist in the Override data but the hook is there). The crew-ratio
+  formula is an **approximation** (the bible names the inputs, not the
+  odds). Success ⇒ you *take command*: switch to the captured hull (stock
+  loadout — your old ship and its outfits are abandoned), repaired, refuelled,
+  repositioned at the prize, cargo clamped to the new hold. Failure ⇒ the
+  crew **self-destruct** the ship (it begins its death sequence). Either way
+  the attempt applies `BoardPenalty`. SDL leg: deferred.
+
 ## Persistence (shell responsibility; browser leg)
 
 The pilot auto-saves **on landing and on takeoff** (classic saved when
