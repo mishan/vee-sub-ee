@@ -469,9 +469,31 @@ through harmlessly. Enemy fire hits escorts normally, and an escort that is
 destroyed is removed from the saved fleet **permanently** (no ambient
 replacement is scheduled). Escorts show as green radar blips.
 
-Sources of escorts today are the two capture outcomes above (the immediate
-ask). The wider "escort for hire" system (recruiting escorts in the spaceport
-bar) is **not yet implemented**. SDL leg: deferred.
+### Escorts for hire (shell; browser leg)
+
+The **Spaceport Bar** carries two boards, toggled by tabs: the mission BBS
+(as before) and a **hire-escort** dialog. The dialog shows *Your fleet* (each
+escort with its type, per-jump salary or "captured", and a **Dismiss**
+button) alongside *Pilots for hire* — a small fixed roster with each hull's
+fee, upkeep, and its ship-class description (desc 2000+`shïp−128`, from the
+data file). The roster is the four cheapest armed, purchasable (`Cost > 0`),
+non-mission-locked hulls, computed once from the ship table (so it's stable
+and data-driven rather than hard-coded).
+
+Hiring pays a one-time **fee** and enlists a persistent escort that draws a
+per-jump **upkeep**; both are fractions of the hull's `Cost` (`HIRE_FEE_FRAC`
+0.5 with a 1 000 cr floor, `UPKEEP_FRAC` 0.01 with a 50 cr floor). Like the
+commodity multipliers and trade-in rate, **these figures are conventions, not
+from the bible — flagged as approximations.** The fleet is capped at
+`MAX_ESCORTS` (6, hired + captured). Upkeep is charged on each hyperspace jump
+(`completeJump`); any escort you can't cover **quits on arrival** (deducted in
+fleet order, so you keep as many as you can afford). Captured ships draw no
+salary. A hired escort is otherwise identical to a captured one — same allied
+AI, persistence, friendly-fire immunity, and permanent loss on death.
+
+The wider original system (per-government rosters, tech-gated availability,
+pilot bios in desc 2100–2163, and in-flight fleet commands) is **not
+implemented**; escorts fight and follow automatically. SDL leg: deferred.
 
 ## Persistence (shell responsibility; browser leg)
 
