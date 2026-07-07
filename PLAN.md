@@ -143,22 +143,33 @@ browser) deliberately undecided until sprites are on screen.
   combat), plain go-to. Completion at ReturnStel pays PayVal (credits /
   outfit grants / cash-%), sets CompBitSet, adjusts reputation; failure on
   time-limit expiry. I-key briefing, <DST>/<RST> text substitution,
-  persistence of the whole mission state. Verified end-to-end headless
-  (accept → deliver → +50,000 cr, mission cleared). Only goals we can
-  complete are offered — nothing dead-ends. Classic-vs-Nova gotcha:
+  persistence of the whole mission state. Classic-vs-Nova gotcha:
   classic misn lacks CompBitSet4/FailBitSet2/AvailShipType (Nova fields);
-  missing fields treated as −1. Deferred: ship-offered missions (AvailLoc
-  2, needs hail integration), board/disable/escort/rescue goals, aux
-  ships, combat-rating/legal-record gates.
+  missing fields treated as −1.
+
+- **Milestone: mission display fixes + plot branching** (browser). Review
+  fixes: random fields (special stellar codes like 20000+g, ±50% cargo,
+  deadlines) are resolved ONCE per offer and cached, so briefings show the
+  real destination/cargo/date instead of "stellar 20002"/"−10t"/blank;
+  full token substitution in briefs and mission NAMES ("Ferry Passengers
+  to <DST>" → "…to Sirius Station"); fixed a double-subst bug. Then the
+  remaining goal types — board (B key on a disabled target), disable,
+  escort (protect to destination), rescue (board a pre-disabled ship) —
+  which is what unblocks the storyline: the Astex opener at Diphidia II
+  now runs its full chain (Investigate Dumping → Observe Antares →
+  Capture Ore Sample → Destroy Freighters → Escape Astex) via CompBitSet→
+  AvailBitSet gating. 49 chaining bits over 72 gated missions in the data;
+  no new machinery beyond bit gating — the goals just all had to work.
+  Deferred: ship-offered missions (AvailLoc 2), aux ships, combat-rating/
+  legal-record gates.
 
 ## Next
 
-1. **Distribution loader** (see README "Distribution"): data-free hosted
-   page that accepts a user-built asset bundle (zip of evdata.json +
-   evassets), cached client-side. Add an `evexport --bundle` command.
-2. **Then**: missions (mïsn + mission bits, bar) → persistence (pilot
-   file read/write via `buildFork` — credits, cargo, outfits, explored
-   set all live in player state now).
+1. **Distribution loader** (deferred per Misha; see README "Distribution"):
+   data-free hosted page that accepts a user-built asset bundle (zip of
+   evdata.json + evassets), cached client-side. Add `evexport --bundle`.
+2. **Also open**: SDL parity catch-up (audio, combat UI, missions),
+   real Mac pilot-file read/write via `buildFork`, title screen + music.
 
 ## Notes
 

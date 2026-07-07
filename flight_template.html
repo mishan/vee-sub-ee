@@ -79,7 +79,7 @@
   <h1>Your ship has been destroyed.</h1>
   <div id="deadHint">Press R to try again</div>
 </div></div>
-<div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · Esc</div>
+<div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · B board · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · Esc</div>
 <script>/*__ENGINE__*/</script>
 <script>
 'use strict';
@@ -228,6 +228,7 @@ function loadSystem(systId) {
   // missions: AvailRandom rerolls per arrival; place this system's ships;
   // mark observe goals satisfied when we arrive in the right system.
   availRandom = {};
+  resolvedOffers = {}; // fresh mission destinations/cargo/deadlines per system
   for (const A of activeMissions) {
     maybeSpawnMissionShips(A);
     if (A.shipGoal === 4 && !A.observed) {
@@ -235,7 +236,7 @@ function loadSystem(systId) {
       if ((sys >= 128 && sys === SYSTEM_ID) ||
           (A.travelStel && spobById(A.travelStel) && spobById(A.travelStel).System === SYSTEM_ID)) {
         A.observed = true;
-        showMsg(`${A.name}: target observed — return for payment.`);
+        showMsg(`${misnName(misns[A.id], A)}: target observed — return for payment.`);
       }
     }
   }
@@ -468,7 +469,10 @@ function hitShip(victim, rec, heading, attacker) {
   if (result === 'destroyed' && victim.deathT < 0) {
     victim.deathT = Math.max(victim.deathDelay, 1);
     playSnd(302, attenuate(victim.x, victim.y)); // breaking up
-  } else if (result === 'disabled') victim.disabled = true;
+  } else if (result === 'disabled' && !victim.disabled) {
+    victim.disabled = true;
+    if (victim.misnId != null && attacker === player) onMissionShipDisabled(victim);
+  }
   grudge(victim, attacker);
 }
 
@@ -585,6 +589,7 @@ addEventListener('keydown', e => {
   if (k === 'n' && gameOver) { newPilot(); return; }
   if (k === 'n' && !landedAt) cyclePlanetTarget();
   if (k === 'y' && !landedAt) hail();
+  if (k === 'b' && !landedAt) boardTarget();
   if (k === 'i' && !landedAt) showMissionBriefing();
   if (k === 'r' && gameOver) location.reload();
   if (k === 'v') {
@@ -849,7 +854,7 @@ function availStelMatch(code, p) {
 
 /* Which goal types can we actually complete? Others aren't offered. */
 function goalSupported(m) {
-  if (m.ShipCount > 0 && m.ShipGoal >= 0) return [0, 4, 6].includes(m.ShipGoal);
+  if (m.ShipCount > 0 && m.ShipGoal >= 0) return [0, 1, 2, 3, 4, 5, 6].includes(m.ShipGoal);
   return true; // cargo delivery / plain go-to
 }
 function playerAI() { return ships[playerShipId].InherentAI; }
@@ -889,43 +894,88 @@ function offeredMissions(p, loc) {
   return out;
 }
 
-/* Substitute EV text placeholders. <DST>/<RST> = travel/return stellar
- * names; the rest we leave alone (govt/player names come later). */
+/* A game "date": gameDay counts days since a fixed epoch. Classic EV shows
+ * real calendar dates; we render day N of an in-fiction year for flavor. */
+function formatDate(day) {
+  const YEAR0 = 1177, DPY = 365;
+  const y = YEAR0 + Math.floor(day / DPY);
+  return `day ${day % DPY + 1}, NC ${y}`;
+}
+
+/* Substitute EV mission text placeholders from a resolved offer/mission A.
+ * (See the bible's token table: <DST> <DSY> <RST> <RSY> <CT> <CQ> <DL> ...) */
 function subst(text, A) {
   if (!text) return text;
-  return text
-    .replace(/<DST>/g, A && A.travelStel != null ? stelName(A.travelStel) : 'your destination')
-    .replace(/<RST>/g, A && A.returnStel != null ? stelName(A.returnStel) : 'your destination');
+  const stel = id => (id != null ? stelName(id) : null);
+  const sysOf = id => { const p = spobById(id); const s = p && systs[p.System]; return s && s.name; };
+  const map = {
+    DST: (A && stel(A.travelStel)) || 'your destination',
+    DSY: (A && sysOf(A.travelStel)) || 'the target system',
+    RST: (A && stel(A.returnStel)) || (A && stel(A.travelStel)) || 'your destination',
+    RSY: (A && sysOf(A.returnStel)) || (A && sysOf(A.travelStel)) || 'the target system',
+    CT:  (A && A.cargoName) || 'cargo',
+    // null-check, not truthiness: a legitimate quantity of 0 must render as
+    // "0", not fall through to "the".
+    CQ:  A && A.cargoQty != null ? String(A.cargoQty) : 'the',
+    DL:  A && A.deadline != null ? formatDate(A.deadline) : 'the deadline',
+    PN:  'Captain',
+    PSN: ships[playerShipId] ? ships[playerShipId].name : 'your ship',
+  };
+  return text.replace(/<(DST|DSY|RST|RSY|CT|CQ|DL|PN|PSN)>/g, (_, k) => map[k]);
 }
 const descText = (id, A) => {
   const d = DATA.types.desc[id];
   return d && d.Description ? subst(d.Description, A) : '';
 };
+/* Mission names carry tokens too (e.g. "Ferry Passengers to <DST>"). */
+const misnName = (m, A) => subst(m.name, A);
 const misnCargoName = m => {
   if (m.CargoType < 0) return null;
   if (m.CargoType === 1000) return DATA.strings[4000].list[Math.floor(Math.random() * 6)];
   return DATA.strings[4000].list[m.CargoType] || 'cargo';
 };
 
+/* Resolve a mission's random fields ONCE per offer, so the briefing shows
+ * the real destination/cargo/deadline and accepting yields the same thing
+ * (classic EV fixes these when the mission is first shown). Cached by id,
+ * per system visit (cleared alongside availRandom in loadSystem). */
+let resolvedOffers = {};
+function getOffer(m, here) {
+  if (resolvedOffers[m.id]) return resolvedOffers[m.id];
+  const qty = m.CargoQty <= -2 ? Math.round(Math.abs(m.CargoQty) * (0.5 + Math.random()))
+            : Math.max(m.CargoQty, 0);
+  const o = {
+    id: m.id,
+    travelStel: resolveStel(m.TravelStel, here),
+    returnStel: m.ReturnStel === -1 ? null : resolveStel(m.ReturnStel, here),
+    cargoName: misnCargoName(m),
+    cargoQty: qty,
+    deadline: m.TimeLimit > 0 ? gameDay + m.TimeLimit : null,
+  };
+  resolvedOffers[m.id] = o;
+  return o;
+}
+
 /* Accept a mission at spob `here`: resolve destinations, load cargo,
  * spawn any special ships if their system is the current one. */
 function acceptMission(id, here) {
   const m = misns[id];
-  const qty = m.CargoQty <= -2 ? Math.round(Math.abs(m.CargoQty) * (0.5 + Math.random()))
-            : Math.max(m.CargoQty, 0);
+  const offer = getOffer(m, here); // reuse what the briefing showed
   const A = {
     id, name: m.name,
     accepted: gameDay,
-    travelStel: resolveStel(m.TravelStel, here),
-    returnStel: m.ReturnStel === -1 ? null : resolveStel(m.ReturnStel, here),
-    cargoName: misnCargoName(m), cargoQty: qty,
+    travelStel: offer.travelStel,
+    returnStel: offer.returnStel,
+    cargoName: offer.cargoName, cargoQty: offer.cargoQty,
     cargoLoaded: false,
     pickupMode: m.PickupMode, dropoffMode: m.DropoffMode,
     shipGoal: m.ShipCount > 0 ? m.ShipGoal : -1,
     shipsLeft: m.ShipCount > 0 ? m.ShipCount : 0,
+    shipTotal: m.ShipCount > 0 ? m.ShipCount : 0,
     shipSyst: m.ShipSyst, shipDude: m.ShipDude, shipBehav: m.ShipBehav, shipNameID: m.ShipNameID,
     observed: false,
     timeLimit: m.TimeLimit,
+    deadline: offer.deadline,
   };
   // prepaid outfit (PayVal -30128-g)
   if (m.PayVal >= -30255 && m.PayVal <= -30128) {
@@ -936,18 +986,19 @@ function acceptMission(id, here) {
   if (A.cargoName && A.pickupMode === 0) A.cargoLoaded = true;
   activeMissions.push(A);
   maybeSpawnMissionShips(A);
-  showMsg(`Mission accepted: ${A.name}`);
+  showMsg(`Mission accepted: ${misnName(m, A)}`);
 }
 
 function abortMission(id) {
   const i = activeMissions.findIndex(a => a.id === id);
   if (i < 0) return;
   const m = misns[id];
+  const A = activeMissions[i];
   if (m.Flags & 0x0040) adjustRep(m.CompGovt, -5 * m.CompReward); // abort reversal
   activeMissions.splice(i, 1);
   // clear its mission ships from the system
   aiShips = aiShips.filter(s => s.misnId !== id);
-  showMsg(`Mission abandoned: ${m.name}`);
+  showMsg(`Mission abandoned: ${misnName(m, A)}`);
 }
 
 function adjustRep(govt, amt) {
@@ -977,9 +1028,16 @@ function maybeSpawnMissionShips(A) {
     const e = EV.makeShip(ships[shipId], player.x + Math.cos(a) * r, player.y + Math.sin(a) * r, Math.random() * 360);
     e.shipId = shipId; e.govt = dude.Govt; e.aiType = 3;
     e.misnId = A.id;
+    e.misnGoal = A.shipGoal;
     e.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
     armShip(e, ships[shipId]);
-    if (A.shipBehav === 0 || A.shipBehav === 10) e.hostile = true; // attack player
+    // goal-specific setup (spec: "Mission ship goals")
+    if (A.shipGoal === 5) { e.disabled = true; e.shields = 0; } // Rescue: start disabled
+    if (A.shipGoal === 3) {                                    // Escort: protect, head out
+      e.escort = true; e.aiType = 1;                          // flee-style: run for the exit
+    } else if (A.shipBehav === 0 || A.shipBehav === 10) {
+      e.hostile = true;                                       // attack player
+    }
     if (A.shipNameID >= 128 && DATA.strings[A.shipNameID])
       e.misnName = DATA.strings[A.shipNameID].list[i % DATA.strings[A.shipNameID].list.length];
     aiShips.push(e);
@@ -998,16 +1056,87 @@ function dudeShipPairs(dude) {
 function onMissionShipDestroyed(s) {
   const A = activeMissions.find(a => a.id === s.misnId);
   if (!A) return;
-  A.shipsLeft--;
-  if (A.shipsLeft <= 0 && (A.shipGoal === 0 || A.shipGoal === 6))
-    showMsg(`${A.name}: objective complete — return for payment.`);
+  switch (A.shipGoal) {
+    case 3: // escort: any loss fails the mission
+      A.escortFailed = true;
+      showMsg(`${misnName(misns[A.id], A)}: escort lost — mission failed.`);
+      return;
+    case 1: // disable: a target already disabled (counted) is fine and must
+            // not be counted twice; destroying one that wasn't disabled fails
+      if (!s.misnCounted) A.captureLost = true;
+      return;
+    case 2: case 5: // board/rescue: the target must be boarded, not killed
+      A.captureLost = true;
+      return;
+    default: // destroy (0) / chase-off (6): count it down
+      A.shipsLeft--;
+      if (A.shipsLeft <= 0)
+        showMsg(`${misnName(misns[A.id], A)}: objective complete — return for payment.`);
+  }
+}
+
+/* Called when a mission ship becomes disabled (from hitShip). Disable goal
+ * counts it done; Board/Rescue now allow boarding. */
+function onMissionShipDisabled(s) {
+  const A = activeMissions.find(a => a.id === s.misnId);
+  if (!A) return;
+  if (A.shipGoal === 1) { // Disable but don't destroy
+    if (!s.misnCounted) { s.misnCounted = true; A.shipsLeft--; }
+    if (A.shipsLeft <= 0) showMsg(`${misnName(misns[A.id], A)}: targets disabled — return for payment.`);
+  } else if (A.shipGoal === 2) {
+    showMsg(`Target disabled — approach and press B to board.`);
+  }
+}
+
+/* Board the nearest disabled mission ship (spec: "Boarding"). B key. */
+function boardTarget() {
+  if (landedAt || gameOver) return;
+  let best = null, bd = 50;
+  for (const s of aiShips) {
+    if (s.misnId == null || !s.disabled || s.deathT >= 0) continue;
+    if (!(s.misnGoal === 2 || s.misnGoal === 5)) continue;
+    const d = Math.hypot(s.x - player.x, s.y - player.y);
+    if (d < bd) { bd = d; best = s; }
+  }
+  if (!best) { showMsg('No disabled ship in boarding range.'); return; }
+  if (Math.hypot(player.vx, player.vy) > EV.LAND_SPEED * 2) { showMsg('Slow down to board.'); return; }
+  const A = activeMissions.find(a => a.id === best.misnId);
+  aiShips.splice(aiShips.indexOf(best), 1);
+  if (best === shipTarget) shipTarget = null;
+  if (A) {
+    A.shipsLeft--;
+    showMsg(A.shipsLeft > 0
+      ? `${misnName(misns[A.id], A)}: boarded (${A.shipsLeft} to go).`
+      : `${misnName(misns[A.id], A)}: objective complete — return for payment.`);
+  }
+}
+
+/* An escort ship reached its destination safely. */
+function onMissionEscortArrived(s) {
+  const A = activeMissions.find(a => a.id === s.misnId);
+  if (!A) return;
+  if (!aiShips.some(x => x.misnId === A.id && x !== s))
+    showMsg(`${misnName(misns[A.id], A)}: escort delivered — return for payment.`);
+}
+/* Escort goal met once all escort ships have arrived (none remain) unharmed. */
+function escortArrived(A) {
+  return A.shipGoal === 3 && !A.escortFailed &&
+    !aiShips.some(s => s.misnId === A.id);
 }
 
 /* Goal met? (used at ReturnStel). */
 function goalMet(A) {
   if (A.shipGoal === 0 || A.shipGoal === 6) return A.shipsLeft <= 0;
+  if (A.shipGoal === 1) return A.shipsLeft <= 0 && !A.captureLost;
+  if (A.shipGoal === 2 || A.shipGoal === 5) return A.shipsLeft <= 0 && !A.captureLost;
+  if (A.shipGoal === 3) return escortArrived(A); // all escorts must arrive, not just survive
   if (A.shipGoal === 4) return A.observed;
   return true; // cargo / go-to: arriving at returnStel is the goal
+}
+/* An unwinnable goal (target killed / escort lost) should fail at ReturnStel
+ * even without a time limit, rather than stranding the mission forever. */
+function goalFailed(A) {
+  return !!A.captureLost || !!A.escortFailed;
 }
 
 /* Handle landing on spob p for every active mission: cargo pickup/dropoff
@@ -1033,14 +1162,14 @@ function missionLandingEvents(p) {
                      (A.returnStel == null && A.travelStel === p.id);
     if (isReturn) {
       const expired = A.timeLimit > 0 && gameDay - A.accepted > A.timeLimit;
-      if (!expired && goalMet(A)) {
-        notes.push(descText(m.CompText) || `Mission complete: ${A.name}.`);
+      if (!expired && !goalFailed(A) && goalMet(A)) {
+        notes.push(descText(m.CompText, A) || `Mission complete: ${misnName(m, A)}.`);
         payMission(m);
         setBitCode(m.CompBitSet); setBitCode(m.CompBitSet2); setBitCode(m.CompBitSet4);
         adjustRep(m.CompGovt, m.CompReward);
         removeMission(A.id);
-      } else if (expired || m.CanAbort) {
-        notes.push(descText(m.FailText) || `Mission failed: ${A.name}.`);
+      } else if (expired || goalFailed(A) || m.CanAbort) {
+        notes.push(descText(m.FailText, A) || `Mission failed: ${misnName(m, A)}.`);
         setBitCode(m.FailBitSet); setBitCode(m.FailBitSet2);
         adjustRep(m.CompGovt, -Math.round(m.CompReward / 2));
         removeMission(A.id);
@@ -1060,7 +1189,7 @@ function checkExpiredMissions() {
       setBitCode(m.FailBitSet); setBitCode(m.FailBitSet2);
       adjustRep(m.CompGovt, -Math.round(m.CompReward / 2));
       removeMission(A.id);
-      showMsg(`Mission failed (out of time): ${A.name}`);
+      showMsg(`Mission failed (out of time): ${misnName(misns[A.id], A)}`);
     }
   }
 }
@@ -1068,9 +1197,10 @@ function checkExpiredMissions() {
 function showMissionBriefing() {
   if (!activeMissions.length) { showMsg('No active missions.'); return; }
   const lines = activeMissions.map(a => {
-    const m = misns[a.id];
-    const dest = a.travelStel != null ? stelName(a.travelStel)
-               : a.returnStel != null ? stelName(a.returnStel) : '—';
+    const destId = a.travelStel != null ? a.travelStel : a.returnStel;
+    const dest = destId != null
+      ? `${stelName(destId)}${systOfSpob(spobById(destId)) ? ' (' + systOfSpob(spobById(destId)).name + ')' : ''}`
+      : '—';
     const days = a.timeLimit > 0 ? `, ${Math.max(0, a.timeLimit - (gameDay - a.accepted))}d left` : '';
     const goal = a.shipsLeft > 0 ? `${a.shipsLeft} ships remain` :
                  a.cargoName ? `deliver ${a.cargoQty}t ${a.cargoName}` : `go to ${dest}`;
@@ -1234,9 +1364,8 @@ function renderMissionBoard(loc) { // loc 0 = computer, 1 = bar
   if (active.length) {
     list += `<div class="meta" style="margin:0 0 4px">Active missions</div>`;
     for (const a of active) {
-      const m = misns[a.id];
       const days = a.timeLimit > 0 ? ` <span class="sub">(${Math.max(0, a.timeLimit - (gameDay - a.accepted))}d left)</span>` : '';
-      list += `<div class="row" style="color:#98c379">${a.name}${days}</div>`;
+      list += `<div class="row" style="color:#98c379">${misnName(misns[a.id], a)}${days}</div>`;
     }
     list += `<hr style="border-color:#26304a;margin:8px 0">`;
   }
@@ -1244,26 +1373,29 @@ function renderMissionBoard(loc) { // loc 0 = computer, 1 = bar
   if (!offers.length) list += `<div class="sub">Nothing right now.</div>`;
   for (const o of offers)
     list += `<div class="row" style="cursor:pointer;color:${o.id === selMisnId ? '#ffd479' : '#cfd6e4'}"
-      onclick="selMisnId=${o.id};rerenderService()">${o.name}</div>`;
+      onclick="selMisnId=${o.id};rerenderService()">${misnName(o, getOffer(o, p))}</div>`;
   list += '</div>';
 
   let pane = '<div style="flex:1.3;min-width:240px">';
   if (sel) {
-    const brief = descText(sel.BriefText) || descText(sel.QuickBrief) || 'No further details are offered.';
+    const offer = getOffer(sel, p);                      // resolved once, stable
+    const brief = descText(sel.BriefText, offer) || descText(sel.QuickBrief, offer)
+      || 'No further details are offered.';
     const pay = sel.PayVal > 0 ? `${sel.PayVal.toLocaleString('en-US')} cr` :
       sel.PayVal <= -20128 && sel.PayVal >= -20255 ? 'an outfit' : 'see briefing';
-    const cargo = sel.CargoType >= 0 && sel.CargoQty ? `${misnCargoName(sel)}` : null;
     const goalTxt = ['Destroy the ships', null, 'Board', 'Escort', 'Observe', 'Rescue', 'Drive off the ships'][sel.ShipGoal] || null;
-    const destShown = sel.TravelStel >= 128 ? stelName(sel.TravelStel)
-      : sel.ReturnStel >= 128 ? stelName(sel.ReturnStel)
-      : sel.ReturnStel === -4 ? p.name + ' (return here)'
-      : 'revealed on acceptance';
-    pane += `<h3>${sel.name}</h3>
+    // Delivery missions go to the destination; return-only missions come back here.
+    const destId = offer.travelStel != null ? offer.travelStel : offer.returnStel;
+    const destShown = destId != null
+      ? `${stelName(destId)}${systOfSpob(spobById(destId)) ? ' (' + systOfSpob(spobById(destId)).name + ')' : ''}`
+        + (destId === p.id ? ' — return here' : '')
+      : 'no fixed destination';
+    pane += `<h3>${misnName(sel, offer)}</h3>
       <div class="desc" style="max-height:150px;overflow-y:auto">${brief}</div>
       <div class="row">Destination: <b>${destShown}</b></div>` +
-      (cargo ? `<div class="row">Cargo: <b>${sel.CargoQty}t ${cargo}</b></div>` : '') +
+      (offer.cargoName && offer.cargoQty ? `<div class="row">Cargo: <b>${offer.cargoQty}t ${offer.cargoName}</b></div>` : '') +
       (sel.ShipCount > 0 && goalTxt ? `<div class="row">Objective: <b>${goalTxt}</b> (${sel.ShipCount})</div>` : '') +
-      (sel.TimeLimit > 0 ? `<div class="row">Time limit: <b>${sel.TimeLimit} days</b></div>` : '') +
+      (offer.deadline != null ? `<div class="row">Deliver by: <b>${formatDate(offer.deadline)}</b> <span class="sub">(${sel.TimeLimit} days)</span></div>` : '') +
       `<div class="row">Pay: <b>${pay}</b></div>
       <div style="margin-top:10px">
         <button class="svc" onclick="doAcceptMission(${sel.id})">Accept</button>
@@ -1460,11 +1592,22 @@ function step() {
     } else if (s.fleeing) {
       EV.stepFlee(s, player.x, player.y);
     } else if (!EV.stepTrader(s, s.target)) {
-      aiShips.splice(aiShips.indexOf(s), 1);
-      if (shipTarget === s) shipTarget = null;
-      const epoch = systEpoch;
-      setTimeout(() => { if (epoch === systEpoch) spawnAI(Math.random() < 0.5); },
-        2000 + Math.random() * 6000);
+      // Reached its target spob and faded.
+      if (s.misnId != null && !s.escort) {
+        // A catch-goal target (board/disable/destroy) mustn't slip away by
+        // landing — loiter near the spob instead of despawning.
+        s.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
+        s.state = 'cruise'; s.fade = 1;
+      } else {
+        if (s.misnId != null && s.escort) onMissionEscortArrived(s);
+        aiShips.splice(aiShips.indexOf(s), 1);
+        if (shipTarget === s) shipTarget = null;
+        if (s.misnId == null) {
+          const epoch = systEpoch;
+          setTimeout(() => { if (epoch === systEpoch) spawnAI(Math.random() < 0.5); },
+            2000 + Math.random() * 6000);
+        }
+      }
     }
   }
 
@@ -1856,6 +1999,10 @@ function render() {
     `<b>${syst.name}</b><br>${ships[playerShipId].name}<br>` +
     `speed ${(speed * EV.FPS).toFixed(0)} px/s`;
 
+  // boardable disabled mission ship in range?
+  const boardable = landedAt ? null : aiShips.find(s => s.misnId != null && s.disabled &&
+    s.deathT < 0 && (s.misnGoal === 2 || s.misnGoal === 5) &&
+    Math.hypot(s.x - player.x, s.y - player.y) < 50);
   const near = (landedAt || jump || !navTarget ||
     (navTarget.$sem && !navTarget.$sem.canLand) ||
     distTo(navTarget) >= EV.LAND_DIST) ? null : navTarget;
@@ -1863,6 +2010,7 @@ function render() {
     jump && jump.phase === 'engage'
       ? (jump.t < EV.JUMP_WARMUP_FRAMES ? 'Hyperdrive spinning up — Esc to abort'
                                         : 'Entering hyperspace…') :
+    boardable ? 'Press B to board' :
     near ? (speed > EV.LAND_SPEED ? `Slow down to land on ${near.name}`
                                   : `Press L to land on ${near.name}`) : '';
 }

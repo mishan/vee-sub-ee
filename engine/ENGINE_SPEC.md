@@ -146,21 +146,48 @@ Ship-type gates: Flags 0x2000 (not for cargo ships, player inherentAI
 (128–255 must fly / 1128–1255 must not / 2128–2255 must be govt).
 Only missions with a supported goal are offered.
 
-**Goals supported now:** cargo delivery (CargoType/CargoQty, PickupMode
-0 = at accept / 1 = at TravelStel, DropOffMode 0 = TravelStel / 1 =
-ReturnStel), destroy special ships (ShipGoal 0), chase-off (6, satisfied
-by destroying or the ship leaving), observe (4, be in the ShipSyst), and
-plain go-to (TravelStel/ReturnStel with no cargo or ships). Deferred
-(not offered): board (2), disable (1), escort (3), rescue (5),
-ship-offered missions, aux ships. TravelStel/ReturnStel resolve their
-codes to a concrete spöb at accept time (−2 random inhabited, −3 random
-uninhabited, −4 the accept spöb, specific ID, govt codes).
+**Goals supported:** all ShipGoal types plus cargo/go-to. Cargo delivery
+(CargoType/CargoQty, PickupMode 0 = at accept / 1 = at TravelStel,
+DropOffMode 0 = TravelStel / 1 = ReturnStel); destroy (0); disable
+(1, ship reduced to disabled not destroyed — killing it fails);
+board (2, disable then approach ≤ 50 px slow and press **B**);
+escort (3, ships spawn friendly and run for their destination — the goal
+fails if any is killed, completes when they arrive safely);
+observe (4, be in the ShipSyst); rescue (5, ships spawn already disabled,
+board them); chase-off (6, destroy or the ship leaves); and plain go-to.
+Deferred: ship-offered missions (AvailLoc 2), aux ships. A catch-goal
+target (destroy/disable/board) that reaches a planet loiters rather than
+landing, so it can't slip away.
 
-**Special ships** (ShipGoal 0/6): `ShipCount` ships from `ShipDude`,
-placed in `ShipSyst` (−1 accept system, −6 follow the player, specific
-ID, …), named from `ShipNameID` STR#. `ShipBehav`: 0/10 attack the
-player, 1/11 protect, 9/hyper-in delay. They reuse the combat system;
-the goal completes when all are destroyed (or, for chase-off, gone).
+**Resolution & display.** Random mission fields are resolved **once when
+first offered** (cached per system visit), so the briefing shows the real
+values and accepting yields exactly what was shown (classic behavior):
+TravelStel/ReturnStel codes → a concrete spöb (−2 random inhabited, −3
+random uninhabited, −4 the accept spöb, specific ID, 9999/15000/20000/
+25000+g govt-relative), CargoQty ≤ −2 → abs·(0.5–1.5) tons, deadline →
+gameDay + TimeLimit. Text tokens are substituted in briefs **and mission
+names**: `<DST>/<DSY>` destination stellar/system, `<RST>/<RSY>` return,
+`<CT>/<CQ>` cargo type/qty, `<DL>` deadline date ("day N, NC <year>"),
+`<PN>/<PSN>` player/ship. Briefings show "Destination: <stellar>
+(<system>)" and "Deliver by: <date> (<N> days)".
+
+**Special ships**: `ShipCount` ships from `ShipDude`, placed in
+`ShipSyst` (−1 accept system, −6 follow the player, specific ID, …),
+named from `ShipNameID` STR#. `ShipBehav`: 0/10 attack the player,
+1/11 protect, 9/hyper-in delay. They reuse the combat system. Goal
+bookkeeping: destroy/chase-off complete when all are gone; disable when
+all disabled; board/rescue when all boarded (killing one instead fails
+the capture); escort when all arrive unharmed.
+
+**Plot branching.** The storyline is a graph of missions gated by mission
+bits: completing a mission's `CompBitSet` unlocks the mission(s) whose
+`AvailBitSet` names that bit, while `AvailBitClr`/1000+ codes create
+mutually-exclusive branches. The classic data has 49 chaining bits over
+72 gated missions — e.g. the Astex opener at Diphidia II: Investigate
+Dumping (bit 24) → Observe Antares (25) → Capture Ore Sample (26, board)
+→ Destroy Freighters (27) → Escape Astex (28). No new machinery is needed
+for chains beyond the bit gating above; the goal types just have to all
+work, which is why board/escort/rescue/disable were completed here.
 
 **Flow.** Accept in the bar/computer shows `BriefText` (a dësc); unless
 Flags 0x0004 (can't refuse) the player may decline (`RefuseText`). `I`
