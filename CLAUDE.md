@@ -13,6 +13,10 @@ the game data is not — see "Data hygiene" below.
   Co-authored-by tags or any AI attribution.
 - Review feedback on a branch goes in separate commits — don't amend or
   squash the commits under review.
+- Stacked branches are **rebased on top of each other, never merged** —
+  keep history linear. When an earlier branch in the stack gains commits
+  (e.g. review fixes), rebase each later branch onto the new tip, in
+  stack order.
 
 ## Commands
 

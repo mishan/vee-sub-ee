@@ -123,6 +123,16 @@ browser) deliberately undecided until sprites are on screen.
   first keypress. snd_<id>.wav aliases added to evconvert.sh. Title
   music (30000+) waits for a title screen.
 
+- **Milestone: persistence** (browser). Classic pilot behavior: auto-save
+  on landing and takeoff (localStorage `ve_pilot`: system, docked spöb,
+  ship, credits, cargo, outfits, explored). Load restores you docked
+  where you last saved; death offers R (return to last landing) or N
+  (new pilot); `?new=1` resets. Test params suppress both restore and
+  save so headless runs can't clobber a real pilot. Also on these
+  branches: master volume ([ / ] keys, persisted as `ve_volume`).
+  Note: the real Mac pilot-file format (via evrsrc buildFork) remains a
+  future compatibility goal; this is the gameplay-persistence layer.
+
 ## Next
 
 1. **Distribution loader** (see README "Distribution"): data-free hosted
