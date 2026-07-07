@@ -102,7 +102,7 @@ function canLand(s, spob) {
 }
 function placeAtTakeoff(s, spob) {
   s.x = spob.x; s.y = spob.y - 40;
-  s.heading = 0; s.vx = 0; s.vy = -0.4;
+  s.heading = 0; s.vx = 0; s.vy = 0; // launch stationary, not adrift
 }
 
 /* ---- hyperjump (spec: "Hyperjump") ---- */

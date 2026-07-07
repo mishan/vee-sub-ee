@@ -150,7 +150,7 @@ static void evPlaceAtArrival(Entity& s, double inBearing) {
   s.vy = -std::cos(b) * s.maxSpeed;
 }
 static void evPlaceAtTakeoff(Entity& s, double px, double py) {
-  s.x = px; s.y = py - 40; s.heading = 0; s.vx = 0; s.vy = -0.4;
+  s.x = px; s.y = py - 40; s.heading = 0; s.vx = 0; s.vy = 0; // launch stationary
 }
 
 /* ---- combat core: MUST mirror engine/core.js (spec: "Combat") ---- */
