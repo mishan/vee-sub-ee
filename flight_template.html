@@ -1530,6 +1530,7 @@ function maybeSpawnMissionShips(A) {
     const a = Math.random() * Math.PI * 2, r = 900 + Math.random() * 700;
     const e = EV.makeShip(ships[shipId], player.x + Math.cos(a) * r, player.y + Math.sin(a) * r, Math.random() * 360);
     e.shipId = shipId; e.govt = dude.Govt; e.aiType = 3;
+    e.booty = dude.Booty || 0; // boardable mission ships plunder like any other
     e.misnId = A.id;
     e.misnGoal = A.shipGoal;
     e.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
@@ -1642,7 +1643,9 @@ function lootVessel() {
     credits += money; got.push(`${money.toLocaleString('en-US')} cr`);
   }
   let free = holds - cargoUsed();          // commodity flags 0x01..0x20 → the six goods
-  for (let i = 0; i < 6; i++) if ((booty & (1 << i)) && free > 0) {
+  let noRoom = false;
+  for (let i = 0; i < 6; i++) if (booty & (1 << i)) {
+    if (free <= 0) { noRoom = true; continue; } // goods aboard, but no hold space
     const take = Math.min(1 + Math.floor(Math.random() * 4), free);
     cargo[COMMODITIES[i]] += take; free -= take; got.push(`${take}t ${cargoNames[i]}`);
   }
@@ -1650,7 +1653,9 @@ function lootVessel() {
   commitCrime(s.govt, penaltyOf(s.govt, 'BoardPenalty'));
   checkDefenseCleared(s.defOf, s);
   hailTarget.mode = 'result';
-  hailTarget.said = got.length ? `You strip the hold — ${got.join(', ')}.` : 'The hold is bare.';
+  hailTarget.said = got.length ? `You strip the hold — ${got.join(', ')}.`
+    : noRoom ? 'Cargo aboard, but your hold is full — nothing you can carry.'
+    : 'The hold is bare.';
   renderHail();
 }
 
@@ -1660,8 +1665,10 @@ function captureVessel() {
   commitCrime(s.govt, penaltyOf(s.govt, 'BoardPenalty'));
   hailTarget.mode = 'result';
   if (Math.random() < captureOdds(s)) {
+    const defOf = s.defOf;                   // read before takeCommand removes s
     hailTarget.said = `Your boarding party seizes the ${ships[s.shipId].name}! You transfer to your new command.`;
     takeCommand(s);
+    checkDefenseCleared(defOf, s);           // a captured defender is out of the fight too
     playSnd(150, 0.5);
   } else {
     hailTarget.said = 'The crew repel your party and scuttle the ship!';
