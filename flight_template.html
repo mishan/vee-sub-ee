@@ -978,6 +978,10 @@ function applyFF() {
   showMsg(on ? 'Fast forward (2×) on' : 'Fast forward off');
 }
 function capsToggle() {
+  // Only in flight — behind the splash/title/hail/service/landing/dead overlays
+  // gameplay keys are swallowed (the splash even advances on any key), so a
+  // Caps Lock press there must not silently arm 2× for when you enter the game.
+  if (gameOver || hailOpen || introUp() || landedAt || serviceOpen) return;
   const t = performance.now();
   if (t - capsLatch < 200) return; // absorb the keydown/keyup pair into one flip
   capsLatch = t; capsFF = !capsFF; applyFF();
