@@ -135,8 +135,11 @@ const explored = new Set(SAVED ? SAVED.explored : []);
 const missionBits = new Uint8Array(256);
 if (SAVED && SAVED.bits) for (const b of SAVED.bits) missionBits[b] = 1;
 let gameDay = SAVED ? (SAVED.day || 0) : 0;
-const reputation = SAVED && SAVED.rep ? { ...SAVED.rep } : {}; // govtId -> number
-const dominated = new Set(SAVED ? SAVED.dominated : []); // spob ids you've subdued for tribute
+/* legal record per govt (spec: "Legal record") — negative = evil, positive
+ * = good; defaults to each govt's InitialRec. Missions and combat move it. */
+const reputation = SAVED && SAVED.rep ? { ...SAVED.rep } : {}; // govtId -> record
+let kills = SAVED ? (SAVED.kills || 0) : 0; // total crew destroyed → combat rating
+const dominated = new Set(SAVED ? SAVED.dominated : []); // spob ids subdued for tribute
 /* active missions: resolved, live copies (not the raw records) */
 let activeMissions = SAVED && SAVED.missions ? SAVED.missions.map(m => ({ ...m })) : [];
 
@@ -147,7 +150,7 @@ function savePilot(spobId) {
     v: 1, syst: SYSTEM_ID, spob: spobId, ship: playerShipId,
     credits, cargo, outfits, explored: [...explored],
     bits: [...missionBits.keys()].filter(b => missionBits[b]),
-    day: gameDay, rep: reputation, missions: activeMissions,
+    day: gameDay, rep: reputation, kills, missions: activeMissions,
     dominated: [...dominated],
   });
   let ok = false;
@@ -294,11 +297,50 @@ function spawnAI(atEdge) {
     ? DATA.types.govt[e.govt].$sem.flags : [];
   if ((gf.includes('alwaysAttacksPlayer') || gf.includes('xenophobic')) && e.aiType >= 3)
     e.hostile = true;
+  // a warship of a govt you're a criminal with attacks on sight (spec)
+  if (e.aiType >= 3 && isCriminalWith(e.govt)) e.hostile = true;
   // Warp-in: ships hyperspace into the system (a brief flash) rather than
   // popping into existence. Arrivals near the player get the warp sound.
   e.warpIn = 18;
   if (atEdge) playSnd(130, attenuate(e.x, e.y) * 0.7); // Warp Out (arrival boom)
   aiShips.push(e);
+}
+
+/* Bounty hunters (spec: "Bounty hunters"): when the player is a criminal in
+ * the current system, that government sends warships after them. They
+ * hyperspace in at the edge, hostile, named from STR# 10008. */
+function systemGovt() { return syst && syst.Govt >= 128 ? syst.Govt : 128; }
+function maybeSpawnBountyHunter() {
+  if (landedAt || gameOver || player.deathT >= 0) return;
+  const g = systemGovt();
+  if (!isCriminalWith(g)) return;
+  const present = aiShips.filter(s => s.bounty).length;
+  // more evil → more hunters, capped; low per-frame chance
+  const cap = Math.min(1 + Math.floor(-legalOf(g) / Math.max(govts[g].CrimeTol, 1) / 4), 4);
+  if (present >= cap || Math.random() > 0.004) return;
+  // hunters are warships: prefer a warship düde native to this system, then
+  // any spöb's defense düde in-system, then any system düde.
+  const warDudes = [];
+  for (let i = 1; i <= 4; i++) {
+    const dd = dudes[syst['DudeTypes' + i]];
+    if (dd && dd.AIType >= 3) warDudes.push(dd);
+  }
+  const defDude = spobs.map(p => dudes[p.DefDude]).find(Boolean);
+  const dude = warDudes[0] || defDude || dudes[syst.DudeTypes1];
+  if (!dude) return;
+  const shipId = weighted(dudeShipPairs(dude));
+  if (shipId == null) return;
+  const a = Math.random() * Math.PI * 2, r = 2200;
+  const e = EV.makeShip(ships[shipId], player.x + Math.cos(a) * r, player.y + Math.sin(a) * r, Math.random() * 360);
+  e.shipId = shipId; e.govt = g; e.aiType = 3;
+  e.hostile = true; e.bounty = true; e.warpIn = 18;
+  e.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
+  armShip(e, ships[shipId]);
+  const names = DATA.strings[10008] && DATA.strings[10008].list;
+  e.misnName = names && names.length ? names[Math.floor(Math.random() * names.length)] : 'Bounty Hunter';
+  playSnd(130, attenuate(e.x, e.y) * 0.6);
+  aiShips.push(e);
+  showMsg('A bounty hunter has jumped in!');
 }
 
 /* ---------------- player ---------------- */
@@ -490,12 +532,43 @@ function hitShip(victim, rec, heading, attacker) {
     playSnd(rec.ExplodType >= 1 ? 300 : 301, attenuate(victim.x, victim.y) * 0.8);
   if (result === 'destroyed' && victim.deathT < 0) {
     victim.deathT = Math.max(victim.deathDelay, 1);
+    if (attacker === player) victim.killedByPlayer = true; // for legal credit on death
     playSnd(302, attenuate(victim.x, victim.y)); // breaking up
   } else if (result === 'disabled' && !victim.disabled) {
     victim.disabled = true;
+    if (attacker === player) commitCrime(victim.govt, penaltyOf(victim.govt, 'DisabPenalty'));
     if (victim.misnId != null && attacker === player) onMissionShipDisabled(victim);
   }
   grudge(victim, attacker);
+}
+
+/* ---- legal consequences of combat (spec: "Legal record") ---- */
+const penaltyOf = (g, field) => (g >= 128 && govts[g] ? govts[g][field] : 0);
+// A crime against govt g costs record with g and (halved) its allies.
+function commitCrime(victimGovt, penalty) {
+  if (victimGovt < 128 || !penalty) return;
+  reputation[victimGovt] = legalOf(victimGovt) - penalty;
+  for (const ally of govtAllies(victimGovt))
+    reputation[ally] = legalOf(ally) - Math.round(penalty / 2);
+}
+// A kill: adds to combat rating, penalizes the victim's govt, and rewards
+// every govt that considers the victim's govt an enemy (bounty for the deed).
+function creditKill(victim) {
+  kills += Math.max(1, (ships[victim.shipId] && ships[victim.shipId].Crew) || 1);
+  const g = victim.govt;
+  if (g < 128) return;
+  const kp = penaltyOf(g, 'KillPenalty');
+  commitCrime(g, kp);
+  // every govt that considers the victim's govt an enemy rewards the deed
+  for (const [hid, h] of Object.entries(govts))
+    if (h.Enemy === g && +hid !== g) reputation[hid] = legalOf(+hid) + kp;
+  // killing a xenophobic aggressor (pirates) is lawful everywhere — the
+  // current system's government credits you too, matching classic feel
+  const vf = govts[g].$sem ? govts[g].$sem.flags : [];
+  if (vf.includes('xenophobic')) {
+    const sg = systemGovt();
+    if (sg !== g) reputation[sg] = legalOf(sg) + kp;
+  }
 }
 
 function shipHalf(e) {
@@ -726,6 +799,7 @@ const subdued = new Set(); // spob ids whose defense fleet you've just cleared (
 /* Called when any ship is destroyed; tracks defense-fleet defeat. */
 function onShipDestroyed(s) {
   if (s.misnId != null) onMissionShipDestroyed(s);
+  if (s.killedByPlayer) creditKill(s); // combat rating + legal consequences
   if (s.defOf != null && !aiShips.some(x => x !== s && x.defOf === s.defOf)) {
     subdued.add(s.defOf);
     const p = spobById(s.defOf);
@@ -970,6 +1044,41 @@ const field = (m, k, dflt = -1) => (m[k] == null ? dflt : m[k]); // classic vs N
 // govt relations (from $sem flags we don't have allies as data; use gövt Ally/Enemy)
 function govtAllies(g) { const r = govts[g]; return r ? [r.Ally].filter(a => a >= 128) : []; }
 function govtEnemies(g) { const r = govts[g]; return r ? [r.Enemy].filter(a => a >= 128) : []; }
+
+/* ---- legal record & combat rating (spec: "Legal record") ---- */
+// Player's legal record with a govt, defaulting to the govt's InitialRec.
+function legalOf(g) {
+  if (g < 128) g = 128;                       // independent systems use govt 128
+  if (reputation[g] != null) return reputation[g];
+  return govts[g] ? govts[g].InitialRec : 0;
+}
+// STR# 134 status label, scaled by the govt's crime tolerance (bible App. II:
+// enough good/evil to equal CrimeTol counts as 1 unit).
+const EVIL_STEPS = [[4096, 'Galactic Scourge'], [1024, 'Prime Evil'], [256, 'Public Enemy'],
+  [64, 'Fugitive'], [16, 'Felon'], [4, 'Criminal'], [1, 'Offender']];
+const GOOD_STEPS = [[4096, 'Honored Leader'], [1024, 'Pillar of Society'], [256, 'Role Model'],
+  [64, 'Upstanding Citizen'], [16, 'Good Egg'], [4, 'Decent Individual']];
+function legalStatus(g) {
+  if (g < 128) g = 128;
+  const rec = govts[g]; if (!rec) return 'Clean';
+  const v = legalOf(g) / Math.max(rec.CrimeTol, 1);
+  if (v <= -1) for (const [t, label] of EVIL_STEPS) if (-v >= t) return label;
+  if (v >= 4)  for (const [t, label] of GOOD_STEPS) if (v >= t) return label;
+  return 'Clean';
+}
+function isCriminalWith(g) { // over the crime-tolerance threshold → warships attack
+  if (g < 128) g = 128;
+  const rec = govts[g]; if (!rec) return false;
+  return legalOf(g) <= -Math.max(rec.CrimeTol, 1);
+}
+// Combat rating from total crew destroyed (bible App. I / STR# 138).
+const RATING_STEPS = [[25600, 10], [12800, 9], [6400, 8], [3200, 7], [1600, 6],
+  [800, 5], [400, 4], [200, 3], [100, 2], [1, 1], [0, 0]];
+function combatRating() {
+  for (const [t, idx] of RATING_STEPS) if (kills >= t)
+    return DATA.strings[138].list[idx] || 'Harmless';
+  return 'Harmless';
+}
 
 /* Resolve an AvailStel/TravelStel/ReturnStel code to a concrete spob id.
  * `here` is the spob the mission is being offered/accepted at. Returns a
@@ -1247,22 +1356,31 @@ function onMissionShipDisabled(s) {
   }
 }
 
-/* Board the nearest disabled mission ship (spec: "Boarding"). B key. */
+/* Board the nearest disabled ship (spec: "Boarding"). B key. Mission
+ * board/rescue targets count toward the goal; any other disabled ship is
+ * plundered for cargo (a crime against its government). */
 function boardTarget() {
   if (landedAt || gameOver) return;
   let best = null, bd = 50;
   for (const s of aiShips) {
-    if (s.misnId == null || !s.disabled || s.deathT >= 0) continue;
-    if (!(s.misnGoal === 2 || s.misnGoal === 5)) continue;
+    if (!s.disabled || s.deathT >= 0) continue;
     const d = Math.hypot(s.x - player.x, s.y - player.y);
     if (d < bd) { bd = d; best = s; }
   }
   if (!best) { showMsg('No disabled ship in boarding range.'); return; }
   if (Math.hypot(player.vx, player.vy) > EV.LAND_SPEED * 2) { showMsg('Slow down to board.'); return; }
-  const A = activeMissions.find(a => a.id === best.misnId);
+  const A = (best.misnGoal === 2 || best.misnGoal === 5)
+    ? activeMissions.find(a => a.id === best.misnId) : null;
   aiShips.splice(aiShips.indexOf(best), 1);
   if (best === shipTarget) shipTarget = null;
-  if (A) {
+  if (!A) { // plunder a non-mission ship — piracy
+    const loot = 500 + Math.floor(Math.random() * 2000);
+    credits += loot;
+    commitCrime(best.govt, penaltyOf(best.govt, 'BoardPenalty'));
+    showMsg(`You plunder the ship's hold. (+${loot.toLocaleString('en-US')} cr)`);
+    return;
+  }
+  {
     A.shipsLeft--;
     showMsg(A.shipsLeft > 0
       ? `${misnName(misns[A.id], A)}: boarded (${A.shipsLeft} to go).`
@@ -1683,6 +1801,7 @@ function maxWeaponRange(e) {
 
 function step() {
   if (gameOver || hailOpen) return; // hail dialog pauses the sim
+  maybeSpawnBountyHunter();
   if (!landedAt) {
     if (jump && player.deathT >= 0) abortJump(); // no jumping out of a fireball
     if (jump && jump.phase === 'engage') {
@@ -2001,8 +2120,10 @@ function drawPanel(w, h) {
     drawSpin(ctx, spinOfShip(shipTarget.shipId), tb.x + tb.w / 2, tb.y + 40, shipTarget.heading);
     const govtName = shipTarget.govt >= 128 && DATA.types.govt[shipTarget.govt]
       ? DATA.types.govt[shipTarget.govt].name : 'Independent';
-    panelText(tb.x + tb.w / 2, tb.y + 86, ships[shipTarget.shipId].name, '#fff', 'center');
-    panelText(tb.x + tb.w / 2, tb.y + 98, govtName, radarColor(shipTarget.govt), 'center');
+    panelText(tb.x + tb.w / 2, tb.y + 86, shipTarget.misnName || ships[shipTarget.shipId].name, '#fff', 'center');
+    panelText(tb.x + tb.w / 2, tb.y + 98,
+      shipTarget.bounty ? 'Bounty Hunter' : govtName,
+      shipTarget.bounty ? '#e06c75' : radarColor(shipTarget.govt), 'center');
     const shp = Math.round(100 * Math.max(0, shipTarget.shields) / shipTarget.shieldMax);
     panelText(tb.x + tb.w / 2, tb.y + 110,
       shipTarget.disabled ? 'DISABLED' : `Shields ${shp}% · ${Math.round(distTo(shipTarget))}px`,
@@ -2072,9 +2193,23 @@ function drawMap(w, h) {
       ctx.fillText(s.name ?? id, x + 8, y + 4);
     }
   }
-  ctx.fillStyle = '#8fa3c8';
+  // Legal status for the selected system (destination if chosen, else the
+  // current one), plus the player's combat rating.
+  const shownId = jumpDest >= 128 && systs[jumpDest] ? jumpDest : SYSTEM_ID;
+  const shownSys = systs[shownId];
+  const statusG = shownSys.Govt >= 128 ? shownSys.Govt : 128;
+  const status = legalStatus(statusG);
+  const crim = isCriminalWith(statusG);
   ctx.font = '12px system-ui, sans-serif';
-  ctx.fillText(`${syst.name} — click a linked system, then J to jump` +
+  ctx.fillStyle = '#8fa3c8';
+  ctx.fillText(`${shownSys.name} (${govts[statusG] ? govts[statusG].name : 'Independent'}) — ` +
+    `legal status: `, mx + 14, my + mh - 30);
+  const w0 = ctx.measureText(`${shownSys.name} (${govts[statusG] ? govts[statusG].name : 'Independent'}) — legal status: `).width;
+  ctx.fillStyle = crim ? '#e06c75' : status === 'Clean' ? '#8fa3c8' : '#98c379';
+  ctx.fillText(status, mx + 14 + w0, my + mh - 30);
+  ctx.fillStyle = '#8fa3c8';
+  ctx.fillText(`Combat rating: ${combatRating()}` +
+    `   ·   click a linked system, then J to jump` +
     (fuel < EV.JUMP_FUEL ? '  (out of fuel!)' : ''), mx + 14, my + mh - 12);
 }
 canvas.addEventListener('mousedown', e => {
