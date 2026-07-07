@@ -236,7 +236,7 @@ function loadSystem(systId) {
       if ((sys >= 128 && sys === SYSTEM_ID) ||
           (A.travelStel && spobById(A.travelStel) && spobById(A.travelStel).System === SYSTEM_ID)) {
         A.observed = true;
-        showMsg(`${A.name}: target observed — return for payment.`);
+        showMsg(`${misnName(misns[A.id], A)}: target observed — return for payment.`);
       }
     }
   }
@@ -1056,18 +1056,23 @@ function dudeShipPairs(dude) {
 function onMissionShipDestroyed(s) {
   const A = activeMissions.find(a => a.id === s.misnId);
   if (!A) return;
-  // Escort: a lost ship fails the mission outright (spec).
-  if (A.shipGoal === 3) {
-    A.escortFailed = true;
-    showMsg(`${misnName(misns[A.id], A)}: escort lost — mission failed.`);
-    return;
+  switch (A.shipGoal) {
+    case 3: // escort: any loss fails the mission
+      A.escortFailed = true;
+      showMsg(`${misnName(misns[A.id], A)}: escort lost — mission failed.`);
+      return;
+    case 1: // disable: a target already disabled (counted) is fine and must
+            // not be counted twice; destroying one that wasn't disabled fails
+      if (!s.misnCounted) A.captureLost = true;
+      return;
+    case 2: case 5: // board/rescue: the target must be boarded, not killed
+      A.captureLost = true;
+      return;
+    default: // destroy (0) / chase-off (6): count it down
+      A.shipsLeft--;
+      if (A.shipsLeft <= 0)
+        showMsg(`${misnName(misns[A.id], A)}: objective complete — return for payment.`);
   }
-  A.shipsLeft--;
-  // Board/Rescue want the ship boarded, not destroyed — killing it fails.
-  if ((A.shipGoal === 2 || A.shipGoal === 5) && A.shipsLeft < A.shipTotal)
-    A.captureLost = true;
-  if (A.shipsLeft <= 0 && (A.shipGoal === 0 || A.shipGoal === 6))
-    showMsg(`${misnName(misns[A.id], A)}: objective complete — return for payment.`);
 }
 
 /* Called when a mission ship becomes disabled (from hitShip). Disable goal
