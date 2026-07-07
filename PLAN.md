@@ -163,6 +163,21 @@ browser) deliberately undecided until sprites are on screen.
   Deferred: ship-offered missions (AvailLoc 2), aux ships, combat-rating/
   legal-record gates.
 
+- **Milestone: legal record & encounters** (browser). Per-govt legal
+  record (persisted, InitialRec default) with STR# 134 status labels
+  scaled by CrimeTol (bible App. II); combat rating from crew killed
+  (STR# 138 / App. I). Combat consequences: disable/board/kill penalties
+  off the victim govt (+half to allies), enemy-kill rewards, and a
+  local-govt bonus for killing xenophobic pirates (so hunting pirates
+  raises standing). Criminals (record < −CrimeTol) draw hostile govt
+  warships; when criminal in-system, bounty hunters hyperspace in
+  (named STR# 10008, capped by notoriety). Map shows the selected
+  system's legal status + your combat rating; target panel labels bounty
+  hunters. Verified: status ladder (Offender→Fugitive), map display,
+  bounty-hunter encounter. NOTE: built on mission-polish, which was NOT
+  actually merged to main (only mission-plot / PR #8 was) — merge
+  mission-polish before this branch.
+
 ## Next
 
 1. **Distribution loader** (deferred per Misha; see README "Distribution"):
@@ -170,6 +185,7 @@ browser) deliberately undecided until sprites are on screen.
    evdata.json + evassets), cached client-side. Add `evexport --bundle`.
 2. **Also open**: SDL parity catch-up (audio, combat UI, missions),
    real Mac pilot-file read/write via `buildFork`, title screen + music.
+   AvailRating/AvailRecord mission gates can use the new legal/rating now.
 
 ## Notes
 

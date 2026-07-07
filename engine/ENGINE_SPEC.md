@@ -321,16 +321,58 @@ a master volume (10% steps, multiplied into every event volume,
 persisted in localStorage as `ve_volume`); `?mute=1` starts muted. Title music (snd 30000+, EV Music) is deferred
 until there's a title screen.
 
+## Legal record & encounters (shell; browser leg)
+
+A per-government **legal record** (persisted; defaults to each gövt's
+`InitialRec`) tracks standing, negative = criminal. The status label
+(STR# 134) is the record scaled by that gövt's `CrimeTol`, on the bible's
+Appendix II ladder: evil at |record| ≥ 1·/4·/16·/64·/256·/1024·/4096·
+CrimeTol → Offender…Galactic Scourge; good at ≥ 4·/16·/…·4096·CrimeTol →
+Decent Individual…Honored Leader; else Clean. Independent systems use
+gövt 128. **Combat rating** (STR# 138 / Appendix I) comes from total crew
+of destroyed ships: 0/1/100/200/400/800/1600/3200/6400/12800/25600 →
+Harmless…Ultimate.
+
+**Consequences of combat** (player actions only): disabling costs
+`DisabPenalty`, boarding/plundering `BoardPenalty`, killing `KillPenalty`
+off the victim gövt's record (and half that off its allies). Killing
+rewards every gövt that lists the victim's gövt as `Enemy` (+KillPenalty);
+killing a **xenophobic** gövt's ship (pirates) also credits the current
+system's gövt, so hunting pirates raises local standing. A kill adds the
+victim's crew to the combat rating. (`ShootPenalty` is "currently ignored"
+per the bible; we follow suit.)
+
+**Encounters.** Pirate/xenophobic warships are hostile on sight (govt
+flags). A gövt whose record you've driven below −CrimeTol treats you as a
+**criminal**: its warships spawn hostile. When you're criminal in the
+current system, **bounty hunters** hyperspace in at the edge (hostile,
+named from STR# 10008, capped by how notorious you are). The galaxy map
+shows the legal status for the selected system's government and your
+combat rating.
+
 ## Hailing (shell; browser leg)
 
 `Y` opens a modal hail dialog (pauses the sim) for the current ship or
-nav target; response text comes from the classic STR# comm lists (ship
-greetings 7000+govt / generic 6999; stellar comm 3002, whose groups are:
-0–4 channel-open, 5–14 tribute-refusal/threats, 15–24 no-information,
-25–26 tribute-agreed). **Ship** options: request assistance (a friendly
-ship tops up 100 fuel), demand surrender/plunder (only if the ship is
-disabled → loot credits), close. **Planet** options: request information
-(a 3002 no-info line), demand tribute, close. **Tribute/domination:**
+nav target; buttons play a click (snd 600). Response text comes from the
+classic STR# comm lists. **Ship comm** (STR# 3000, grouped): 0–4
+channel-open, 5–9 no-response, 10–14 "What do you want?", 15–19
+beg-for-life, 20–29 cordial greeting, 50–59 rude, 60–64 can't-afford,
+70–74 no-danger, 90–94 pay-first, 95–99 refuse, 100–104 deal-done,
+115–119 good-mood accept, 120–124 bad-mood refuse, 135–139 I'll-leave-
+you-alone, 140–144 fuel-for-a-price. Greeting: a hostile ship snarls
+(10–14), otherwise the govt greeting (7000+govt) or cordial (20–29). The
+`.who` line shows the govt and **HOSTILE** (red) when hostile.
+
+**Ship options:** *Request assistance* — a hostile ship refuses (95–99);
+if you don't need fuel it says so (70–74); otherwise it offers to refuel
+for `FUEL_PRICE` (1500 cr) with a *Pay* / *Offer half* / *Never mind*
+sub-dialog (a low-ball lands only on a coin-flip "good mood", else it's
+refused). *Beg for mercy* (hostile only) — ~45% the pilot names a bribe
+(20% of your credits, clamped 500–5000) you can *Pay* to make it break
+off (hostile→false, flees), else it taunts you. *Demand surrender /
+plunder* (disabled only) → loot credits. **Planet** options: request
+information (a 3002 no-info line), demand tribute, close. **Tribute/
+domination:**
 demanding tribute from a governed planet with a defense fleet
 (`DefDude`/`DefCount`; >1000 encodes waves, last digit = ships/wave)
 refuses and scrambles that fleet (hostile, tagged to the spöb). Once you
@@ -358,7 +400,10 @@ ship spïn = 128 + (shïp − 128); stellar spïn = 300 + spöb.Type;
 weapons 200–263, explosions 400–402. Landing landscape: PICT
 (10000 + spöb.Type) in EV Titles (34 landscapes, one per stellar type),
 overridden by `CustPicID` when ≥ 0; fall back to the standard if the
-custom PICT is missing from the data.
+custom PICT is missing from the data. Per-ship PICTs (index = shïp − 128):
+shipyard detail 5000+i, **target-display schematic 3000+i** ("Target
+Pics"), **hail comm portrait 5300+i** ("Ship Comm Dialog"); shop menu
+sheets 5100 (ships) / 6100 (outfits), outfit detail 6000+i.
 
 ## Golden trace
 

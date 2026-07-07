@@ -60,6 +60,8 @@ Test affordances are mirrored: URL params `?map=1 ?dest= ?jump=1 ?land=1
   must pass (tolerance 1e-6; typically agrees to ~1e-13).
 - `flight_template.html` — browser shell (canvas render, DOM dialogs).
   `cpp/main.cpp` — SDL shell, a deliberate port of the same logic.
+- Per-ship PICTs (index = shïp−128): target schematic 3000+i, hail comm
+  portrait 5300+i, shipyard detail 5000+i, outfit detail 6000+i.
 - Asset conventions (spec "Sprite ID conventions"): ship spïn = shïp ID,
   stellar spïn = 300+Type, landscape PICT = 10000+Type (CustPicID
   overrides), shop art PICT 5000+i/6000+i, menu sheets 5100/6100, sidebar

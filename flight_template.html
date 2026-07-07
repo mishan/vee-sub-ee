@@ -73,6 +73,8 @@
   #hail .who { color: #6b7a96; font-size: 12px; margin-bottom: 10px; }
   #hail .say { color: #aab6cc; font-size: 13px; font-style: italic; min-height: 34px;
     border-left: 2px solid #2a3550; padding-left: 10px; margin: 8px 0 14px; }
+  #hail .commpic { float: right; width: 120px; image-rendering: pixelated;
+    border: 1px solid #2a3550; border-radius: 4px; background: #000; margin: 0 0 8px 12px; }
   #hail button { display: block; width: 100%; text-align: left; background: #1a2338;
     color: #cfd6e4; border: 1px solid #2a3550; border-radius: 4px; padding: 7px 10px;
     margin: 4px 0; cursor: pointer; font-size: 13px; }
@@ -135,8 +137,11 @@ const explored = new Set(SAVED ? SAVED.explored : []);
 const missionBits = new Uint8Array(256);
 if (SAVED && SAVED.bits) for (const b of SAVED.bits) missionBits[b] = 1;
 let gameDay = SAVED ? (SAVED.day || 0) : 0;
-const reputation = SAVED && SAVED.rep ? { ...SAVED.rep } : {}; // govtId -> number
-const dominated = new Set(SAVED ? SAVED.dominated : []); // spob ids you've subdued for tribute
+/* legal record per govt (spec: "Legal record") — negative = evil, positive
+ * = good; defaults to each govt's InitialRec. Missions and combat move it. */
+const reputation = SAVED && SAVED.rep ? { ...SAVED.rep } : {}; // govtId -> record
+let kills = SAVED ? (SAVED.kills || 0) : 0; // total crew destroyed → combat rating
+const dominated = new Set(SAVED ? SAVED.dominated : []); // spob ids subdued for tribute
 /* active missions: resolved, live copies (not the raw records) */
 let activeMissions = SAVED && SAVED.missions ? SAVED.missions.map(m => ({ ...m })) : [];
 
@@ -147,7 +152,7 @@ function savePilot(spobId) {
     v: 1, syst: SYSTEM_ID, spob: spobId, ship: playerShipId,
     credits, cargo, outfits, explored: [...explored],
     bits: [...missionBits.keys()].filter(b => missionBits[b]),
-    day: gameDay, rep: reputation, missions: activeMissions,
+    day: gameDay, rep: reputation, kills, missions: activeMissions,
     dominated: [...dominated],
   });
   let ok = false;
@@ -197,6 +202,29 @@ function drawSpin(ctx, spinId, x, y, headingDeg) {
   ctx.drawImage(s.img, (fi % xTiles) * frameW, Math.floor(fi / xTiles) * frameH,
     frameW, frameH, x - frameW / 2, y - frameH / 2, frameW, frameH);
 }
+/* Plain single-image PICT cache (target pics 3000+, etc.), drawn fit to a
+ * box centred on (cx, cy). */
+const gfxCache = new Map();
+function gfxImg(pictId) {
+  let e = gfxCache.get(pictId);
+  if (!e) {
+    const img = new Image();
+    img.src = 'evassets/graphics/PICT_' + pictId + '.png';
+    e = { img, ready: img.complete };
+    img.onload = () => { e.ready = true; };
+    img.onerror = () => { e.bad = true; };
+    gfxCache.set(pictId, e);
+  }
+  return e;
+}
+function drawGfxFit(ctx, pictId, cx, cy, maxW, maxH) {
+  const e = gfxImg(pictId);
+  if (!e.ready || e.bad || !e.img.naturalWidth) return false;
+  const s = Math.min(maxW / e.img.naturalWidth, maxH / e.img.naturalHeight, 1);
+  const w = e.img.naturalWidth * s, h = e.img.naturalHeight * s;
+  ctx.drawImage(e.img, cx - w / 2, cy - h / 2, w, h);
+  return true;
+}
 
 /* ---------------- world (per-system state) ---------------- */
 
@@ -226,6 +254,7 @@ function loadSystem(systId) {
   aiShips = [];
   shots = []; beams = []; explosions = [];
   navTarget = null; shipTarget = null;
+  alertGrace = 45; prevHostiles = 0; // don't red-alert the ambient population
   preloadSprites(spinsNeededFor(SYSTEM_ID));
   // Landscapes for this system's spobs (default 10000+Type and custom),
   // so the planet screen never shows without its picture.
@@ -294,11 +323,50 @@ function spawnAI(atEdge) {
     ? DATA.types.govt[e.govt].$sem.flags : [];
   if ((gf.includes('alwaysAttacksPlayer') || gf.includes('xenophobic')) && e.aiType >= 3)
     e.hostile = true;
+  // a warship of a govt you're a criminal with attacks on sight (spec)
+  if (e.aiType >= 3 && isCriminalWith(e.govt)) e.hostile = true;
   // Warp-in: ships hyperspace into the system (a brief flash) rather than
   // popping into existence. Arrivals near the player get the warp sound.
   e.warpIn = 18;
   if (atEdge) playSnd(130, attenuate(e.x, e.y) * 0.7); // Warp Out (arrival boom)
   aiShips.push(e);
+}
+
+/* Bounty hunters (spec: "Bounty hunters"): when the player is a criminal in
+ * the current system, that government sends warships after them. They
+ * hyperspace in at the edge, hostile, named from STR# 10008. */
+function systemGovt() { return syst && syst.Govt >= 128 ? syst.Govt : 128; }
+function maybeSpawnBountyHunter() {
+  if (landedAt || gameOver || player.deathT >= 0) return;
+  const g = systemGovt();
+  if (!isCriminalWith(g)) return;
+  const present = aiShips.filter(s => s.bounty).length;
+  // more evil → more hunters, capped; low per-frame chance
+  const cap = Math.min(1 + Math.floor(-legalOf(g) / Math.max(govts[g].CrimeTol, 1) / 4), 4);
+  if (present >= cap || Math.random() > 0.004) return;
+  // hunters are warships: prefer a warship düde native to this system, then
+  // any spöb's defense düde in-system, then any system düde.
+  const warDudes = [];
+  for (let i = 1; i <= 4; i++) {
+    const dd = dudes[syst['DudeTypes' + i]];
+    if (dd && dd.AIType >= 3) warDudes.push(dd);
+  }
+  const defDude = spobs.map(p => dudes[p.DefDude]).find(Boolean);
+  const dude = warDudes[0] || defDude || dudes[syst.DudeTypes1];
+  if (!dude) return;
+  const shipId = weighted(dudeShipPairs(dude));
+  if (shipId == null) return;
+  const a = Math.random() * Math.PI * 2, r = 2200;
+  const e = EV.makeShip(ships[shipId], player.x + Math.cos(a) * r, player.y + Math.sin(a) * r, Math.random() * 360);
+  e.shipId = shipId; e.govt = g; e.aiType = 3;
+  e.hostile = true; e.bounty = true; e.warpIn = 18;
+  e.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
+  armShip(e, ships[shipId]);
+  const names = DATA.strings[10008] && DATA.strings[10008].list;
+  e.misnName = names && names.length ? names[Math.floor(Math.random() * names.length)] : 'Bounty Hunter';
+  playSnd(130, attenuate(e.x, e.y) * 0.6);
+  aiShips.push(e);
+  showMsg('A bounty hunter has jumped in!');
 }
 
 /* ---------------- player ---------------- */
@@ -470,6 +538,14 @@ function spawnExplosion(x, y, type) {
   const meta = MANIFEST.spins[spin];
   if (meta) explosions.push({ x, y, spin, f: 0, frames: meta.frames, tick: 0 });
 }
+/* Begin a ship's destruction: the fireball plays immediately over the ship
+ * as it breaks up (was flash-then-boom, which looked backwards). The ship
+ * then fades out over deathDelay frames; big ships get a final blast. */
+function beginDestruction(v) {
+  v.deathT = Math.max(v.deathDelay, 1);
+  spawnExplosion(v.x, v.y, v.deathDelay >= 60 ? 1 : 0);
+  playSnd(302, attenuate(v.x, v.y)); // breaking up
+}
 
 function grudge(victim, attacker) {
   if (attacker !== player || !victim.aiType) return;
@@ -489,13 +565,43 @@ function hitShip(victim, rec, heading, attacker) {
   if (rec.ExplodType >= 0)
     playSnd(rec.ExplodType >= 1 ? 300 : 301, attenuate(victim.x, victim.y) * 0.8);
   if (result === 'destroyed' && victim.deathT < 0) {
-    victim.deathT = Math.max(victim.deathDelay, 1);
-    playSnd(302, attenuate(victim.x, victim.y)); // breaking up
+    if (attacker === player) victim.killedByPlayer = true; // for legal credit on death
+    beginDestruction(victim);
   } else if (result === 'disabled' && !victim.disabled) {
     victim.disabled = true;
+    if (attacker === player) commitCrime(victim.govt, penaltyOf(victim.govt, 'DisabPenalty'));
     if (victim.misnId != null && attacker === player) onMissionShipDisabled(victim);
   }
   grudge(victim, attacker);
+}
+
+/* ---- legal consequences of combat (spec: "Legal record") ---- */
+const penaltyOf = (g, field) => (g >= 128 && govts[g] ? govts[g][field] : 0);
+// A crime against govt g costs record with g and (halved) its allies.
+function commitCrime(victimGovt, penalty) {
+  if (victimGovt < 128 || !penalty) return;
+  reputation[victimGovt] = legalOf(victimGovt) - penalty;
+  for (const ally of govtAllies(victimGovt))
+    reputation[ally] = legalOf(ally) - Math.round(penalty / 2);
+}
+// A kill: adds to combat rating, penalizes the victim's govt, and rewards
+// every govt that considers the victim's govt an enemy (bounty for the deed).
+function creditKill(victim) {
+  kills += Math.max(1, (ships[victim.shipId] && ships[victim.shipId].Crew) || 1);
+  const g = victim.govt;
+  if (g < 128) return;
+  const kp = penaltyOf(g, 'KillPenalty');
+  commitCrime(g, kp);
+  // every govt that considers the victim's govt an enemy rewards the deed
+  for (const [hid, h] of Object.entries(govts))
+    if (h.Enemy === g && +hid !== g) reputation[hid] = legalOf(+hid) + kp;
+  // killing a xenophobic aggressor (pirates) is lawful everywhere — the
+  // current system's government credits you too, matching classic feel
+  const vf = govts[g].$sem ? govts[g].$sem.flags : [];
+  if (vf.includes('xenophobic')) {
+    const sg = systemGovt();
+    if (sg !== g) reputation[sg] = legalOf(sg) + kp;
+  }
 }
 
 function shipHalf(e) {
@@ -724,13 +830,20 @@ function pickFrom(listId, lo, hi) {
 let hailOpen = false, hailTarget = null;
 const subdued = new Set(); // spob ids whose defense fleet you've just cleared (session)
 /* Called when any ship is destroyed; tracks defense-fleet defeat. */
+/* Mark a spöb subdued once none of its defense-fleet ships remain. Called
+ * both when a defender is destroyed AND when one is boarded/plundered —
+ * either way that ship is out of the fight. */
+function checkDefenseCleared(defOf, excluding) {
+  if (defOf == null) return;
+  if (aiShips.some(x => x !== excluding && x.defOf === defOf)) return;
+  subdued.add(defOf);
+  const p = spobById(defOf);
+  if (p) showMsg(`${p.name}'s defenses are broken — hail it to demand tribute.`);
+}
 function onShipDestroyed(s) {
   if (s.misnId != null) onMissionShipDestroyed(s);
-  if (s.defOf != null && !aiShips.some(x => x !== s && x.defOf === s.defOf)) {
-    subdued.add(s.defOf);
-    const p = spobById(s.defOf);
-    if (p) showMsg(`${p.name}'s defenses are broken — hail it to demand tribute.`);
-  }
+  if (s.killedByPlayer) creditKill(s); // combat rating + legal consequences
+  checkDefenseCleared(s.defOf, s);
 }
 function openHail(kind, obj) {
   clearTimeout(hailCloseTimer); // don't let a pending auto-close hit a new hail
@@ -788,17 +901,74 @@ function spawnDefenseFleet(p) {
 let hailCloseTimer = null;
 function closeHailSoon() { clearTimeout(hailCloseTimer); hailCloseTimer = setTimeout(closeHail, 1400); }
 
+const hailClick = () => playSnd(600, 0.4);       // UI click (snd 600)
+const FUEL_PRICE = 1500;                         // full refuel from a passing ship
+
+// Greeting depends on disposition — hostiles snarl, others are cordial.
+function shipGreeting(s) {
+  if (s.hostile) return pickFrom(3000, 10, 14) || 'What do you want?';
+  return pickLine(7000 + (s.govt - 128)) || pickFrom(3000, 20, 29) || 'Channel open.';
+}
+
 function requestAssistance(s) {
-  if (s.hostile) { hailSay(pickLine(3001) || 'They refuse and cut the channel.'); return; }
-  if (fuel < fuelMax) { fuel = Math.min(fuelMax, fuel + 100); hailSay('They spare you some fuel. (+100 fuel)'); playSnd(150, 0.4); }
-  else hailSay('“Safe travels, captain.”');
+  hailClick();
+  if (s.hostile) { hailSay(pickFrom(3000, 95, 99) || pickFrom(3000, 50, 59)); return; }
+  if (fuel >= fuelMax) { hailSay(pickFrom(3000, 70, 74) || 'You look fine to me.'); return; }
+  hailTarget.mode = 'fuel';                       // offer fuel for a price
+  hailSay(pickFrom(3000, 140, 144) || 'I can spare fuel, for a price.');
+}
+function payFuel(full) {
+  hailClick();
+  const price = full ? FUEL_PRICE : Math.round(FUEL_PRICE / 2);
+  // a low-ball offer only lands if the pilot is in a good mood
+  if (!full && Math.random() < 0.5) {
+    hailTarget.mode = 'main';
+    hailSay(pickFrom(3000, 120, 124) || 'Bad mood today — no deal.');
+    return;
+  }
+  if (credits < price) { hailSay(pickFrom(3000, 60, 64) || 'You can’t afford it.'); return; }
+  credits -= price;
+  fuel = fuelMax;
+  hailTarget.mode = 'main';
+  hailSay((full ? pickFrom(3000, 100, 104) : pickFrom(3000, 115, 119)) +
+    ` (−${price.toLocaleString('en-US')} cr, refuelled)`);
+  playSnd(150, 0.4);
+}
+function begForMercy(s) {
+  hailClick();
+  if (Math.random() < 0.45) {                     // they'll entertain a bribe
+    hailTarget.mode = 'mercy';
+    hailTarget.bribe = Math.max(500, Math.min(5000, Math.round(credits * 0.2)));
+    hailSay(`They'll let you go... for ${hailTarget.bribe.toLocaleString('en-US')} credits.`);
+  } else {
+    hailSay(pickFrom(3000, 15, 19) || 'Calling to beg for your life?');
+    closeHailSoon();
+  }
+}
+function payBribe(s) {
+  hailClick();
+  if (credits < hailTarget.bribe) { hailSay(pickFrom(3000, 60, 64) || 'You can’t afford it.'); return; }
+  credits -= hailTarget.bribe;
+  s.hostile = false; s.fleeing = true;            // breaks off and runs
+  hailSay(pickFrom(3000, 135, 139) || 'All right, I’ll leave you alone.');
+  playSnd(150, 0.4);
+  closeHailSoon();
 }
 function demandSurrender(s) {
-  if (!s.disabled) { hailSay(pickFrom(3002, 7, 9) || '“Surrender? To you? Ha!”'); return; }
+  hailClick();
+  if (!s.disabled) { hailSay(pickFrom(3002, 7, 9) || 'Surrender? To you? Ha!'); return; }
   const loot = 500 + Math.floor(Math.random() * 2000);
   credits += loot;
-  hailSay(`You plunder the disabled ship. (+${loot.toLocaleString('en-US')} cr)`);
+  // same consequences as boarding: it's piracy, and the ship is gone once
+  // plundered (was repeatable free loot, and left defenders "in the fight").
+  commitCrime(s.govt, penaltyOf(s.govt, 'BoardPenalty'));
+  const i = aiShips.indexOf(s);
+  if (i >= 0) aiShips.splice(i, 1);
+  if (shipTarget === s) shipTarget = null;
+  checkDefenseCleared(s.defOf, s);
+  showMsg(`You plunder the disabled ship. (+${loot.toLocaleString('en-US')} cr)`);
   playSnd(150, 0.5);
+  closeHail();
 }
 
 function renderHail() {
@@ -807,12 +977,29 @@ function renderHail() {
   if (t.kind === 'ship') {
     const s = t.obj;
     const govtName = s.govt >= 128 && govts[s.govt] ? govts[s.govt].name : 'Independent';
-    const greet = t.said || pickLine(7000 + (s.govt - 128)) || pickLine(6999) || 'Channel open.';
-    html = `<h3>${ships[s.shipId].name}</h3>
-      <div class="who">${govtName}${s.disabled ? ' · disabled' : s.hostile ? ' · hostile' : ''}</div>
-      <div class="say">“${greet}”</div>
-      <button onclick="requestAssistance(hailTarget.obj)">Request assistance</button>
-      <button onclick="demandSurrender(hailTarget.obj)"${s.disabled ? '' : ' disabled'}>Demand surrender / plunder</button>
+    if (t.said == null) t.said = shipGreeting(s);   // first-time greeting
+    const label = s.bounty ? 'Bounty Hunter' : govtName;
+    const tag = s.disabled ? ' · <span style="color:#e06c75">DISABLED</span>'
+              : s.hostile ? ' · <span style="color:#e06c75">HOSTILE</span>' : '';
+    let buttons;
+    if (t.mode === 'fuel') {
+      buttons = `<button onclick="payFuel(true)">Pay ${FUEL_PRICE.toLocaleString('en-US')} cr for fuel</button>
+        <button onclick="payFuel(false)">Offer ${Math.round(FUEL_PRICE / 2).toLocaleString('en-US')} cr</button>
+        <button onclick="hailTarget.mode='main';renderHail()">Never mind</button>`;
+    } else if (t.mode === 'mercy') {
+      buttons = `<button onclick="payBribe(hailTarget.obj)">Pay ${t.bribe.toLocaleString('en-US')} cr to be spared</button>
+        <button onclick="hailTarget.mode='main';renderHail()">Never mind</button>`;
+    } else {
+      buttons = `<button onclick="requestAssistance(hailTarget.obj)">Request assistance</button>` +
+        (s.hostile ? `<button onclick="begForMercy(hailTarget.obj)">Beg for mercy</button>` : '') +
+        `<button onclick="demandSurrender(hailTarget.obj)"${s.disabled ? '' : ' disabled'}>Demand surrender / plunder</button>`;
+    }
+    // classic ship comm portrait: PICT 5300 + ship index
+    html = `<img class="commpic" src="evassets/graphics/PICT_${5300 + (s.shipId - 128)}.png" onerror="this.remove()">
+      <h3>${s.misnName || ships[s.shipId].name}</h3>
+      <div class="who">${label}${tag}</div>
+      <div class="say">“${t.said}”</div>
+      ${buttons}
       <button onclick="closeHail()">Close channel</button>`;
   } else {
     const p = t.obj, m = p.$sem || {};
@@ -821,8 +1008,8 @@ function renderHail() {
     html = `<h3>${p.name}</h3>
       <div class="who">${(m.govt || 'Independent')}${dom ? ' · paying tribute' : ''}</div>
       <div class="say">“${greet}”</div>
-      <button onclick="hailSay(pickFrom(3002,15,24) || 'They have nothing to tell you.')">Request information</button>
-      <button onclick="demandTribute(hailTarget.obj)"${p.Govt < 128 ? ' disabled' : ''}>Demand tribute</button>
+      <button onclick="hailClick();hailSay(pickFrom(3002,15,24) || 'They have nothing to tell you.')">Request information</button>
+      <button onclick="hailClick();demandTribute(hailTarget.obj)"${p.Govt < 128 ? ' disabled' : ''}>Demand tribute</button>
       <button onclick="closeHail()">Close channel</button>`;
   }
   document.getElementById('hailCard').innerHTML = html;
@@ -970,6 +1157,41 @@ const field = (m, k, dflt = -1) => (m[k] == null ? dflt : m[k]); // classic vs N
 // govt relations (from $sem flags we don't have allies as data; use gövt Ally/Enemy)
 function govtAllies(g) { const r = govts[g]; return r ? [r.Ally].filter(a => a >= 128) : []; }
 function govtEnemies(g) { const r = govts[g]; return r ? [r.Enemy].filter(a => a >= 128) : []; }
+
+/* ---- legal record & combat rating (spec: "Legal record") ---- */
+// Player's legal record with a govt, defaulting to the govt's InitialRec.
+function legalOf(g) {
+  if (g < 128) g = 128;                       // independent systems use govt 128
+  if (reputation[g] != null) return reputation[g];
+  return govts[g] ? govts[g].InitialRec : 0;
+}
+// STR# 134 status label, scaled by the govt's crime tolerance (bible App. II:
+// enough good/evil to equal CrimeTol counts as 1 unit).
+const EVIL_STEPS = [[4096, 'Galactic Scourge'], [1024, 'Prime Evil'], [256, 'Public Enemy'],
+  [64, 'Fugitive'], [16, 'Felon'], [4, 'Criminal'], [1, 'Offender']];
+const GOOD_STEPS = [[4096, 'Honored Leader'], [1024, 'Pillar of Society'], [256, 'Role Model'],
+  [64, 'Upstanding Citizen'], [16, 'Good Egg'], [4, 'Decent Individual']];
+function legalStatus(g) {
+  if (g < 128) g = 128;
+  const rec = govts[g]; if (!rec) return 'Clean';
+  const v = legalOf(g) / Math.max(rec.CrimeTol, 1);
+  if (v <= -1) for (const [t, label] of EVIL_STEPS) if (-v >= t) return label;
+  if (v >= 4)  for (const [t, label] of GOOD_STEPS) if (v >= t) return label;
+  return 'Clean';
+}
+function isCriminalWith(g) { // over the crime-tolerance threshold → warships attack
+  if (g < 128) g = 128;
+  const rec = govts[g]; if (!rec) return false;
+  return legalOf(g) <= -Math.max(rec.CrimeTol, 1);
+}
+// Combat rating from total crew destroyed (bible App. I / STR# 138).
+const RATING_STEPS = [[25600, 10], [12800, 9], [6400, 8], [3200, 7], [1600, 6],
+  [800, 5], [400, 4], [200, 3], [100, 2], [1, 1], [0, 0]];
+function combatRating() {
+  for (const [t, idx] of RATING_STEPS) if (kills >= t)
+    return DATA.strings[138].list[idx] || 'Harmless';
+  return 'Harmless';
+}
 
 /* Resolve an AvailStel/TravelStel/ReturnStel code to a concrete spob id.
  * `here` is the spob the mission is being offered/accepted at. Returns a
@@ -1247,22 +1469,32 @@ function onMissionShipDisabled(s) {
   }
 }
 
-/* Board the nearest disabled mission ship (spec: "Boarding"). B key. */
+/* Board the nearest disabled ship (spec: "Boarding"). B key. Mission
+ * board/rescue targets count toward the goal; any other disabled ship is
+ * plundered for cargo (a crime against its government). */
 function boardTarget() {
   if (landedAt || gameOver) return;
   let best = null, bd = 50;
   for (const s of aiShips) {
-    if (s.misnId == null || !s.disabled || s.deathT >= 0) continue;
-    if (!(s.misnGoal === 2 || s.misnGoal === 5)) continue;
+    if (!s.disabled || s.deathT >= 0) continue;
     const d = Math.hypot(s.x - player.x, s.y - player.y);
     if (d < bd) { bd = d; best = s; }
   }
   if (!best) { showMsg('No disabled ship in boarding range.'); return; }
   if (Math.hypot(player.vx, player.vy) > EV.LAND_SPEED * 2) { showMsg('Slow down to board.'); return; }
-  const A = activeMissions.find(a => a.id === best.misnId);
+  const A = (best.misnGoal === 2 || best.misnGoal === 5)
+    ? activeMissions.find(a => a.id === best.misnId) : null;
   aiShips.splice(aiShips.indexOf(best), 1);
   if (best === shipTarget) shipTarget = null;
-  if (A) {
+  checkDefenseCleared(best.defOf, best); // a boarded defender counts as defeated
+  if (!A) { // plunder a non-mission ship — piracy
+    const loot = 500 + Math.floor(Math.random() * 2000);
+    credits += loot;
+    commitCrime(best.govt, penaltyOf(best.govt, 'BoardPenalty'));
+    showMsg(`You plunder the ship's hold. (+${loot.toLocaleString('en-US')} cr)`);
+    return;
+  }
+  {
     A.shipsLeft--;
     showMsg(A.shipsLeft > 0
       ? `${misnName(misns[A.id], A)}: boarded (${A.shipsLeft} to go).`
@@ -1681,8 +1913,21 @@ function maxWeaponRange(e) {
   return r;
 }
 
+/* Red-alert when the number of ships hostile to the player rises (a new
+ * grudge, a bounty hunter jumping in, a defense fleet scrambling) — but not
+ * for the ambient population when a system first loads (alertGrace). */
+let prevHostiles = 0, alertGrace = 0;
+function checkHostileAlert() {
+  const n = aiShips.filter(s => s.hostile && s.deathT < 0).length;
+  if (alertGrace > 0) alertGrace--;
+  else if (n > prevHostiles) playSnd(370, 0.7); // Red Alert
+  prevHostiles = n;
+}
+
 function step() {
   if (gameOver || hailOpen) return; // hail dialog pauses the sim
+  maybeSpawnBountyHunter();
+  checkHostileAlert();
   if (!landedAt) {
     if (jump && player.deathT >= 0) abortJump(); // no jumping out of a fireball
     if (jump && jump.phase === 'engage') {
@@ -1729,10 +1974,13 @@ function step() {
   }
 
   for (const s of [...aiShips]) {
-    if (s.deathT >= 0) {                       // disintegrating
+    if (s.deathT >= 0) {                       // disintegrating (fireball already going)
       EV.integrate(s);
+      // secondary blasts flicker across a bigger hull as it comes apart
+      if (s.deathDelay >= 30 && s.deathT % 7 === 0)
+        spawnExplosion(s.x + (Math.random() - 0.5) * 24, s.y + (Math.random() - 0.5) * 24, 0);
       if (--s.deathT <= 0) {
-        spawnExplosion(s.x, s.y, s.deathDelay >= 60 ? 2 : 1);
+        spawnExplosion(s.x, s.y, s.deathDelay >= 60 ? 2 : 1); // final blast
         playSnd(303, attenuate(s.x, s.y)); // the final boom
         onShipDestroyed(s);
         aiShips.splice(aiShips.indexOf(s), 1);
@@ -1920,7 +2168,11 @@ const panelImg = (() => {
  * the shop dialogs render complete on first open */
 {
   const files = ['PICT_5100.png', 'PICT_6100.png'];
-  for (const id of Object.keys(ships)) files.push(`PICT_${5000 + (id - 128)}.png`);
+  for (const id of Object.keys(ships)) {
+    files.push(`PICT_${5000 + (id - 128)}.png`);  // shipyard detail
+    files.push(`PICT_${3000 + (id - 128)}.png`);  // target schematic
+    files.push(`PICT_${5300 + (id - 128)}.png`);  // hail comm portrait
+  }
   for (const id of Object.keys(DATA.types.outf)) files.push(`PICT_${6000 + (id - 128)}.png`);
   for (const f of files) {
     const img = document.createElement('img');
@@ -1929,6 +2181,8 @@ const panelImg = (() => {
     img.onerror = () => img.remove();
     document.body.appendChild(img);
   }
+  // warm the canvas PICT cache too (target pics are drawn on the canvas)
+  for (const id of Object.keys(ships)) gfxImg(3000 + (id - 128));
   // combat sprites: every weapon graphic + the three explosion sets
   const combatSpins = new Set([400, 401, 402]);
   for (const w of Object.values(DATA.types.weap))
@@ -1998,11 +2252,15 @@ function drawPanel(w, h) {
   /* target display */
   const tb = { x: px + 5, y: py + 262, w: 134, h: 117 };
   if (shipTarget) {
-    drawSpin(ctx, spinOfShip(shipTarget.shipId), tb.x + tb.w / 2, tb.y + 40, shipTarget.heading);
+    // classic schematic target pic (PICT 3000 + ship index); sprite fallback
+    if (!drawGfxFit(ctx, 3000 + (shipTarget.shipId - 128), tb.x + tb.w / 2, tb.y + 40, tb.w - 8, 74))
+      drawSpin(ctx, spinOfShip(shipTarget.shipId), tb.x + tb.w / 2, tb.y + 40, shipTarget.heading);
     const govtName = shipTarget.govt >= 128 && DATA.types.govt[shipTarget.govt]
       ? DATA.types.govt[shipTarget.govt].name : 'Independent';
-    panelText(tb.x + tb.w / 2, tb.y + 86, ships[shipTarget.shipId].name, '#fff', 'center');
-    panelText(tb.x + tb.w / 2, tb.y + 98, govtName, radarColor(shipTarget.govt), 'center');
+    panelText(tb.x + tb.w / 2, tb.y + 86, shipTarget.misnName || ships[shipTarget.shipId].name, '#fff', 'center');
+    panelText(tb.x + tb.w / 2, tb.y + 98,
+      shipTarget.bounty ? 'Bounty Hunter' : govtName,
+      shipTarget.bounty ? '#e06c75' : radarColor(shipTarget.govt), 'center');
     const shp = Math.round(100 * Math.max(0, shipTarget.shields) / shipTarget.shieldMax);
     panelText(tb.x + tb.w / 2, tb.y + 110,
       shipTarget.disabled ? 'DISABLED' : `Shields ${shp}% · ${Math.round(distTo(shipTarget))}px`,
@@ -2072,9 +2330,23 @@ function drawMap(w, h) {
       ctx.fillText(s.name ?? id, x + 8, y + 4);
     }
   }
-  ctx.fillStyle = '#8fa3c8';
+  // Legal status for the selected system (destination if chosen, else the
+  // current one), plus the player's combat rating.
+  const shownId = jumpDest >= 128 && systs[jumpDest] ? jumpDest : SYSTEM_ID;
+  const shownSys = systs[shownId];
+  const statusG = shownSys.Govt >= 128 ? shownSys.Govt : 128;
+  const status = legalStatus(statusG);
+  const crim = isCriminalWith(statusG);
   ctx.font = '12px system-ui, sans-serif';
-  ctx.fillText(`${syst.name} — click a linked system, then J to jump` +
+  ctx.fillStyle = '#8fa3c8';
+  ctx.fillText(`${shownSys.name} (${govts[statusG] ? govts[statusG].name : 'Independent'}) — ` +
+    `legal status: `, mx + 14, my + mh - 30);
+  const w0 = ctx.measureText(`${shownSys.name} (${govts[statusG] ? govts[statusG].name : 'Independent'}) — legal status: `).width;
+  ctx.fillStyle = crim ? '#e06c75' : status === 'Clean' ? '#8fa3c8' : '#98c379';
+  ctx.fillText(status, mx + 14 + w0, my + mh - 30);
+  ctx.fillStyle = '#8fa3c8';
+  ctx.fillText(`Combat rating: ${combatRating()}` +
+    `   ·   click a linked system, then J to jump` +
     (fuel < EV.JUMP_FUEL ? '  (out of fuel!)' : ''), mx + 14, my + mh - 12);
 }
 canvas.addEventListener('mousedown', e => {
@@ -2110,7 +2382,8 @@ function render() {
   for (const s of aiShips) {
     const [x, y] = toScreen(s.x, s.y);
     if (x < -100 || x > w + 100 || y < -100 || y > h + 100) continue;
-    if (s.deathT >= 0 && s.deathT % 4 < 2) continue; // disintegration flicker
+    // disintegration: fade the hull out under the fireball (not a hard flicker)
+    if (s.deathT >= 0) ctx.globalAlpha = Math.max(0, s.deathT / Math.max(s.deathDelay, 1));
     if (s.warpIn > 0) {                               // hyperspace-in flash
       const t = s.warpIn / 18, half = spriteHalf(spinOfShip(s.shipId), 24);
       ctx.strokeStyle = `rgba(150,200,255,${t})`;
@@ -2128,9 +2401,11 @@ function render() {
       drawBrackets(x, y, spriteHalf(spinOfShip(s.shipId), 32),
         s.hostile ? 'rgba(224,108,117,.9)' : 'rgba(255,212,121,.9)');
   }
-  if (!landedAt && !gameOver && !(player.deathT >= 0 && player.deathT % 4 < 2)) {
+  if (!landedAt && !gameOver) {
+    if (player.deathT >= 0) ctx.globalAlpha = Math.max(0, player.deathT / Math.max(player.deathDelay, 1));
     drawSpin(ctx, spinOfShip(player.shipId), w / 2, h / 2, player.heading);
     drawFlame(player, w / 2, h / 2);
+    ctx.globalAlpha = 1;
   }
 
   /* shots, beams, explosions */
