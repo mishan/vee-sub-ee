@@ -609,8 +609,15 @@ function completeJump() {
 
 const keys = {};
 addEventListener('keydown', e => {
-  keys[e.key.toLowerCase()] = true;
   const k = e.key.toLowerCase();
+  // The hail modal pauses the sim; swallow every hotkey but Escape so the
+  // game can't be driven into odd states behind the overlay.
+  if (hailOpen) {
+    if (e.key === 'Escape') closeHail();
+    e.preventDefault();
+    return;
+  }
+  keys[e.key.toLowerCase()] = true;
   if (k === 'l') tryLand();
   if (k === 'm') { mapOpen = !mapOpen; }
   if (k === 'j') { if (mapOpen) mapOpen = false; beginJump(); }
@@ -725,8 +732,12 @@ function onShipDestroyed(s) {
     if (p) showMsg(`${p.name}'s defenses are broken — hail it to demand tribute.`);
   }
 }
-function openHail(kind, obj) { hailOpen = true; hailTarget = { kind, obj }; renderHail(); }
+function openHail(kind, obj) {
+  clearTimeout(hailCloseTimer); // don't let a pending auto-close hit a new hail
+  hailOpen = true; hailTarget = { kind, obj }; renderHail();
+}
 function closeHail() {
+  clearTimeout(hailCloseTimer);
   hailOpen = false; hailTarget = null;
   document.getElementById('hail').style.display = 'none';
 }
