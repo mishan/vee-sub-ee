@@ -158,7 +158,8 @@
   /* thrust + fire buttons, bottom-right, clear of the 144px sidebar panel */
   #touchThrust, #touchFire { position: fixed; bottom: 20px; width: 90px; height: 90px;
     border-radius: 50%; text-align: center; opacity: .55; user-select: none;
-    transition: opacity .15s, background .1s; }
+    transition: opacity .15s, background .1s; -webkit-appearance: none; appearance: none;
+    margin: 0; padding: 0; cursor: pointer; }
   #touchFire { right: 158px; border: 2px solid rgba(255,120,120,.55);
     background: rgba(220,70,70,.14); color: rgba(255,190,190,.85);
     font: 600 15px/90px system-ui, sans-serif; letter-spacing: .05em; }
@@ -194,8 +195,8 @@
   <div id="touchJoyZone"></div>
   <div id="touchJoyBase"></div>
   <div id="touchJoyKnob"></div>
-  <div id="touchThrust">▲<br>THRUST</div>
-  <div id="touchFire">FIRE</div>
+  <button id="touchThrust" type="button" aria-label="Thrust">▲<br>THRUST</button>
+  <button id="touchFire" type="button" aria-label="Fire primary weapon">FIRE</button>
   <div id="touchBar">
     <button data-act="target">Tgt</button>
     <button data-act="nav">Nav</button>
@@ -280,6 +281,9 @@ const explored = new Set(SAVED ? SAVED.explored : []);
 const missionBits = new Uint8Array(256);
 if (SAVED && SAVED.bits) for (const b of SAVED.bits) missionBits[b] = 1;
 let gameDay = SAVED ? (SAVED.day || 0) : 0;
+// Real-world epoch the pilot was created, so the displayed in-game date is
+// stable across sessions (legacy saves without it fall back to now).
+let pilotBorn = SAVED && SAVED.born ? SAVED.born : Date.now();
 /* legal record per govt (spec: "Legal record") — negative = evil, positive
  * = good; defaults to each govt's InitialRec. Missions and combat move it. */
 const reputation = SAVED && SAVED.rep ? { ...SAVED.rep } : {}; // govtId -> record
@@ -295,7 +299,7 @@ function savePilot(spobId) {
     v: 1, syst: SYSTEM_ID, spob: spobId, ship: playerShipId,
     credits, cargo, outfits, explored: [...explored],
     bits: [...missionBits.keys()].filter(b => missionBits[b]),
-    day: gameDay, rep: reputation, kills, missions: activeMissions,
+    day: gameDay, born: pilotBorn, rep: reputation, kills, missions: activeMissions,
     dominated: [...dominated],
   });
   let ok = false;
@@ -582,11 +586,15 @@ function ensureAudioCtx() {
 }
 const titleVol = () => Math.min(0.7 * masterVol, 1);
 // Decode the theme up front so it's ready the instant a gesture unlocks audio.
-fetch('evassets/music/snd_30000.wav')
-  .then(r => r.arrayBuffer())
-  .then(buf => ensureAudioCtx() ? audioCtx.decodeAudioData(buf) : Promise.reject())
-  .then(b => { titleBuffer = b; if (musicWanted) startTitleMusic(); })
-  .catch(() => {});
+// Skipped in test mode (the intro is bypassed) and where Web Audio is absent,
+// so headless/scripted runs stay fast and deterministic.
+if (!TEST_MODE && (window.AudioContext || window.webkitAudioContext)) {
+  fetch('evassets/music/snd_30000.wav')
+    .then(r => r.arrayBuffer())
+    .then(buf => ensureAudioCtx() ? audioCtx.decodeAudioData(buf) : Promise.reject())
+    .then(b => { titleBuffer = b; if (musicWanted) startTitleMusic(); })
+    .catch(() => {});
+}
 function startTitleMusic() {
   if (!soundOn || masterVol <= 0 || !introUp()) return;
   musicWanted = true;
@@ -607,6 +615,25 @@ function stopTitleMusic() {
   musicWanted = false;
   if (titleSource) { try { titleSource.stop(); } catch {} try { titleSource.disconnect(); } catch {} titleSource = null; }
   if (titleGain) { try { titleGain.disconnect(); } catch {} titleGain = null; }
+}
+/* Some mobile browsers only honour AudioContext.resume() from certain gesture
+ * types (a pointerup/touchend/click — not the pointerdown the splash advances
+ * on), which is why the theme used to wait for the first menu-button click.
+ * Arm the unlock on every gesture type until the context is actually running. */
+let audioUnlockArmed = false;
+function armAudioUnlock() {
+  if (audioUnlockArmed) return;
+  audioUnlockArmed = true;
+  const evs = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
+  const tryUnlock = () => {
+    startTitleMusic();                        // resumes the ctx + starts the buffer
+    // stop listening once audio is running, or once we've left the intro
+    if ((audioCtx && audioCtx.state === 'running') || !introUp()) {
+      for (const e of evs) removeEventListener(e, tryUnlock, true);
+      audioUnlockArmed = false;
+    }
+  };
+  for (const e of evs) addEventListener(e, tryUnlock, true);
 }
 const attenuate = (x, y) => Math.max(0, 1 - Math.hypot(x - player.x, y - player.y) / 1200);
 let ambientSnd = null, klaxxonArmed = true;
@@ -2914,6 +2941,7 @@ function showSplash() {
   document.getElementById('splashPrompt').textContent = 'Press any key to continue';
   const arm = () => { advanceSplash(); removeEventListener('pointerdown', arm, true); };
   addEventListener('pointerdown', arm, true); // keydown handled in the key listener
+  armAudioUnlock();                           // unlock audio on any gesture type
 }
 function advanceSplash() {
   if (!splashShown || splashAdvancing) return;
@@ -2943,11 +2971,7 @@ function showTitle() {
   setTimeout(renderTitleSummary, 200); // fonts/bg may lag a frame
   titleSummaryResize = () => renderTitleSummary();
   addEventListener('resize', titleSummaryResize);
-  // Music normally started at the splash; if we came straight to the menu
-  // (e.g. ?titlemenu=1), arm the first pointer gesture as a fallback. Keys
-  // are swallowed while the title is up, so only pointer needs arming here.
-  const arm = () => { startTitleMusic(); removeEventListener('pointerdown', arm, true); };
-  addEventListener('pointerdown', arm, true);
+  armAudioUnlock(); // in case we came straight to the menu (e.g. ?titlemenu=1)
 }
 function enterGame() {
   if (!titleShown) return;
@@ -2983,11 +3007,11 @@ function escapeHtml(s) {
 /* The title viewscreen shows a summary of the current pilot's game (as the
  * original does), drawn on the canvas so it scales with the framed art. */
 function gameDate() {
-  // Classic EV starts the calendar at the real date + 250 years and advances
-  // it one day per hyperspace jump (gameDay). A fresh pilot made today reads
-  // the same as the original would.
-  const now = new Date();
-  const d = new Date(now.getFullYear() + 250, now.getMonth(), now.getDate());
+  // Classic EV starts the calendar at the pilot's creation date + 250 years and
+  // advances it one day per hyperspace jump (gameDay). Anchored to the stored
+  // creation epoch so the date is stable across sessions.
+  const base = new Date(pilotBorn);
+  const d = new Date(base.getFullYear() + 250, base.getMonth(), base.getDate());
   d.setDate(d.getDate() + gameDay);
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
     'August', 'September', 'October', 'November', 'December'];

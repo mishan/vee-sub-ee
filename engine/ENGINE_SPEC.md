@@ -506,10 +506,13 @@ fit the viewport height (no-op on desktop, where the viewport is taller).
 The landing and service dialogs cap their width to the viewport and, since
 there is no Esc key, carry a **persistent Take Off / Back button pinned to the
 overlay** (reachable without scrolling past the dialog body); the keyboard-hint
-strip is hidden on touch. The title theme's Audio element is created and
-preloaded up front so its `play()` on the first tap isn't racing a still-
-loading file (which silently fails on mobile); a failed unlock clears the
-handle so the next tap retries.
+strip is hidden on touch. The viewport meta keeps browser/assistive **zoom
+enabled** (accessibility); accidental double-tap zoom over the play area is
+suppressed with `touch-action` (the touch controls capture their own gestures).
+The title theme uses Web Audio (see "Title screen"); because some mobile
+browsers only honour `AudioContext.resume()` from a pointerup/touchend/click
+rather than the pointerdown the splash advances on, the unlock is armed on
+every gesture type until the context is actually running.
 
 ## Sprite ID conventions (from the EV bible, see semantics.js)
 
