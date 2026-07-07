@@ -185,15 +185,19 @@ browser) deliberately undecided until sprites are on screen.
   record-gated missions were previously mishandled (rating-gated ones were
   always hidden; record-gated ones unchecked). Verified across all cases.
 
-- **Milestone: title screen + music** (browser). Classic PICT 8000 menu as
-  a full-screen overlay on normal load; sim paused until the player picks
-  an option. Transparent hotspots over the baked labels (New/Open Pilot,
-  Enter Ship, Set Prefs, About, Quit); player ship rotates in the centre
-  viewscreen; STR# 20000 intro text behind About. Title theme (snd 30000,
-  music/ set) loops, deferred to first gesture per autoplay policy, and is
-  race-safe on stop so it never bleeds into flight. Test params skip it;
-  `?title=1` forces it. Spec: "Title screen". Verified via headless
-  screenshots (art + hotspot alignment + spinning ship + gameplay intact).
+- **Milestone: title screen + music** (browser). Boot sequence echoes the
+  original: a loading splash (PICT 131) with "Press any key to continue" →
+  first gesture unlocks/starts the theme → brief hold → fade to the classic
+  PICT 8000 menu (which fades in). Menu is a full-screen overlay; sim paused
+  and gameplay hotkeys swallowed while splash/title is up. Transparent
+  hotspots over the baked labels (New/Open Pilot, Enter Ship, Set Prefs,
+  About, Quit); player ship rotates in the centre viewscreen; STR# 20000
+  intro text behind About. Title theme (snd 30000, music/ set) loops from
+  the splash gesture, race-safe on stop so it never bleeds into flight.
+  Test params skip the intro; `?title`/`?splash` force the splash,
+  `?titlemenu` the menu. Spec: "Title screen". Verified via headless
+  screenshots + a scripted flow harness (key-swallow, gesture-started music,
+  splash→title advance, sim paused, enter stops music).
 
 ## Next
 

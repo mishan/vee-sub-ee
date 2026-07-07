@@ -80,9 +80,23 @@
     margin: 4px 0; cursor: pointer; font-size: 13px; }
   #hail button:hover:not(:disabled) { background: #24304d; }
   #hail button:disabled { opacity: .4; cursor: default; }
+  /* loading splash: PICT 131, sits above the title menu so it can reveal it */
+  #splash { position: fixed; inset: 0; display: none; align-items: center;
+    justify-content: center; background: #000; z-index: 55; opacity: 1;
+    transition: opacity .7s ease; }
+  #splash.fade { opacity: 0; }
+  #splashFrame { position: relative; aspect-ratio: 832 / 624; max-width: 100vw;
+    max-height: 100vh; width: min(100vw, calc(100vh * 832 / 624));
+    background: url(evassets/titles/PICT_131.png) center/contain no-repeat; }
+  #splashPrompt { position: absolute; bottom: 8%; width: 100%; text-align: center;
+    color: #cfe3ff; font-size: 15px; letter-spacing: .04em;
+    text-shadow: 0 0 8px #000, 0 0 4px #000; animation: splashBlink 1.1s step-start infinite; }
+  @keyframes splashBlink { 50% { opacity: .25; } }
   /* title screen: PICT 8000 art with transparent hotspots over its baked menu */
   #title { position: fixed; inset: 0; display: none; align-items: center;
     justify-content: center; background: #000; z-index: 50; }
+  #title.intro #titleFrame { animation: titleIn 1s ease both; }
+  @keyframes titleIn { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
   #titleFrame { position: relative; aspect-ratio: 832 / 624; max-width: 100vw;
     max-height: 100vh; width: min(100vw, calc(100vh * 832 / 624));
     background: url(evassets/titles/PICT_8000.png) center/contain no-repeat; }
@@ -121,6 +135,11 @@
   <div id="deadHint">Press R to try again</div>
 </div></div>
 <div id="hail"><div class="card" id="hailCard"></div></div>
+<div id="splash">
+  <div id="splashFrame">
+    <div id="splashPrompt">Press any key to continue</div>
+  </div>
+</div>
 <div id="title">
   <div id="titleFrame">
     <canvas id="titleShip"></canvas>
@@ -131,7 +150,7 @@
     <button class="hot" id="hotPrefs" title="Set Prefs"></button>
     <button class="hot" id="hotAbout" title="About"></button>
   </div>
-  <div id="titleHint">click to begin · original EV title theme</div>
+  <div id="titleHint">select a menu option · original EV title theme</div>
 </div>
 <div id="about"><div class="card" id="aboutCard"></div></div>
 <div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · B board · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · Esc</div>
@@ -464,7 +483,7 @@ const stopSnd = a => { if (a) { a.pause(); a.currentTime = 0; } };
  * browsers block autoplay. Volume tracks masterVol like every other loop. */
 let titleMusic = null;
 function startTitleMusic() {
-  if (titleMusic || !soundOn || masterVol <= 0 || !titleShown) return;
+  if (titleMusic || !soundOn || masterVol <= 0 || !introUp()) return;
   const a = new Audio('evassets/music/snd_30000.wav');
   a._baseVol = 0.7;
   a.volume = Math.min(0.7 * masterVol, 1);
@@ -778,6 +797,10 @@ function completeJump() {
 const keys = {};
 addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
+  // Splash/title overlays pause the sim; swallow every gameplay hotkey so the
+  // game can't be driven behind them. Any key advances the loading splash.
+  if (splashShown) { advanceSplash(); e.preventDefault(); return; }
+  if (titleShown) { e.preventDefault(); return; }
   // The hail modal pauses the sim; swallow every hotkey but Escape so the
   // game can't be driven into odd states behind the overlay.
   if (hailOpen) {
@@ -1998,7 +2021,7 @@ function checkHostileAlert() {
 }
 
 function step() {
-  if (gameOver || hailOpen || titleShown) return; // dialogs/title pause the sim
+  if (gameOver || hailOpen || introUp()) return; // dialogs/splash/title pause the sim
   maybeSpawnBountyHunter();
   checkHostileAlert();
   if (!landedAt) {
@@ -2541,26 +2564,50 @@ function render() {
  * already-initialised game; the sim is paused (titleShown) until the
  * player picks Enter Ship / Open Pilot. Test-param runs skip it so
  * headless screenshots go straight to the game. ?title=1 forces it. */
-let titleShown = false;
+let titleShown = false, splashShown = false, splashAdvancing = false;
 const titleEl = document.getElementById('title');
+const splashEl = document.getElementById('splash');
+const introUp = () => splashShown || titleShown; // sim paused, keys swallowed
+
+/* Loading splash (PICT 131) → "Press any key" → music, brief hold, then the
+ * title menu, echoing classic EV's boot. The first key/pointer gesture is
+ * what unlocks audio (autoplay policy), so the theme starts here. */
+function showSplash() {
+  splashShown = true;
+  splashEl.style.display = 'flex';
+  document.getElementById('splashPrompt').textContent = 'Press any key to continue';
+  const arm = () => { advanceSplash(); removeEventListener('pointerdown', arm, true); };
+  addEventListener('pointerdown', arm, true); // keydown handled in the key listener
+}
+function advanceSplash() {
+  if (!splashShown || splashAdvancing) return;
+  splashAdvancing = true;
+  startTitleMusic(); // first gesture unlocks + starts the theme
+  document.getElementById('splashPrompt').textContent = 'Loading…';
+  setTimeout(() => {           // hold the splash a beat, like the original
+    showTitle();               // title menu comes up beneath the splash
+    splashEl.classList.add('fade');
+    setTimeout(() => {         // then fade the splash away to reveal it
+      splashEl.style.display = 'none';
+      splashEl.classList.remove('fade');
+      splashShown = false; splashAdvancing = false;
+    }, 700);
+  }, 1600);
+}
 
 function showTitle() {
   titleShown = true;
   titleEl.style.display = 'flex';
+  titleEl.classList.add('intro'); // one-shot fade/scale-in, cleared after
+  setTimeout(() => titleEl.classList.remove('intro'), 1100);
   // Open Pilot only means something when there's a save to resume.
   document.getElementById('hotOpen').style.opacity = SAVED ? '' : '0.35';
   startTitleShipSpin();
-  // Browsers block autoplay until a user gesture, so the theme can't start
-  // on load — kick it off on the very first pointer/key interaction
-  // anywhere (even empty space or a menu button). If that first gesture is
-  // Enter/Open, enterGame stops it again, race-safe.
-  const arm = () => {
-    startTitleMusic();
-    removeEventListener('pointerdown', arm, true);
-    removeEventListener('keydown', arm, true);
-  };
+  // Music normally started at the splash; if we came straight to the menu
+  // (e.g. ?titlemenu=1), arm the first pointer gesture as a fallback. Keys
+  // are swallowed while the title is up, so only pointer needs arming here.
+  const arm = () => { startTitleMusic(); removeEventListener('pointerdown', arm, true); };
   addEventListener('pointerdown', arm, true);
-  addEventListener('keydown', arm, true);
 }
 function enterGame() {
   if (!titleShown) return;
@@ -2602,7 +2649,7 @@ function startTitleShipSpin() {
   const spinId = spinOfShip(playerShipId);
   const draw = () => {
     const w = cv.clientWidth, h = cv.clientHeight;
-    if (cv.width !== w) { cv.width = w; cv.height = h; }
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
     g.clearRect(0, 0, cv.width, cv.height);
     const sp = sprites.get(spinId);
     if (sp && sp.ready) {
@@ -2678,8 +2725,10 @@ addEventListener('load', () => {
   if (params.has('nav')) cyclePlanetTarget();
   last = performance.now(); render(); requestAnimationFrame(frame);
   if (TEST_MODE) showMsg('Test mode (URL params) — pilot will not be saved or restored.');
-  // Classic title menu on a normal load; ?title=1 forces it for testing.
-  if (!TEST_MODE || params.has('title')) showTitle();
+  // Classic boot on a normal load: loading splash → title menu. Test flags
+  // skip it; ?title/?splash force the splash, ?titlemenu jumps to the menu.
+  if (params.has('titlemenu')) showTitle();
+  else if (!TEST_MODE || params.has('title') || params.has('splash')) showSplash();
 });
 </script>
 </body>
