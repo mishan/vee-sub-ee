@@ -78,16 +78,25 @@ Landing refuels the ship to capacity (see Hyperjump).
 - Destinations: the current sÿst's `Con1..Con16` fields with values ≥ 128
   that name existing systems.
 - Jump sequence (shell drives it, constants normative):
-  1. Player selects a linked destination (map). Requires fuel ≥ 100.
+  1. Player selects a linked destination (map). Requires fuel ≥ 100 and
+     **distance > 800 px from every spöb** (JUMP_MIN_DIST, approximation
+     of classic's "too close to a stellar object" rule) — both to engage
+     and to enter hyperspace.
   2. Engage: autopilot steers toward the destination system's map bearing
-     (`atan2(dx, −dy)` on galaxy-map coordinates) and forces thrust.
-  3. When aligned within one frame-step of turn and at ≥ 95% maxSpeed, the
-     ship "enters hyperspace": 30-frame outbound streak effect, then the
-     world switches to the destination system.
+     (`atan2(dx, −dy)` on galaxy-map coordinates) and forces thrust. The
+     hyperdrive warm-up starts now (Warp Up sound, 8.3 s).
+  3. The ship enters hyperspace only when (a) aligned within one
+     frame-step of turn at ≥ 95% maxSpeed, (b) **220 frames
+     (JUMP_WARMUP_FRAMES) have elapsed since engaging** — the drive has
+     to spin up; the autopilot cruises toward the destination meanwhile —
+     and (c) clear of stellars. Then the 30-frame outbound streak plays
+     (timed to land on the sound's final whoosh: 220 + 30 = 250 frames ≈
+     the 8.3 s Warp Up).
   4. Arrival: player is placed 700 px from the system center on the
      bearing back toward the origin system, same heading, velocity =
      maxSpeed along the inbound bearing; fuel −= 100. (700 keeps arrival
      within sight of the inner planets; was 1800, which felt stranded.)
+     Aborting the engage/warm-up (Esc) cuts the Warp Up sound.
 
 ## Map knowledge (fog of war)
 
@@ -113,7 +122,11 @@ Cargo capacity = raw shïp `Holds`; starting credits **10,000**.
 
 Availability gate for both: item `TechLevel ≤ spöb.TechLevel`, or an exact
 match against `SpecialTech1..3`; items with `MissionBit ≥ 0` are hidden
-until the mission system exists. Outfits: `Cost`/`Mass`/`Max` from the
+until the mission system exists. Shops show **only available items** —
+no empty or grayed slots; the grid compacts (thumbnails still come from
+each item's fixed cell in the menu sheet). Owned outfits stay listed
+anywhere they'd otherwise be hidden (you can always sell). A shop whose
+list would be empty doesn't get a button on the landing screen at all. Outfits: `Cost`/`Mass`/`Max` from the
 oütf record; outfit Mass consumes the hull's `FreeMass` (negative Mass —
 e.g. Mass Expansion — frees space); effects applied per ModType (semantics
 .js): cargoSpace→Holds, fuelCapacity→Fuel, shieldCapacity/armor/accelBoost
