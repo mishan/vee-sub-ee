@@ -458,14 +458,65 @@ menu labels; the shell places transparent hotspots over them:
 - **About EV…** — shows the STR# 20000 intro text plus a clean-room note.
 - **Quit EV** — no-op in the browser (note to close the tab).
 
-The central viewscreen shows the player ship's spin sheet slowly rotating,
-echoing the original's animated panel. Title music (snd 30000, in the
-music/ set) loops from the splash gesture through the menu and tracks
-`masterVol`/`soundOn` like every other loop. Because `play()` is async,
-stopping the music re-pauses once the play promise settles, so entering the
-game never leaves the theme bleeding into flight. Any test-param run (see
-Persistence) skips the intro so headless screenshots go straight to the
-game; `?title`/`?splash` force the splash, `?titlemenu` jumps to the menu.
+The central viewscreen shows a **summary of the current pilot's game** (as the
+original does), drawn on a canvas so it scales with the framed art: ship type,
+current system, legal status in that system, combat rating, credits, and the
+date. The date follows classic EV — real date + 250 years at pilot creation,
++1 day per hyperjump (`gameDay`) — so a fresh pilot reads like the original's.
+When no pilot is loaded (no save) the viewscreen reads **"No Pilot file
+loaded"** instead.
+
+Title music (snd 30000, in the music/ set) prefers the **Web Audio API**: the
+file is fetched and `decodeAudioData`'d up front, and the first splash gesture
+`resume()`s the AudioContext (the reliable mobile unlock) and starts the
+pre-decoded buffer — so the theme begins on the loading screen, not on a later
+menu tap. Because some mobile browsers only honour `resume()` from a
+pointerup/touchend/click (not the splash's pointerdown), the unlock is armed on
+every gesture type until the context runs. Some desktop browsers' decode
+**rejects the classic 8-bit PCM WAV**, so on decode failure (or where Web Audio
+is absent) it **falls back to an HTMLAudio element**, which every browser plays;
+the same gesture unlock drives both. Volume tracks `0.7·masterVol`; the theme
+stops on entering the game. (Sound effects keep using HTMLAudio; they unlock
+once gameplay begins.) Any test-param run (see Persistence) skips
+the intro so headless screenshots go straight to the game; `?title`/`?splash`
+force the splash, `?titlemenu` jumps to the menu.
+
+## Touch controls (shell responsibility; browser leg)
+
+On touch devices (detected via `pointer: coarse` / `ontouchstart` /
+`maxTouchPoints`, forceable with `?mobile=1`, off with `?mobile=0`) the shell
+overlays on-screen controls; the game is landscape-only and shows a
+rotate-to-landscape nudge in portrait. The controls are shown only while
+actually flying (hidden on the splash/title, landing, service, hail, and
+game-over screens).
+
+- **Floating joystick** (left thumb): appears wherever the thumb presses in
+  the left region. Its angle is an *absolute* facing — the ship steers toward
+  it (past a small ~18% deadzone). Steering is **decoupled from thrust** so
+  aiming never accidentally burns the engine. The joystick does **not** touch
+  the flight core: it synthesizes the same `left`/`right` booleans the keyboard
+  produces (turn toward the target heading, stopping within half a turn-step so
+  it doesn't oscillate), so physics and the golden trace are unaffected.
+- **Thrust and Fire buttons** (bottom-right, side by side, clear of the sidebar
+  panel): each holds its control (`thrust` / primary trigger) while pressed.
+- **Mini action bar** (always-on, top-centre): Target/Nav cycle, Land, Board,
+  Hail, Map, Jump, Missions, and a sound toggle — each just calls the same
+  handler as its keyboard shortcut. On the galaxy map the joystick and fire
+  button hide so canvas taps can pick a destination (fingertip hit radius is
+  enlarged).
+
+Fitting the small screen: the fixed 144×480 sidebar panel is scaled down to
+fit the viewport height (no-op on desktop, where the viewport is taller).
+The landing and service dialogs cap their width to the viewport and, since
+there is no Esc key, carry a **persistent Take Off / Back button pinned to the
+overlay** (reachable without scrolling past the dialog body); the keyboard-hint
+strip is hidden on touch. The viewport meta keeps browser/assistive **zoom
+enabled** (accessibility); accidental double-tap zoom over the play area is
+suppressed with `touch-action` (the touch controls capture their own gestures).
+The title theme uses Web Audio (see "Title screen"); because some mobile
+browsers only honour `AudioContext.resume()` from a pointerup/touchend/click
+rather than the pointerdown the splash advances on, the unlock is armed on
+every gesture type until the context is actually running.
 
 ## Sprite ID conventions (from the EV bible, see semantics.js)
 

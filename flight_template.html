@@ -2,11 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Vₑ</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
     font: 13px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif; color: #cfd6e4; }
-  canvas { display: block; }
+  /* allow pinch-zoom (accessibility) but suppress double-tap zoom over the
+     play area; the touch controls capture their own gestures (touch-action:none) */
+  canvas { display: block; touch-action: manipulation; }
   #hud { position: fixed; top: 10px; left: 12px; color: #8fa3c8; font-size: 12px;
     text-shadow: 0 1px 2px #000; user-select: none; }
   #hud b { color: #fff; font-size: 14px; }
@@ -23,10 +28,19 @@
   #landed, #service { position: fixed; inset: 0; display: none;
     align-items: center; justify-content: center; background: rgba(0,0,0,.72); }
   #service { background: rgba(0,0,0,.45); }
-  #landed .card, #service .card { width: 560px; max-height: 86vh; overflow-y: auto;
+  #landed .card, #service .card { width: min(560px, 94vw); max-height: 88vh; overflow-y: auto;
     background: #0c1120; border: 1px solid #2a3550;
     border-radius: 8px; padding: 20px 24px; }
-  #service .card { width: 540px; box-shadow: 0 12px 48px rgba(0,0,0,.8); }
+  #service .card { width: min(540px, 94vw); box-shadow: 0 12px 48px rgba(0,0,0,.8); }
+  /* persistent leave button, pinned to the overlay so it's reachable without
+     scrolling (essential on mobile, where there is no Esc key) */
+  .leaveBtn { position: fixed; top: 10px; right: 12px; z-index: 3;
+    background: #24304d; color: #eaf0fb; border: 1px solid #3a4a6a; border-radius: 6px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0,0,0,.5); }
+  .leaveBtn:hover { background: #2e3c5e; }
+  /* on short/mobile screens keep the landscape image from dominating the scroll */
+  @media (max-height: 560px) { #landed img.scape { max-height: 34vh; width: auto; max-width: 100%; } }
   #landed h2, #service h2 { margin: 0 0 4px; color: #fff; }
   #landed .meta, #service .meta { color: #6b7a96; font-size: 12px; margin-bottom: 10px; }
   #landed .desc { white-space: pre-wrap; color: #aab6cc; font-size: 13px; }
@@ -100,7 +114,7 @@
   #titleFrame { position: relative; aspect-ratio: 832 / 624; max-width: 100vw;
     max-height: 100vh; width: min(100vw, calc(100vh * 832 / 624));
     background: url(evassets/titles/PICT_8000.png) center/contain no-repeat; }
-  #titleShip { position: absolute; left: 42.4%; top: 51.5%; width: 16.6%; height: 28.5%; }
+  #titleView { position: absolute; left: 44%; top: 53.5%; width: 13%; height: 29.5%; }
   #titleFrame .hot { position: absolute; background: transparent; border: 2px solid transparent;
     border-radius: 6px; cursor: pointer; padding: 0; }
   #titleFrame .hot:hover { border-color: rgba(120,255,140,.6); background: rgba(120,255,140,.08); }
@@ -120,16 +134,88 @@
   #about p { color: #aab6cc; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
   #about button { margin-top: 14px; background: #1a2338; color: #cfd6e4;
     border: 1px solid #2a3550; border-radius: 4px; padding: 6px 14px; cursor: pointer; }
+
+  /* ---- touch controls (mobile only; shown when body.touch) ---- */
+  #touch { display: none; }
+  body.touch #touch { display: block; }
+  /* the whole layer ignores pointers; only its interactive children opt back in */
+  #touch { position: fixed; inset: 0; z-index: 40; touch-action: none; pointer-events: none; }
+  #touchJoyZone { position: fixed; left: 0; top: 0; bottom: 0; right: 38%;
+    pointer-events: auto; touch-action: none; }     /* left-thumb steering area */
+  body.touch.no-fly #touch { display: none; }        /* hidden off the flight screen */
+  #touch > *:not(#touchJoyZone) { pointer-events: auto; }
+  /* while the galaxy map is up, hide joystick+thrust+fire so canvas taps pick a system */
+  #touch.map #touchJoyZone, #touch.map #touchFire, #touch.map #touchThrust,
+  #touch.map #touchJoyBase, #touch.map #touchJoyKnob { display: none; pointer-events: none; }
+  /* floating joystick: base + knob drawn where the thumb lands */
+  #touchJoyBase, #touchJoyKnob { position: fixed; border-radius: 50%; display: none;
+    pointer-events: none; opacity: .5; }
+  #touchJoyBase { width: 132px; height: 132px; margin: -66px 0 0 -66px;
+    border: 2px solid rgba(150,190,255,.55); background: rgba(120,160,220,.10); }
+  #touchJoyKnob { width: 60px; height: 60px; margin: -30px 0 0 -30px;
+    border: 2px solid rgba(180,210,255,.8); background: rgba(150,190,255,.30); }
+  #touch.on #touchJoyBase, #touch.on #touchJoyKnob { display: block; }
+  /* thrust + fire buttons, bottom-right, clear of the 144px sidebar panel */
+  #touchThrust, #touchFire { position: fixed; bottom: 20px; width: 90px; height: 90px;
+    border-radius: 50%; text-align: center; opacity: .55; user-select: none;
+    transition: opacity .15s, background .1s; -webkit-appearance: none; appearance: none;
+    margin: 0; padding: 0; cursor: pointer; }
+  #touchFire { right: 158px; border: 2px solid rgba(255,120,120,.55);
+    background: rgba(220,70,70,.14); color: rgba(255,190,190,.85);
+    font: 600 15px/90px system-ui, sans-serif; letter-spacing: .05em; }
+  #touchFire.press { opacity: 1; background: rgba(220,70,70,.4); }
+  #touchThrust { right: 262px; border: 2px solid rgba(120,190,255,.55);
+    background: rgba(70,140,220,.14); color: rgba(195,220,255,.9);
+    font: 600 11px/1.3 system-ui, sans-serif; letter-spacing: .04em;
+    display: grid; place-items: center; }
+  #touchThrust.press { opacity: 1; background: rgba(70,140,220,.42); }
+  /* always-on mini action bar, top-centre, single row */
+  #touchBar { position: fixed; top: 6px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 4px; padding: 4px; border-radius: 10px; flex-wrap: nowrap;
+    background: rgba(8,14,26,.5); backdrop-filter: blur(2px); }
+  #touchBar button { min-width: 42px; height: 36px; padding: 0 7px; border-radius: 7px;
+    border: 1px solid rgba(90,120,170,.4); background: rgba(26,35,56,.7); color: #cfd6e4;
+    font: 600 12px system-ui, sans-serif; user-select: none; opacity: .85; }
+  #touchBar button:active { background: rgba(60,90,140,.85); opacity: 1; }
+  /* keyboard hint bar is meaningless on touch */
+  body.touch #help { display: none; }
+  /* rotate-to-landscape nudge (portrait on a touch device) */
+  #rotate { display: none; position: fixed; inset: 0; z-index: 70; background: #05070d;
+    color: #9fb4d8; align-items: center; justify-content: center; text-align: center;
+    font-size: 16px; padding: 24px; }
+  body.touch.portrait #rotate { display: flex; }
+  #rotate .glyph { font-size: 46px; display: block; margin-bottom: 14px;
+    animation: rotateHint 2s ease-in-out infinite; }
+  @keyframes rotateHint { 0%,60% { transform: rotate(0); } 80%,100% { transform: rotate(-90deg); } }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
+<div id="touch">
+  <div id="touchJoyZone"></div>
+  <div id="touchJoyBase"></div>
+  <div id="touchJoyKnob"></div>
+  <button id="touchThrust" type="button" aria-label="Thrust">▲<br>THRUST</button>
+  <button id="touchFire" type="button" aria-label="Fire primary weapon">FIRE</button>
+  <div id="touchBar">
+    <button data-act="target">Tgt</button>
+    <button data-act="nav">Nav</button>
+    <button data-act="land">Land</button>
+    <button data-act="board">Board</button>
+    <button data-act="hail">Hail</button>
+    <button data-act="map">Map</button>
+    <button data-act="jump">Jump</button>
+    <button data-act="missions">Msn</button>
+    <button data-act="sound">♪</button>
+  </div>
+</div>
+<div id="rotate"><div><span class="glyph">▭</span>Rotate your device to landscape to play Vₑ.</div></div>
 <div id="hud"></div>
 <div id="target"></div>
 <div id="prompt"></div>
 <div id="msg"></div>
-<div id="landed"><div class="card" id="landedCard"></div></div>
-<div id="service"><div class="card" id="serviceCard"></div></div>
+<div id="landed"><button class="leaveBtn" onclick="takeOff()">Take Off ▲</button><div class="card" id="landedCard"></div></div>
+<div id="service"><button class="leaveBtn" onclick="closeService()">◀ Back</button><div class="card" id="serviceCard"></div></div>
 <div id="dead"><div>
   <h1>Your ship has been destroyed.</h1>
   <div id="deadHint">Press R to try again</div>
@@ -142,7 +228,7 @@
 </div>
 <div id="title">
   <div id="titleFrame">
-    <canvas id="titleShip"></canvas>
+    <canvas id="titleView"></canvas>
     <button class="hot" id="hotNew"   title="New Pilot"></button>
     <button class="hot" id="hotOpen"  title="Open Pilot"></button>
     <button class="hot" id="hotQuit"  title="Quit"></button>
@@ -195,6 +281,9 @@ const explored = new Set(SAVED ? SAVED.explored : []);
 const missionBits = new Uint8Array(256);
 if (SAVED && SAVED.bits) for (const b of SAVED.bits) missionBits[b] = 1;
 let gameDay = SAVED ? (SAVED.day || 0) : 0;
+// Real-world epoch the pilot was created, so the displayed in-game date is
+// stable across sessions (legacy saves without it fall back to now).
+let pilotBorn = SAVED && SAVED.born ? SAVED.born : Date.now();
 /* legal record per govt (spec: "Legal record") — negative = evil, positive
  * = good; defaults to each govt's InitialRec. Missions and combat move it. */
 const reputation = SAVED && SAVED.rep ? { ...SAVED.rep } : {}; // govtId -> record
@@ -210,7 +299,7 @@ function savePilot(spobId) {
     v: 1, syst: SYSTEM_ID, spob: spobId, ship: playerShipId,
     credits, cargo, outfits, explored: [...explored],
     bits: [...missionBits.keys()].filter(b => missionBits[b]),
-    day: gameDay, rep: reputation, kills, missions: activeMissions,
+    day: gameDay, born: pilotBorn, rep: reputation, kills, missions: activeMissions,
     dominated: [...dominated],
   });
   let ok = false;
@@ -452,8 +541,10 @@ function setVolume(delta) {
   masterVol = Math.max(0, Math.min(1, Math.round((masterVol + delta) * 10) / 10));
   try { localStorage.setItem('ve_volume', String(masterVol)); } catch {}
   // adjust every currently-playing long sound live
-  for (const a of [ambientSnd, warpSnd, titleMusic])
+  for (const a of [ambientSnd, warpSnd])
     if (a) a.volume = Math.min((a._baseVol ?? 1) * masterVol, 1);
+  if (titleGain) titleGain.gain.value = titleVol();
+  if (titleAudioEl) titleAudioEl.volume = titleVol();
   showMsg(`Volume ${Math.round(masterVol * 100)}%`);
   playSnd(150, 0.6); // audible reference beep at the new level
 }
@@ -480,27 +571,86 @@ function loopSnd(id, vol = 1) {
 }
 const stopSnd = a => { if (a) { a.pause(); a.currentTime = 0; } };
 
-/* Title theme (snd 30000) lives in evassets/music/, not sounds/. Looped
- * while the title screen is up; deferred until a user gesture because
- * browsers block autoplay. Volume tracks masterVol like every other loop. */
-let titleMusic = null;
+/* Title theme (snd 30000). Prefer Web Audio — resuming the AudioContext inside
+ * a gesture is the reliable mobile unlock, and a pre-decoded buffer plays
+ * instantly on the first splash tap. But some desktop browsers' decodeAudioData
+ * rejects the classic 8-bit PCM WAV; when decode fails (or Web Audio is absent)
+ * fall back to an HTMLAudio element, which every browser plays. Either path is
+ * driven by the same gesture unlock (armAudioUnlock). Effects stay on HTMLAudio. */
+let audioCtx = null, titleBuffer = null, titleSource = null, titleGain = null;
+let titleAudioEl = null, musicWanted = false;
+function ensureAudioCtx() {
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) audioCtx = new AC();               // starts suspended until a gesture
+  }
+  return audioCtx;
+}
+const titleVol = () => Math.min(0.7 * masterVol, 1);
+const musicPlaying = () => !!titleSource || (titleAudioEl && !titleAudioEl.paused);
+function useHtmlAudioFallback() {
+  audioCtx = null; titleBuffer = null;         // give up on Web Audio for the theme
+  titleAudioEl = new Audio('evassets/music/snd_30000.wav');
+  titleAudioEl.loop = true;
+  if (musicWanted) startTitleMusic();
+}
+// Prepare the theme up front (skipped in test mode; the intro is bypassed).
+if (!TEST_MODE) {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (AC) {
+    fetch('evassets/music/snd_30000.wav')
+      .then(r => r.arrayBuffer())
+      .then(buf => ensureAudioCtx().decodeAudioData(buf))
+      .then(b => { titleBuffer = b; if (musicWanted) startTitleMusic(); })
+      .catch(useHtmlAudioFallback);            // e.g. 8-bit WAV desktop decode fails
+  } else {
+    useHtmlAudioFallback();
+  }
+}
 function startTitleMusic() {
-  if (titleMusic || !soundOn || masterVol <= 0 || !introUp()) return;
-  const a = new Audio('evassets/music/snd_30000.wav');
-  a._baseVol = 0.7;
-  a.volume = Math.min(0.7 * masterVol, 1);
-  a.loop = true;
-  titleMusic = a;
-  a._playP = a.play().catch(() => {});
+  if (!soundOn || masterVol <= 0 || !introUp()) return;
+  musicWanted = true;
+  if (titleBuffer && audioCtx) {                // Web Audio path
+    if (audioCtx.state === 'suspended') audioCtx.resume(); // unlock inside the gesture
+    if (titleSource) return;                    // already playing
+    titleGain = audioCtx.createGain();
+    titleGain.gain.value = titleVol();
+    titleGain.connect(audioCtx.destination);
+    titleSource = audioCtx.createBufferSource();
+    titleSource.buffer = titleBuffer;
+    titleSource.loop = true;
+    titleSource.connect(titleGain);
+    titleSource.start();
+  } else if (titleAudioEl) {                     // HTMLAudio fallback
+    titleAudioEl.volume = titleVol();
+    titleAudioEl.play().catch(() => {});
+  }
+  // neither ready yet → the decode/fallback handler will call us again
 }
 function stopTitleMusic() {
-  const a = titleMusic; titleMusic = null;
-  if (!a) return;
-  const kill = () => { a.pause(); a.currentTime = 0; };
-  kill();
-  // play() is async; if it hadn't resolved yet, pausing now is a no-op and
-  // the track would start anyway — re-kill once the promise settles.
-  if (a._playP) a._playP.then(kill).catch(() => {});
+  musicWanted = false;
+  if (titleSource) { try { titleSource.stop(); } catch {} try { titleSource.disconnect(); } catch {} titleSource = null; }
+  if (titleGain) { try { titleGain.disconnect(); } catch {} titleGain = null; }
+  if (titleAudioEl) { titleAudioEl.pause(); titleAudioEl.currentTime = 0; }
+}
+/* Some mobile browsers only honour AudioContext.resume() from certain gesture
+ * types (a pointerup/touchend/click — not the pointerdown the splash advances
+ * on), which is why the theme used to wait for the first menu-button click.
+ * Arm the unlock on every gesture type until the context is actually running. */
+let audioUnlockArmed = false;
+function armAudioUnlock() {
+  if (audioUnlockArmed) return;
+  audioUnlockArmed = true;
+  const evs = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
+  const tryUnlock = () => {
+    startTitleMusic();                        // resumes the ctx / plays the theme
+    // stop listening once the theme is playing, or once we've left the intro
+    if (musicPlaying() || !introUp()) {
+      for (const e of evs) removeEventListener(e, tryUnlock, true);
+      audioUnlockArmed = false;
+    }
+  };
+  for (const e of evs) addEventListener(e, tryUnlock, true);
 }
 const attenuate = (x, y) => Math.max(0, 1 - Math.hypot(x - player.x, y - player.y) / 1200);
 let ambientSnd = null, klaxxonArmed = true;
@@ -800,6 +950,11 @@ function completeJump() {
 /* ---------------- input ---------------- */
 
 const keys = {};
+/* Touch control state (mobile). The joystick doesn't drive the engine
+ * directly — it synthesizes the same left/right/thrust the keyboard produces
+ * (see step's player branch), so the flight core and golden trace are
+ * untouched. touchHeading is the absolute facing the stick points at. */
+const touchCtl = { steer: false, heading: 0, thrust: false, fire: false };
 addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   // Splash/title overlays pause the sim; swallow every gameplay hotkey so the
@@ -852,6 +1007,112 @@ addEventListener('keydown', e => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
 });
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+/* ---------------- touch controls (mobile) ----------------
+ * A floating joystick (left thumb) steers, dedicated Thrust and Fire buttons
+ * (right thumb) drive and shoot, and an always-on mini bar reaches the
+ * secondary actions. The joystick only sets heading — thrust is its own
+ * button — so aiming never accidentally burns the engine. All of it just
+ * synthesizes the same booleans the keyboard produces (see step). Shown on
+ * touch devices (or forced with ?mobile=1; ?mobile=0 off), only while flying. */
+const TOUCH = params.has('mobile')
+  ? params.get('mobile') !== '0'
+  : (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window ||
+     navigator.maxTouchPoints > 0);
+const touchEl = document.getElementById('touch');
+const joyBase = document.getElementById('touchJoyBase');
+const joyKnob = document.getElementById('touchJoyKnob');
+const JOY_MAX = 60;      // px the knob travels from the origin
+const JOY_DEAD = 0.18;   // fraction of radius before steering engages
+let joyId = null, joyOX = 0, joyOY = 0;
+
+function updateJoyKnob(x, y) {
+  let dx = x - joyOX, dy = y - joyOY;
+  const len = Math.hypot(dx, dy) || 1;
+  if (len > JOY_MAX) { dx *= JOY_MAX / len; dy *= JOY_MAX / len; }
+  joyKnob.style.left = (joyOX + dx) + 'px';
+  joyKnob.style.top = (joyOY + dy) + 'px';
+  touchCtl.steer = Math.min(len / JOY_MAX, 1) > JOY_DEAD;
+  if (touchCtl.steer) touchCtl.heading = EV.bearing(dx, dy); // up (−y) = heading 0
+}
+function releaseJoy() {
+  joyId = null; touchEl.classList.remove('on');
+  touchCtl.steer = false;
+}
+function touchAction(act) {
+  switch (act) {
+    case 'target': cycleShipTarget(); break;
+    case 'nav': cyclePlanetTarget(); break;
+    case 'land': tryLand(); break;
+    case 'board': boardTarget(); break;
+    case 'hail': hail(); break;
+    case 'map': mapOpen = !mapOpen; break;
+    case 'jump': if (mapOpen) mapOpen = false; beginJump(); break;
+    case 'missions': showMissionBriefing(); break;
+    case 'sound':
+      soundOn = !soundOn;
+      if (!soundOn) stopAllLoops();
+      showMsg(soundOn ? 'Sound on.' : 'Sound off.');
+      break;
+  }
+}
+function updateOrientation() {
+  document.body.classList.toggle('portrait', innerHeight > innerWidth * 1.1);
+}
+/* Called from render(): only show flight controls while actually flying; on
+ * the galaxy map, hide joystick+fire so canvas taps can pick a destination. */
+function updateTouchUI() {
+  if (!TOUCH) return;
+  const flying = !splashShown && !titleShown && !landedAt && !gameOver &&
+                 !hailOpen && !serviceOpen;
+  document.body.classList.toggle('no-fly', !flying);
+  touchEl.classList.toggle('map', flying && mapOpen);
+  if (!flying || mapOpen) { // joystick/thrust/fire unusable → release everything
+    if (joyId !== null) releaseJoy();
+    if (touchCtl.fire) { touchCtl.fire = false; document.getElementById('touchFire').classList.remove('press'); }
+    if (touchCtl.thrust) { touchCtl.thrust = false; document.getElementById('touchThrust').classList.remove('press'); }
+  }
+}
+
+if (TOUCH) {
+  document.body.classList.add('touch');
+  const zone = document.getElementById('touchJoyZone');
+  zone.addEventListener('pointerdown', e => {
+    if (joyId !== null) return;
+    joyId = e.pointerId; joyOX = e.clientX; joyOY = e.clientY;
+    try { zone.setPointerCapture(joyId); } catch {}
+    joyBase.style.left = joyOX + 'px'; joyBase.style.top = joyOY + 'px';
+    updateJoyKnob(joyOX, joyOY);
+    touchEl.classList.add('on');
+    e.preventDefault();
+  });
+  zone.addEventListener('pointermove', e => {
+    if (e.pointerId !== joyId) return;
+    updateJoyKnob(e.clientX, e.clientY); e.preventDefault();
+  });
+  const endJoy = e => { if (e.pointerId === joyId) releaseJoy(); };
+  zone.addEventListener('pointerup', endJoy);
+  zone.addEventListener('pointercancel', endJoy);
+
+  // hold-button helper: sets a touchCtl flag while pressed
+  const holdButton = (el, set) => {
+    const on = v => { set(v); el.classList.toggle('press', v); };
+    el.addEventListener('pointerdown', e => { on(true); e.preventDefault(); });
+    el.addEventListener('pointerup', e => { on(false); e.preventDefault(); });
+    el.addEventListener('pointercancel', () => on(false));
+    el.addEventListener('pointerleave', () => on(false));
+  };
+  holdButton(document.getElementById('touchFire'), v => touchCtl.fire = v);
+  holdButton(document.getElementById('touchThrust'), v => touchCtl.thrust = v);
+
+  document.getElementById('touchBar').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (b) touchAction(b.dataset.act);
+  });
+
+  addEventListener('resize', updateOrientation);
+  addEventListener('orientationchange', updateOrientation);
+  updateOrientation();
+}
 
 /* ---------------- landing ---------------- */
 
@@ -2051,7 +2312,7 @@ function renderPlanetScreen() {
     `</div>`;
   html += `<div class="wallet"><b>${credits.toLocaleString('en-US')}</b> credits ·
     cargo ${cargoUsed()}/${holds} tons${activeMissions.length ? ` · ${activeMissions.length} active mission${activeMissions.length > 1 ? 's' : ''}` : ''}</div>
-    <div class="hint">Press Esc to take off</div>`;
+    <div class="hint">Take Off ▲ (top-right) — or press Esc</div>`;
   document.getElementById('landedCard').innerHTML = html;
 }
 
@@ -2152,15 +2413,27 @@ function step() {
         document.getElementById('dead').style.display = 'flex';
       }
     } else {
+      let cl = keys['arrowleft'] || keys['a'];
+      let cr = keys['arrowright'] || keys['d'];
+      let cThrust = keys['arrowup'] || keys['w'];
+      // Joystick → same booleans: turn toward the stick's absolute heading,
+      // stopping within half a turn-step so it doesn't oscillate; a firm push
+      // (touchCtl.thrust) burns the engine.
+      if (touchCtl.steer) {
+        let diff = EV.norm(touchCtl.heading - player.heading);
+        if (diff > 180) diff -= 360;
+        if (diff > player.turn * 0.5) cr = true;
+        else if (diff < -player.turn * 0.5) cl = true;
+      }
+      if (touchCtl.thrust) cThrust = true;
       EV.stepPlayer(player, {
-        left: keys['arrowleft'] || keys['a'],
-        right: keys['arrowright'] || keys['d'],
+        left: cl, right: cr,
         retro: keys['arrowdown'] || keys['s'],
-        thrust: keys['arrowup'] || keys['w'],
+        thrust: cThrust,
       });
       EV.stepShields(player, player.shieldMax, player.shieldRe);
       for (const w of player.weapons) if (w.cool > 0) w.cool--;
-      if (keys[' ']) fire(player, shipTarget, true);
+      if (keys[' '] || touchCtl.fire) fire(player, shipTarget, true);
       if (keys['x'] && player.selSecondary) fire(player, shipTarget, false);
       /* klaxxon on shield collapse, re-armed on recovery */
       if (player.shields <= 0 && klaxxonArmed) { playSnd(350, 0.8); klaxxonArmed = false; }
@@ -2394,7 +2667,13 @@ function panelText(x, y, text, color = GREEN, align = 'left', font = '10px Genev
 
 function drawPanel(w, h) {
   const pw = 144, ph = 480;
-  const px = w - pw, py = Math.max(0, Math.round((h - ph) / 2));
+  // Shrink the fixed 144×480 sidebar to fit short (mobile landscape) screens;
+  // no-op on desktop where the viewport is taller than the panel.
+  const psc = Math.min(1, h / ph);
+  ctx.save();
+  ctx.translate(w - pw * psc, Math.max(0, (h - ph * psc) / 2));
+  ctx.scale(psc, psc);
+  const px = 0, py = 0;
   if (panelImg.complete && panelImg.naturalWidth) ctx.drawImage(panelImg, px, py);
   else { ctx.fillStyle = '#041004'; ctx.fillRect(px, py, pw, ph); }
 
@@ -2476,6 +2755,7 @@ function drawPanel(w, h) {
   const held = COMMODITIES.map((c, i) => [cargoNames[i], cargo[c]]).filter(([, q]) => q > 0);
   if (held.length === 0) panelText(cb.x, cy, `Cargo: ${holds} tons free`, DIMGREEN);
   else for (const [name, q] of held.slice(0, 4)) { panelText(cb.x, cy, `${q}t ${name}`); cy += 12; }
+  ctx.restore();
 }
 
 /* ---- galaxy map overlay ---- */
@@ -2544,13 +2824,14 @@ function drawMap(w, h) {
     `   ·   click a linked system, then J to jump` +
     (fuel < EV.JUMP_FUEL ? '  (out of fuel!)' : ''), mx + 14, my + mh - 12);
 }
-canvas.addEventListener('mousedown', e => {
+canvas.addEventListener('pointerdown', e => {
   if (!mapOpen) return;
-  for (const t of mapHit)
-    if (Math.hypot(e.clientX - t.x, e.clientY - t.y) < 12) { jumpDest = t.id; return; }
+  for (const t of mapHit) // generous hit radius so it works with a fingertip too
+    if (Math.hypot(e.clientX - t.x, e.clientY - t.y) < (TOUCH ? 22 : 12)) { jumpDest = t.id; return; }
 });
 
 function render() {
+  updateTouchUI();
   const w = innerWidth, h = innerHeight;
   ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   ctx.clearRect(0, 0, w, h);
@@ -2677,6 +2958,7 @@ function showSplash() {
   document.getElementById('splashPrompt').textContent = 'Press any key to continue';
   const arm = () => { advanceSplash(); removeEventListener('pointerdown', arm, true); };
   addEventListener('pointerdown', arm, true); // keydown handled in the key listener
+  armAudioUnlock();                           // unlock audio on any gesture type
 }
 function advanceSplash() {
   if (!splashShown || splashAdvancing) return;
@@ -2701,19 +2983,19 @@ function showTitle() {
   setTimeout(() => titleEl.classList.remove('intro'), 1100);
   // Open Pilot only means something when there's a save to resume.
   document.getElementById('hotOpen').style.opacity = SAVED ? '' : '0.35';
-  startTitleShipSpin();
-  // Music normally started at the splash; if we came straight to the menu
-  // (e.g. ?titlemenu=1), arm the first pointer gesture as a fallback. Keys
-  // are swallowed while the title is up, so only pointer needs arming here.
-  const arm = () => { startTitleMusic(); removeEventListener('pointerdown', arm, true); };
-  addEventListener('pointerdown', arm, true);
+  // draw the pilot summary once layout settles, and keep it sized on resize
+  requestAnimationFrame(renderTitleSummary);
+  setTimeout(renderTitleSummary, 200); // fonts/bg may lag a frame
+  titleSummaryResize = () => renderTitleSummary();
+  addEventListener('resize', titleSummaryResize);
+  armAudioUnlock(); // in case we came straight to the menu (e.g. ?titlemenu=1)
 }
 function enterGame() {
   if (!titleShown) return;
   titleShown = false;
   titleEl.style.display = 'none';
   stopTitleMusic();
-  stopTitleShipSpin();
+  if (titleSummaryResize) { removeEventListener('resize', titleSummaryResize); titleSummaryResize = null; }
   render();
 }
 function titleAbout() {
@@ -2739,34 +3021,78 @@ function escapeHtml(s) {
   return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 }
 
-/* Little rotating ship in the title viewscreen, like the original's
- * animated centre panel. Uses the player ship's spin sheet if ready. */
-let titleSpinRAF = 0, titleSpinAng = 0;
-function startTitleShipSpin() {
-  const cv = document.getElementById('titleShip');
-  const g = cv.getContext('2d');
-  const spinId = spinOfShip(playerShipId);
-  const draw = () => {
-    const w = cv.clientWidth, h = cv.clientHeight;
-    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
-    g.clearRect(0, 0, cv.width, cv.height);
-    const sp = sprites.get(spinId);
-    if (sp && sp.ready) {
-      const { frameW, frameH, xTiles, frames } = sp.meta;
-      const fi = EV.frameIndex(titleSpinAng, frames);
-      const sc = Math.min(cv.width / frameW, cv.height / frameH) * 0.85;
-      const dw = frameW * sc, dh = frameH * sc;
-      g.drawImage(sp.img, (fi % xTiles) * frameW, Math.floor(fi / xTiles) * frameH,
-        frameW, frameH, (cv.width - dw) / 2, (cv.height - dh) / 2, dw, dh);
-    }
-    titleSpinAng = EV.norm(titleSpinAng + 1.2);
-    titleSpinRAF = requestAnimationFrame(draw);
-  };
-  cancelAnimationFrame(titleSpinRAF);
-  preloadSprites([spinId]);
-  draw();
+/* The title viewscreen shows a summary of the current pilot's game (as the
+ * original does), drawn on the canvas so it scales with the framed art. */
+function gameDate() {
+  // Classic EV starts the calendar at the pilot's creation date + 250 years and
+  // advances it one day per hyperspace jump (gameDay). Anchored to the stored
+  // creation epoch so the date is stable across sessions.
+  const base = new Date(pilotBorn);
+  const d = new Date(base.getFullYear() + 250, base.getMonth(), base.getDate());
+  d.setDate(d.getDate() + gameDay);
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+    'August', 'September', 'October', 'November', 'December'];
+  const day = d.getDate();
+  const suf = (day % 10 === 1 && day !== 11) ? 'st' : (day % 10 === 2 && day !== 12) ? 'nd'
+            : (day % 10 === 3 && day !== 13) ? 'rd' : 'th';
+  return `${months[d.getMonth()]} ${day}${suf}, ${d.getFullYear()}`;
 }
-function stopTitleShipSpin() { cancelAnimationFrame(titleSpinRAF); titleSpinRAF = 0; }
+function renderTitleSummary() {
+  const cv = document.getElementById('titleView');
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;                     // not laid out yet
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  const g = cv.getContext('2d');
+  g.clearRect(0, 0, cv.width, cv.height);
+  if (!SAVED) { // nothing to summarize until a pilot is opened/created
+    const words = ['No', 'Pilot', 'file', 'loaded'];
+    const m = Math.round(cv.width * 0.08), aw = cv.width - m * 2;
+    let fs = Math.round(cv.height / 7);
+    g.textAlign = 'center'; g.textBaseline = 'top';
+    const longest = () => Math.max(...words.map(wd => g.measureText(wd).width));
+    g.font = `bold ${fs}px monospace`;
+    while (fs > 7 && longest() > aw) { fs -= 1; g.font = `bold ${fs}px monospace`; }
+    const lines = []; let line = '';
+    for (const wd of words) {
+      const t = line ? line + ' ' + wd : wd;
+      if (line && g.measureText(t).width > aw) { lines.push(line); line = wd; } else line = t;
+    }
+    if (line) lines.push(line);
+    const lh = fs * 1.35;
+    let y = (cv.height - lines.length * lh) / 2;
+    g.fillStyle = '#6f9f80';
+    for (const ln of lines) { g.fillText(ln, cv.width / 2, y); y += lh; }
+    g.textAlign = 'left';
+    return;
+  }
+  const shipName = ships[playerShipId] ? ships[playerShipId].name : 'Shuttlecraft';
+  const sysName = syst ? syst.name : '';
+  const fields = [
+    ['Ship', shipName],
+    ['System', sysName],
+    ['Legal status', legalStatus(systemGovt())],
+    ['Combat rating', combatRating()],
+    ['Credits', credits.toLocaleString('en-US')],
+    ['Date', gameDate()],
+  ];
+  const pad = Math.round(cv.width * 0.07);
+  const avail = cv.width - pad * 2;
+  const lh = cv.height / (fields.length * 2 + 0.5); // label+value per field
+  const labelSz = Math.max(6, Math.round(lh * 0.72));
+  const valueSz = Math.max(7, Math.round(lh * 0.92));
+  g.textBaseline = 'top';
+  let y = pad * 0.6;
+  for (const [label, val] of fields) {
+    g.fillStyle = '#3f8f63'; g.font = `${labelSz}px monospace`;
+    g.fillText(label + ':', pad, y); y += lh * 0.95;
+    // shrink the value to fit the narrow viewscreen if needed
+    let vs = valueSz; g.font = `bold ${vs}px monospace`;
+    while (vs > 6 && g.measureText(val).width > avail) { vs -= 1; g.font = `bold ${vs}px monospace`; }
+    g.fillStyle = '#86ffb6'; g.fillText(val, pad, y); y += lh * 1.05;
+  }
+}
+// re-render on resize while the title is up (the canvas is sized from layout)
+let titleSummaryResize = null;
 
 document.getElementById('hotEnter').onclick = () => enterGame();
 document.getElementById('hotOpen').onclick  = () => { if (SAVED) enterGame(); };
