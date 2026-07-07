@@ -278,6 +278,10 @@ function spawnAI(atEdge) {
     ? DATA.types.govt[e.govt].$sem.flags : [];
   if ((gf.includes('alwaysAttacksPlayer') || gf.includes('xenophobic')) && e.aiType >= 3)
     e.hostile = true;
+  // Warp-in: ships hyperspace into the system (a brief flash) rather than
+  // popping into existence. Arrivals near the player get the warp sound.
+  e.warpIn = 18;
+  if (atEdge) playSnd(130, attenuate(e.x, e.y) * 0.7); // Warp Out (arrival boom)
   aiShips.push(e);
 }
 
@@ -1587,6 +1591,7 @@ function step() {
       }
       continue;
     }
+    if (s.warpIn > 0) s.warpIn--;
     if (s.disabled) { EV.integrate(s); continue; }
     EV.stepShields(s, s.shieldMax, s.shieldRe);
     for (const w of s.weapons) if (w.cool > 0) w.cool--;
@@ -1595,21 +1600,26 @@ function step() {
       if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, player, true);
     } else if (s.fleeing) {
       EV.stepFlee(s, player.x, player.y);
-    } else if (!EV.stepTrader(s, s.target)) {
-      // Reached its target spob and faded.
-      if (s.misnId != null && !s.escort) {
-        // A catch-goal target (board/disable/destroy) mustn't slip away by
-        // landing — loiter near the spob instead of despawning.
-        s.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
-        s.state = 'cruise'; s.fade = 1;
-      } else {
-        if (s.misnId != null && s.escort) onMissionEscortArrived(s);
-        aiShips.splice(aiShips.indexOf(s), 1);
-        if (shipTarget === s) shipTarget = null;
-        if (s.misnId == null) {
-          const epoch = systEpoch;
-          setTimeout(() => { if (epoch === systEpoch) spawnAI(Math.random() < 0.5); },
-            2000 + Math.random() * 6000);
+    } else {
+      const alive = EV.stepTrader(s, s.target);
+      // A plain trader that reaches its planet docks instantly (clean
+      // disappearance at the spob — no drawn-out ghost fade).
+      const docked = alive && !s.misnId && s.state === 'landing';
+      if (!alive || docked) {
+        if (s.misnId != null && !s.escort) {
+          // A catch-goal target (board/disable/destroy) mustn't slip away by
+          // landing — loiter near the spob instead of despawning.
+          s.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
+          s.state = 'cruise'; s.fade = 1;
+        } else {
+          if (s.misnId != null && s.escort) onMissionEscortArrived(s);
+          aiShips.splice(aiShips.indexOf(s), 1);
+          if (shipTarget === s) shipTarget = null;
+          if (s.misnId == null) {
+            const epoch = systEpoch;
+            setTimeout(() => { if (epoch === systEpoch) spawnAI(Math.random() < 0.5); },
+              2000 + Math.random() * 6000);
+          }
         }
       }
     }
@@ -1950,6 +1960,14 @@ function render() {
     const [x, y] = toScreen(s.x, s.y);
     if (x < -100 || x > w + 100 || y < -100 || y > h + 100) continue;
     if (s.deathT >= 0 && s.deathT % 4 < 2) continue; // disintegration flicker
+    if (s.warpIn > 0) {                               // hyperspace-in flash
+      const t = s.warpIn / 18, half = spriteHalf(spinOfShip(s.shipId), 24);
+      ctx.strokeStyle = `rgba(150,200,255,${t})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, half + t * 40, 0, 7); ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 1 - t;                        // fade the ship IN
+    }
     if (s.fade != null) ctx.globalAlpha = Math.max(s.fade, 0);
     if (s.disabled) ctx.globalAlpha = 0.6;
     drawSpin(ctx, spinOfShip(s.shipId), x, y, s.heading);
