@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>EV Flight</title>
+<title>Vₑ</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
     font: 13px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif; color: #cfd6e4; }
@@ -62,6 +62,10 @@
   .shoppane .row { color: #aab6cc; font-size: 12px; margin: 2px 0; }
   .shoppane .row b { color: #fff; }
   #help { position: fixed; bottom: 8px; left: 12px; color: #4d5b76; font-size: 11px; }
+  #dead { position: fixed; inset: 0; display: none; align-items: center;
+    justify-content: center; text-align: center; background: rgba(0,0,0,.6); }
+  #dead h1 { color: #e06c75; font-size: 24px; margin-bottom: 8px; }
+  #dead div { color: #ffd479; }
 </style>
 </head>
 <body>
@@ -72,7 +76,11 @@
 <div id="msg"></div>
 <div id="landed"><div class="card" id="landedCard"></div></div>
 <div id="service"><div class="card" id="serviceCard"></div></div>
-<div id="help">← → turn · ↑ thrust · ↓ retrograde · L target/land · N planets · Tab ships · Y hail · M map · J jump · Esc cancel</div>
+<div id="dead"><div>
+  <h1>Your ship has been destroyed.</h1>
+  <div>Press R to try again</div>
+</div></div>
+<div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · N/Tab target · Y hail · M map · J jump · Esc</div>
 <script>/*__ENGINE__*/</script>
 <script>
 'use strict';
@@ -152,6 +160,7 @@ function loadSystem(systId) {
     .filter(([, p]) => p.System === SYSTEM_ID)
     .map(([id, p]) => ({ id: +id, x: p.xPos, y: p.yPos, ...p }));
   aiShips = [];
+  shots = []; beams = []; explosions = [];
   navTarget = null; shipTarget = null;
   preloadSprites(spinsNeededFor(SYSTEM_ID));
   // Landscapes for this system's spobs (default 10000+Type and custom),
@@ -198,7 +207,14 @@ function spawnAI(atEdge) {
   const e = EV.makeShip(ships[shipId], Math.cos(a) * r, Math.sin(a) * r, Math.random() * 360);
   e.shipId = shipId;
   e.govt = dudes[dudeId].Govt;
+  e.aiType = dudes[dudeId].AIType;
   e.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
+  armShip(e, ships[shipId]);
+  // hostility from govt flags (spec: "Hostility")
+  const gf = e.govt >= 128 && DATA.types.govt[e.govt] && DATA.types.govt[e.govt].$sem
+    ? DATA.types.govt[e.govt].$sem.flags : [];
+  if ((gf.includes('alwaysAttacksPlayer') || gf.includes('xenophobic')) && e.aiType >= 3)
+    e.hostile = true;
   aiShips.push(e);
 }
 
@@ -211,6 +227,141 @@ let fuel = ships[playerShipId].Fuel;
 let fuelMax = ships[playerShipId].Fuel;
 let holds = ships[playerShipId].Holds;
 let landedAt = null;
+
+/* ---- combat state (spec: "Combat") ---- */
+const weaps = DATA.types.weap;
+let shots = [], beams = [], explosions = [];
+let gameOver = false;
+
+// ammo pool key for a weapon record (AmmoType 0-63 -> weapon 128+n's pool)
+const poolKey = rec => rec.AmmoType >= 0 && rec.AmmoType <= 63 ? 128 + rec.AmmoType : null;
+
+/* Give an entity combat stats + stock loadout from its shïp record. */
+function armShip(e, rec) {
+  e.shieldMax = rec.Shield; e.shields = rec.Shield;
+  e.armorMax = rec.Armor; e.armor = rec.Armor;
+  e.shieldRe = rec.ShieldRe; e.mass = Math.max(rec.Mass, 1);
+  e.deathDelay = rec.DeathDelay;
+  e.disableFrac = (rec.Flags & 0x0010) ? 0.10 : 1 / 3;
+  e.deathT = -1; e.disabled = false; e.hostile = false; e.fleeing = false;
+  e.weapons = []; e.pools = {}; e.poolCap = {};
+  for (let i = 1; i <= 4; i++) {
+    const t = rec['WeapType' + i];
+    if (t >= 128 && weaps[t]) {
+      e.weapons.push({ id: t, rec: weaps[t], n: Math.max(rec['WeapCount' + i], 1), cool: 0 });
+      const pk = poolKey(weaps[t]);
+      if (pk) {
+        e.pools[pk] = (e.pools[pk] || 0) + Math.max(rec['AmmoLoad' + i], 0);
+        e.poolCap[pk] = (e.poolCap[pk] || 0) + Math.max(rec['AmmoLoad' + i], 0);
+      }
+    }
+  }
+  return e;
+}
+
+/* Player loadout = stock + outfitter weapons/ammo (rebuilt on refit). */
+function rebuildPlayerWeapons() {
+  armShipKeepingCondition(player, effectiveShip());
+  for (const [oid, n] of Object.entries(outfits)) {
+    const o = DATA.types.outf[oid];
+    if (!o || !n || !o.$sem) continue;
+    if (o.$sem.modType === 'weapon' && weaps[o.ModVal]) {
+      const existing = player.weapons.find(w => w.id === o.ModVal);
+      if (existing) existing.n += n;
+      else player.weapons.push({ id: o.ModVal, rec: weaps[o.ModVal], n, cool: 0 });
+    } else if (o.$sem.modType === 'ammunition' && weaps[o.ModVal]) {
+      const pk = poolKey(weaps[o.ModVal]) ?? o.ModVal;
+      player.pools[pk] = (player.pools[pk] || 0) + n;
+      player.poolCap[pk] = (player.poolCap[pk] || 0) + (o.Max > 0 ? o.Max : n);
+    }
+  }
+  if (!player.weapons.some(w => w === player.selSecondary))
+    player.selSecondary = player.weapons.find(w => w.rec.MiscFlags & 2) || null;
+}
+function armShipKeepingCondition(e, s) {
+  const frac = e.shieldMax ? e.shields / e.shieldMax : 1;
+  const afrac = e.armorMax ? e.armor / e.armorMax : 1;
+  armShip(e, { ...ships[playerShipId], Shield: s.rec.Shield, Armor: s.rec.Armor });
+  e.shields = e.shieldMax * frac;
+  e.armor = e.armorMax * afrac;
+}
+
+const clampArc = (aim, base, arc) => {
+  let d = EV.norm(aim - base);
+  if (d > 180) d -= 360;
+  return EV.norm(base + Math.max(-arc, Math.min(arc, d)));
+};
+function leadAim(e, t, shotSpeed) {
+  const dist = Math.hypot(t.x - e.x, t.y - e.y);
+  const dt = shotSpeed > 0 ? dist / shotSpeed : 0;
+  return EV.bearing(t.x + t.vx * dt - e.x, t.y + t.vy * dt - e.y);
+}
+
+function fire(e, target, primary) {
+  for (const w of e.weapons) {
+    const sec = (w.rec.MiscFlags & 2) !== 0;
+    if (primary ? sec : w !== e.selSecondary) continue;
+    if (w.cool > 0) continue;
+    const g = w.rec.Guidance;
+    if (g === 99) continue; // fighter bays: a later milestone
+    const pk = poolKey(w.rec);
+    if (g === 0 || g === 3) { // beam
+      if (pk && !((e.pools[pk] || 0) > 0)) continue;
+      if (pk) e.pools[pk]--;
+      beams.push({ owner: e, rec: w.rec, life: w.rec.Count, turreted: g === 3, target });
+      w.cool = w.rec.Reload + w.rec.Count;
+      continue;
+    }
+    let fired = false;
+    for (let i = 0; i < w.n; i++) {
+      if (pk) { if ((e.pools[pk] || 0) < 1) break; e.pools[pk]--; }
+      let aim = e.heading;
+      if ((g === 1 || g === 2 || g === 4) && target) aim = leadAim(e, target, EV.shotSpeedOf(w.rec));
+      if (g === 7 || g === 8) {
+        const base = g === 7 ? e.heading : EV.norm(e.heading + 180);
+        aim = target ? clampArc(leadAim(e, target, EV.shotSpeedOf(w.rec)), base, 45) : base;
+      }
+      aim = EV.norm(aim + (Math.random() * 2 - 1) * w.rec.Inaccuracy);
+      const shot = EV.makeShot(w.rec, e, aim);
+      shot.owner = e;
+      shot.homing = (g === 1 || g === 2) ? target : null;
+      shots.push(shot);
+      fired = true;
+    }
+    if (fired) w.cool = w.rec.Reload;
+  }
+}
+
+function spawnExplosion(x, y, type) {
+  const spin = 400 + Math.max(0, Math.min(type, 2));
+  const meta = MANIFEST.spins[spin];
+  if (meta) explosions.push({ x, y, spin, f: 0, frames: meta.frames, tick: 0 });
+}
+
+function grudge(victim, attacker) {
+  if (attacker !== player || !victim.aiType) return;
+  const react = s => {
+    if (s.aiType >= 3 || s.aiType === 2) s.hostile = true;
+    else s.fleeing = true;
+  };
+  react(victim);
+  for (const s of aiShips) if (s.govt === victim.govt && s.govt >= 128) react(s);
+}
+
+function hitShip(victim, rec, heading, attacker) {
+  const result = EV.applyDamage(victim, rec);
+  const kick = rec.Impact / (10 * victim.mass);
+  victim.vx += Math.sin(EV.rad(heading)) * kick;
+  victim.vy -= Math.cos(EV.rad(heading)) * kick;
+  if (result === 'destroyed' && victim.deathT < 0) victim.deathT = Math.max(victim.deathDelay, 1);
+  else if (result === 'disabled') victim.disabled = true;
+  grudge(victim, attacker);
+}
+
+function shipHalf(e) {
+  const m = MANIFEST.spins[spinOfShip(e.shipId)];
+  return m ? Math.max(m.frameW, m.frameH) / 2 : 16;
+}
 
 /* ---- outfits (spec-adjacent; oütf ModType effects from semantics.js) ----
  * outfits: outf id -> count. Effective ship stats = base shïp record plus
@@ -245,6 +396,7 @@ function applyShipStats() {
   holds = s.holds;
   fuelMax = s.fuelMax;
   fuel = Math.min(fuel, fuelMax);
+  rebuildPlayerWeapons(); // loadout + shield/armor maxes follow the refit
 }
 
 /* jump state: null | {destId, phase:'engage'|'streak', t} */
@@ -293,6 +445,16 @@ addEventListener('keydown', e => {
   if (k === 'j') { if (mapOpen) mapOpen = false; beginJump(); }
   if (k === 'n' && !landedAt) cyclePlanetTarget();
   if (k === 'y' && !landedAt) hail();
+  if (k === 'r' && gameOver) location.reload();
+  if (k === 'q' && !landedAt) { // cycle secondary weapon
+    const secs = player.weapons.filter(w => w.rec.MiscFlags & 2);
+    if (!secs.length) { showMsg('No secondary weapons fitted.'); }
+    else {
+      const i = secs.indexOf(player.selSecondary);
+      player.selSecondary = secs[(i + 1) % secs.length];
+      showMsg(`Secondary: ${player.selSecondary.rec.name ?? 'weapon ' + player.selSecondary.id}`);
+    }
+  }
   if (e.key === 'Tab') { e.preventDefault(); if (!landedAt) cycleShipTarget(); }
   if (e.key === 'Escape') {
     if (serviceOpen) closeService();
@@ -646,6 +808,10 @@ function tryLand() {
   landedAt = p;
   player.vx = player.vy = 0;
   fuel = fuelMax; // landing refuels (spec)
+  player.shields = player.shieldMax; // ...and repairs
+  player.armor = player.armorMax;
+  player.disabled = false;
+  rebuildPlayerWeapons(); // rearm (simplification: ammo refills on landing)
   renderPlanetScreen();
   document.getElementById('landed').style.display = 'flex';
 }
@@ -660,7 +826,17 @@ function takeOff() {
 
 /* ---------------- logic step (30Hz) ---------------- */
 
+function maxWeaponRange(e) {
+  let r = 0;
+  for (const w of e.weapons)
+    if (w.rec.Guidance !== 99)
+      r = Math.max(r, w.rec.Guidance === 0 || w.rec.Guidance === 3
+        ? w.rec.Speed : EV.shotSpeedOf(w.rec) * w.rec.Count);
+  return r;
+}
+
 function step() {
+  if (gameOver) return;
   if (!landedAt) {
     if (jump && jump.phase === 'engage') {
       if (EV.stepJumpEngage(player, mapBearingTo(jump.destId)))
@@ -668,6 +844,15 @@ function step() {
     } else if (jump && jump.phase === 'streak') {
       EV.thrust(player); EV.integrate(player);
       if (++jump.t >= EV.JUMP_STREAK_FRAMES) completeJump();
+    } else if (player.disabled) {
+      EV.integrate(player); // dead in the water — classic would let you be boarded
+    } else if (player.deathT >= 0) {
+      EV.integrate(player);
+      if (--player.deathT <= 0) {
+        spawnExplosion(player.x, player.y, player.deathDelay >= 60 ? 2 : 1);
+        gameOver = true;
+        document.getElementById('dead').style.display = 'flex';
+      }
     } else {
       EV.stepPlayer(player, {
         left: keys['arrowleft'] || keys['a'],
@@ -675,16 +860,82 @@ function step() {
         retro: keys['arrowdown'] || keys['s'],
         thrust: keys['arrowup'] || keys['w'],
       });
+      EV.stepShields(player, player.shieldMax, player.shieldRe);
+      for (const w of player.weapons) if (w.cool > 0) w.cool--;
+      if (keys[' ']) fire(player, shipTarget, true);
+      if (keys['x'] && player.selSecondary) fire(player, shipTarget, false);
     }
   }
+
   for (const s of [...aiShips]) {
-    if (!EV.stepTrader(s, s.target)) {
+    if (s.deathT >= 0) {                       // disintegrating
+      EV.integrate(s);
+      if (--s.deathT <= 0) {
+        spawnExplosion(s.x, s.y, s.deathDelay >= 60 ? 2 : 1);
+        aiShips.splice(aiShips.indexOf(s), 1);
+        if (shipTarget === s) shipTarget = null;
+        const epoch = systEpoch;
+        setTimeout(() => { if (epoch === systEpoch) spawnAI(true); }, 4000 + Math.random() * 8000);
+      }
+      continue;
+    }
+    if (s.disabled) { EV.integrate(s); continue; }
+    EV.stepShields(s, s.shieldMax, s.shieldRe);
+    for (const w of s.weapons) if (w.cool > 0) w.cool--;
+    if (s.hostile && player.deathT < 0 && !gameOver && !landedAt) {
+      const r = EV.stepWarship(s, player.x, player.y);
+      if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, player, true);
+    } else if (s.fleeing) {
+      EV.stepFlee(s, player.x, player.y);
+    } else if (!EV.stepTrader(s, s.target)) {
       aiShips.splice(aiShips.indexOf(s), 1);
       if (shipTarget === s) shipTarget = null;
       const epoch = systEpoch;
       setTimeout(() => { if (epoch === systEpoch) spawnAI(Math.random() < 0.5); },
         2000 + Math.random() * 6000);
     }
+  }
+
+  /* shots */
+  const everyone = player.deathT < 0 && !landedAt && !gameOver ? [player, ...aiShips] : [...aiShips];
+  for (const shot of [...shots]) {
+    const alive = EV.stepShot(shot, shot.homing);
+    let hit = false;
+    for (const v of everyone) {
+      if (v === shot.owner || v.deathT >= 0) continue;
+      if (Math.hypot(v.x - shot.x, v.y - shot.y) <
+          Math.max(shot.rec.ProxRadius, shipHalf(v))) {
+        hitShip(v, shot.rec, shot.heading, shot.owner);
+        if (shot.rec.ExplodType >= 0) spawnExplosion(shot.x, shot.y, 0);
+        hit = true;
+        break;
+      }
+    }
+    if (hit || !alive) shots.splice(shots.indexOf(shot), 1);
+  }
+
+  /* beams: ray from owner's nose, damage first ship within 8 px */
+  for (const b of [...beams]) {
+    if (b.owner.deathT >= 0 || --b.life <= 0) { beams.splice(beams.indexOf(b), 1); continue; }
+    b.heading = b.turreted && b.target ? EV.bearing(b.target.x - b.owner.x, b.target.y - b.owner.y)
+                                       : b.owner.heading;
+    const dx = Math.sin(EV.rad(b.heading)), dy = -Math.cos(EV.rad(b.heading));
+    let bestT = Infinity, bestV = null;
+    for (const v of everyone) {
+      if (v === b.owner || v.deathT >= 0) continue;
+      const t = (v.x - b.owner.x) * dx + (v.y - b.owner.y) * dy;
+      if (t < 0 || t > b.rec.Speed) continue;
+      const px = b.owner.x + dx * t, py = b.owner.y + dy * t;
+      if (Math.hypot(v.x - px, v.y - py) < 8 + shipHalf(v) / 2 && t < bestT) { bestT = t; bestV = v; }
+    }
+    b.len = bestV ? bestT : b.rec.Speed;
+    if (bestV) hitShip(bestV, b.rec, b.heading, b.owner);
+  }
+
+  /* explosions */
+  for (const ex of [...explosions]) {
+    if (++ex.tick % 2 === 0 && ++ex.f >= ex.frames)
+      explosions.splice(explosions.indexOf(ex), 1);
   }
 }
 
@@ -798,6 +1049,11 @@ const panelImg = (() => {
     img.onerror = () => img.remove();
     document.body.appendChild(img);
   }
+  // combat sprites: every weapon graphic + the three explosion sets
+  const combatSpins = new Set([400, 401, 402]);
+  for (const w of Object.values(DATA.types.weap))
+    if (w.Graphic >= 0 && w.Graphic <= 63) combatSpins.add(200 + w.Graphic);
+  preloadSprites(combatSpins);
 }
 
 const GREEN = '#3ce052', DIMGREEN = '#1d7a2e';
@@ -833,21 +1089,24 @@ function drawPanel(w, h) {
   ctx.fillStyle = '#fff'; ctx.fillRect(rcx - 1.5, rcy - 1.5, 3, 3);
   ctx.restore();
 
-  /* shield & fuel bars (no damage model yet — shields read full) */
+  /* shield & fuel bars */
   ctx.fillStyle = GREEN;
-  ctx.fillRect(px + 60, py + 154, Math.round(74 * 1), 6);
+  ctx.fillRect(px + 60, py + 154,
+    Math.round(74 * Math.max(0, player.shields / player.shieldMax)), 6);
   ctx.fillRect(px + 60, py + 170, Math.round(74 * (fuel / fuelMax)), 6);
 
-  /* message box */
-  if (lastMsg) {
-    const words = lastMsg.split(' ');
-    let line = '', lines = [];
-    for (const wd of words) {
-      if (ctx.measureText(line + ' ' + wd).width > 120 && line) { lines.push(line); line = wd; }
-      else line += (line ? ' ' : '') + wd;
-    }
-    lines.push(line);
-    lines.slice(0, 3).forEach((l, i) => panelText(px + 9, py + 202 + i * 11, l));
+  /* secondary weapon display (classic behavior — not a message mirror) */
+  const sw = player.selSecondary;
+  if (sw) {
+    const pk = poolKey(sw.rec);
+    panelText(px + 9, py + 202, sw.rec.name ?? 'weapon ' + sw.id);
+    if (pk != null) {
+      const cur = player.pools[pk] || 0, cap = player.poolCap[pk] || 0;
+      panelText(px + 9, py + 214, `Ammo: ${cur}${cap > 0 ? '/' + cap : ''}`,
+        cur > 0 ? GREEN : '#e06c75');
+    } else panelText(px + 9, py + 214, 'Ready', DIMGREEN);
+  } else {
+    panelText(px + 9, py + 202, 'No secondary', DIMGREEN);
   }
 
   /* status strip: hyperspace destination */
@@ -864,7 +1123,10 @@ function drawPanel(w, h) {
       ? DATA.types.govt[shipTarget.govt].name : 'Independent';
     panelText(tb.x + tb.w / 2, tb.y + 86, ships[shipTarget.shipId].name, '#fff', 'center');
     panelText(tb.x + tb.w / 2, tb.y + 98, govtName, radarColor(shipTarget.govt), 'center');
-    panelText(tb.x + tb.w / 2, tb.y + 110, `Shields 100% · ${Math.round(distTo(shipTarget))}px`, GREEN, 'center');
+    const shp = Math.round(100 * Math.max(0, shipTarget.shields) / shipTarget.shieldMax);
+    panelText(tb.x + tb.w / 2, tb.y + 110,
+      shipTarget.disabled ? 'DISABLED' : `Shields ${shp}% · ${Math.round(distTo(shipTarget))}px`,
+      shipTarget.disabled ? '#e06c75' : GREEN, 'center');
   } else if (navTarget) {
     drawSpin(ctx, spinOfSpob(navTarget), tb.x + tb.w / 2, tb.y + 44, 0);
     panelText(tb.x + tb.w / 2, tb.y + 98, navTarget.name, '#fff', 'center');
@@ -968,16 +1230,51 @@ function render() {
   for (const s of aiShips) {
     const [x, y] = toScreen(s.x, s.y);
     if (x < -100 || x > w + 100 || y < -100 || y > h + 100) continue;
+    if (s.deathT >= 0 && s.deathT % 4 < 2) continue; // disintegration flicker
     if (s.fade != null) ctx.globalAlpha = Math.max(s.fade, 0);
+    if (s.disabled) ctx.globalAlpha = 0.6;
     drawSpin(ctx, spinOfShip(s.shipId), x, y, s.heading);
     drawFlame(s, x, y);
     ctx.globalAlpha = 1;
     if (s === shipTarget)
-      drawBrackets(x, y, spriteHalf(spinOfShip(s.shipId), 32), 'rgba(255,212,121,.9)');
+      drawBrackets(x, y, spriteHalf(spinOfShip(s.shipId), 32),
+        s.hostile ? 'rgba(224,108,117,.9)' : 'rgba(255,212,121,.9)');
   }
-  if (!landedAt) {
+  if (!landedAt && !gameOver && !(player.deathT >= 0 && player.deathT % 4 < 2)) {
     drawSpin(ctx, spinOfShip(player.shipId), w / 2, h / 2, player.heading);
     drawFlame(player, w / 2, h / 2);
+  }
+
+  /* shots, beams, explosions */
+  const BEAM_COLORS = { '-2': '#ff5050', '-3': '#50ff70', '-4': '#5080ff',
+    '-5': '#50ffff', '-6': '#ff50ff', '-7': '#ffff50' };
+  for (const b of beams) {
+    const [x1, y1] = toScreen(b.owner.x, b.owner.y);
+    const a = EV.rad(b.heading), len = b.len ?? b.rec.Speed;
+    ctx.strokeStyle = BEAM_COLORS[b.rec.Graphic] || '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x1 + Math.sin(a) * len, y1 - Math.cos(a) * len);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+  for (const shot of shots) {
+    const [x, y] = toScreen(shot.x, shot.y);
+    if (x < -40 || x > w + 40 || y < -40 || y > h + 40) continue;
+    const spin = 200 + shot.rec.Graphic;
+    if (MANIFEST.spins[spin]) drawSpin(ctx, spin, x, y, shot.heading);
+    else { ctx.fillStyle = '#fff'; ctx.fillRect(x - 1, y - 1, 2, 2); }
+  }
+  for (const ex of explosions) {
+    const [x, y] = toScreen(ex.x, ex.y);
+    const meta = MANIFEST.spins[ex.spin];
+    const s = sprites.get(ex.spin);
+    if (!s || !s.ready) continue;
+    const fi = Math.min(ex.f, meta.frames - 1);
+    ctx.drawImage(s.img, (fi % meta.xTiles) * meta.frameW,
+      Math.floor(fi / meta.xTiles) * meta.frameH, meta.frameW, meta.frameH,
+      x - meta.frameW / 2, y - meta.frameH / 2, meta.frameW, meta.frameH);
   }
   drawPanel(w, h);
   if (mapOpen) drawMap(w, h);
@@ -998,7 +1295,9 @@ function render() {
 
 /* ---------------- main loop ---------------- */
 
+applyShipStats(); // arm the player (stats + loadout + shield/armor maxes)
 loadSystem(SYSTEM_ID);
+if (params.has('fire')) keys[' '] = true; // test affordance: hold the trigger
 
 // Test/dev affordances (mirror the SDL flags): ?map=1 opens the map,
 // ?dest=<systId> preselects a destination, ?jump=1 engages the jump

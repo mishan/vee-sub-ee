@@ -26,12 +26,24 @@ if (jsOut.samples.length !== cppOut.samples.length) {
 for (let i = 0; i < nSamples; i++) {
   const a = jsOut.samples[i], b = cppOut.samples[i];
   for (let e = 0; e < a.entities.length; e++)
-    for (const k of ['x', 'y', 'vx', 'vy', 'heading']) {
+    for (const k of ['x', 'y', 'vx', 'vy', 'heading', 'shields', 'armor']) {
+      if (!(k in a.entities[e])) continue;
       const d = Math.abs(a.entities[e][k] - b.entities[e][k]);
       checked++;
       worst = Math.max(worst, d);
       if (d > TOL && failures++ < 10)
         console.error(`frame ${a.frame} entity ${e} ${k}: js=${a.entities[e][k]} cpp=${b.entities[e][k]} (Δ${d.toExponential(2)})`);
+    }
+  const as = a.shots || [], bs = b.shots || [];
+  if (as.length !== bs.length && failures++ < 10)
+    console.error(`frame ${a.frame}: shot count js=${as.length} cpp=${bs.length}`);
+  for (let s = 0; s < Math.min(as.length, bs.length); s++)
+    for (const k of ['x', 'y']) {
+      const d = Math.abs(as[s][k] - bs[s][k]);
+      checked++;
+      worst = Math.max(worst, d);
+      if (d > TOL && failures++ < 10)
+        console.error(`frame ${a.frame} shot ${s} ${k}: Δ${d.toExponential(2)}`);
     }
 }
 console.log(`${checked} values compared, worst Δ = ${worst.toExponential(2)}, tolerance ${TOL}`);

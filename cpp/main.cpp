@@ -1,4 +1,6 @@
-// evflight — C++/SDL2 leg of the Escape Velocity engine.
+// evflight — C++/SDL2 leg of V_e (pron. "vee-sub-e"), the Escape Velocity
+// engine reimplementation. (V_e: the physics symbol for escape velocity —
+// and EV backwards.)
 //
 // Feature parity with flight_template.html (the browser leg): Game Panel
 // HUD (PICT 128), targeting/hails, fog-of-war galaxy map, hyperjump,
@@ -21,6 +23,7 @@
 #include <cstdio>
 #include <fstream>
 #include <functional>
+#include <list>
 #include <map>
 #include <random>
 #include <set>
@@ -52,6 +55,8 @@ static double norm360(double d) { d = std::fmod(d, 360.0); return d < 0 ? d + 36
 
 struct Spob; // fwd
 
+struct Weapon { int id{}; const json* rec = nullptr; int n = 1, cool = 0; };
+
 struct Entity {
   int shipId{}; double x{}, y{}, vx{}, vy{}, heading{};
   double maxSpeed{}, accel{}, turn{};
@@ -60,6 +65,15 @@ struct Entity {
   const Spob* target = nullptr;
   enum { CRUISE, BRAKE, LANDING } state = CRUISE;
   double fade = 1.0;
+  /* combat */
+  double shields = 0, shieldMax = 0, armor = 0, armorMax = 0;
+  double disableFrac = 1.0 / 3.0, mass = 50;
+  int shieldT = 0, shieldRe = 0, deathDelay = 30, deathT = -1, aiType = 0;
+  bool disabled = false, hostile = false, fleeing = false;
+  std::vector<Weapon> weapons;
+  std::map<int, int> pools;    // ammo pools: 128+AmmoType -> rounds
+  std::map<int, int> poolCap;  // pool capacity (stock AmmoLoad + ammo-outfit Max)
+  int selSecondary = -1;      // weapon id
 };
 
 static std::mt19937 rng(std::random_device{}());
@@ -138,6 +152,83 @@ static void evPlaceAtTakeoff(Entity& s, double px, double py) {
   s.x = px; s.y = py - 40; s.heading = 0; s.vx = 0; s.vy = -0.4;
 }
 
+/* ---- combat core: MUST mirror engine/core.js (spec: "Combat") ---- */
+
+constexpr double HOMING_TURN = 3.0;
+constexpr int ROCKET_ACCEL_DIV = 15;
+
+struct Shot {
+  int guidance{}; double x{}, y{}, vx{}, vy{}, heading{}, speed{};
+  double massDmg{}, energyDmg{}, impact{}, proxRadius{};
+  int life{}, graphic = -1, explodType = -1;
+  Entity* owner = nullptr; Entity* homing = nullptr;
+};
+
+static Shot evMakeShot(const json& rec, const Entity& sh, double aim) {
+  int g = (int)rec["Guidance"].get<double>();
+  bool ff = g == 5;
+  double heading = ff ? sh.heading : norm360(aim);
+  double sp = rec["Speed"].get<double>() / 100.0;
+  double mv = (ff || g == 6) ? 0 : sp;
+  Shot s;
+  s.guidance = g; s.x = sh.x; s.y = sh.y; s.heading = heading;
+  s.vx = sh.vx * (ff ? 0.8 : 1) + std::sin(d2r(heading)) * mv;
+  s.vy = sh.vy * (ff ? 0.8 : 1) - std::cos(d2r(heading)) * mv;
+  s.speed = sp;
+  s.life = (int)rec["Count"].get<double>();
+  s.massDmg = rec.value("MassDmg", 0.0); s.energyDmg = rec.value("EnergyDmg", 0.0);
+  s.impact = rec.value("Impact", 0.0); s.proxRadius = rec.value("ProxRadius", 0.0);
+  s.graphic = (int)rec.value("Graphic", -1.0);
+  s.explodType = (int)rec.value("ExplodType", -1.0);
+  return s;
+}
+
+static bool evStepShot(Shot& s, const Entity* t) {
+  if ((s.guidance == 1 || s.guidance == 2) && t) {
+    double diff = norm360(evBearing(t->x - s.x, t->y - s.y) - s.heading);
+    if (diff > 180) diff -= 360;
+    s.heading = norm360(s.heading + std::clamp(diff, -HOMING_TURN, HOMING_TURN));
+    s.vx = std::sin(d2r(s.heading)) * s.speed;
+    s.vy = -std::cos(d2r(s.heading)) * s.speed;
+  } else if (s.guidance == 6) {
+    double acc = s.speed / ROCKET_ACCEL_DIV;
+    s.vx += std::sin(d2r(s.heading)) * acc;
+    s.vy -= std::cos(d2r(s.heading)) * acc;
+    double v = std::hypot(s.vx, s.vy);
+    if (v > s.speed) { s.vx *= s.speed / v; s.vy *= s.speed / v; }
+  }
+  s.x += s.vx; s.y += s.vy;
+  return --s.life > 0;
+}
+
+enum class Hit { SHIELDED, HIT, DISABLED, DESTROYED };
+static Hit evApplyDamage(Entity& st, double massDmg, double energyDmg) {
+  bool up = st.shields > 0;
+  double dmg = std::max(1.0, up ? massDmg / 4 + energyDmg : massDmg + energyDmg / 4);
+  if (up) { st.shields = std::max(0.0, st.shields - dmg); return Hit::SHIELDED; }
+  st.armor -= dmg;
+  if (st.armor <= 0) return Hit::DESTROYED;
+  if (st.armor <= st.armorMax * st.disableFrac) return Hit::DISABLED;
+  return Hit::HIT;
+}
+
+static void evStepShields(Entity& st, double mx, int re) {
+  if (st.shields >= mx || re <= 0) return;
+  if (++st.shieldT >= re) { st.shieldT = 0; st.shields = std::min(mx, st.shields + mx / 100); }
+}
+
+static void evStepWarship(Entity& s, double ex, double ey, bool& aligned, double& dist) {
+  dist = std::hypot(ex - s.x, ey - s.y);
+  aligned = evSteer(s, evBearing(ex - s.x, ey - s.y));
+  if ((dist > 260 && aligned) || dist < 120) evThrust(s);
+  evIntegrate(s);
+}
+static void evStepFlee(Entity& s, double ex, double ey) {
+  bool aligned = evSteer(s, norm360(evBearing(ex - s.x, ey - s.y) + 180));
+  if (aligned) evThrust(s);
+  evIntegrate(s);
+}
+
 /* ================= golden-trace mode ================= */
 
 static int runTrace(const std::string& path) {
@@ -156,17 +247,27 @@ static int runTrace(const std::string& path) {
     t.e.turn = st["Maneuver"].get<double>();
     t.e.x = je["x"]; t.e.y = je["y"];
     t.e.heading = norm360(je["heading"].get<double>());
+    t.e.shields = t.e.shieldMax = st.value("Shield", 0.0);
+    t.e.armor = t.e.armorMax = st.value("Armor", 0.0);
+    t.e.mass = st.value("Mass", 50.0);
+    t.e.shieldRe = (int)st.value("ShieldRe", 0.0);
     t.kind = je["kind"];
     if (je.contains("script")) t.script = je["script"];
     if (je.contains("target")) { t.hasTarget = true; t.tx = je["target"]["x"]; t.ty = je["target"]["y"]; }
     ents.push_back(std::move(t));
   }
+  constexpr double TRACE_HIT_RADIUS = 12;
+  struct TShot { Shot s; int ownerIdx, homingIdx; };
+  std::vector<TShot> shots;
   json samples = json::array();
   auto sample = [&](int fr) {
     json list = json::array();
     for (auto& t : ents)
-      list.push_back({{"x", t.e.x}, {"y", t.e.y}, {"vx", t.e.vx}, {"vy", t.e.vy}, {"heading", t.e.heading}});
-    samples.push_back({{"frame", fr}, {"entities", list}});
+      list.push_back({{"x", t.e.x}, {"y", t.e.y}, {"vx", t.e.vx}, {"vy", t.e.vy},
+                      {"heading", t.e.heading}, {"shields", t.e.shields}, {"armor", t.e.armor}});
+    json sl = json::array();
+    for (auto& sh : shots) sl.push_back({{"x", sh.s.x}, {"y", sh.s.y}});
+    samples.push_back({{"frame", fr}, {"entities", list}, {"shots", sl}});
   };
   sample(0);
   for (int fr = 1; fr <= frames; fr++) {
@@ -182,6 +283,35 @@ static int runTrace(const std::string& path) {
         evStepPlayer(t.e, c);
       } else if (t.active) t.active = evStepTrader(t.e, t.hasTarget, t.tx, t.ty);
     }
+    if (sc.contains("shots"))
+      for (auto& scs : sc["shots"])
+        if (scs["frame"].get<int>() == fr) {
+          TShot ts{ evMakeShot(scs["weapon"], ents[scs["shooter"].get<int>()].e,
+                               scs["aim"].get<double>()),
+                    scs["shooter"].get<int>(), (int)scs.value("homingTarget", -1.0) };
+          shots.push_back(ts);
+        }
+    for (size_t i = 0; i < shots.size();) {
+      TShot& ts = shots[i];
+      bool alive = evStepShot(ts.s, ts.homingIdx >= 0 ? &ents[ts.homingIdx].e : nullptr);
+      bool hit = false;
+      for (size_t k = 0; k < ents.size(); k++) {
+        if ((int)k == ts.ownerIdx) continue;
+        Entity& v = ents[k].e;
+        if (std::hypot(v.x - ts.s.x, v.y - ts.s.y) <
+            std::max(ts.s.proxRadius, TRACE_HIT_RADIUS)) {
+          evApplyDamage(v, ts.s.massDmg, ts.s.energyDmg);
+          double kick = ts.s.impact / (10 * v.mass);
+          v.vx += std::sin(d2r(ts.s.heading)) * kick;
+          v.vy -= std::cos(d2r(ts.s.heading)) * kick;
+          hit = true;
+          break;
+        }
+      }
+      if (hit || !alive) shots.erase(shots.begin() + i);
+      else i++;
+    }
+    for (auto& t : ents) evStepShields(t.e, t.e.shieldMax, t.e.shieldRe);
     if (fr % every == 0) sample(fr);
   }
   std::printf("%s\n", json({{"samples", samples}}).dump().c_str());
@@ -401,7 +531,7 @@ struct Game {
   int systId = 128;
   json syst;
   std::vector<Spob> spobs;
-  std::vector<Entity> ai;
+  std::list<Entity> ai;
   std::set<int> explored;
   int pendingSpawns = 0;
 
@@ -413,6 +543,15 @@ struct Game {
   std::map<int,int> outfits;
   double fuel = 400, fuelMax = 400;
   int holds = 20;
+
+  /* combat state */
+  std::vector<Shot> shots;
+  struct Beam { Entity* owner; const json* rec; int life; bool turreted;
+                Entity* target; double heading = 0, len = 0; };
+  std::vector<Beam> beams;
+  struct Expl { double x, y; int spin, f, frames, tick; };
+  std::vector<Expl> explosions;
+  bool gameOver = false, fireHeld = false;
 
   /* ui state */
   const Spob* landedAt = nullptr;
@@ -451,6 +590,158 @@ struct Game {
     }
     return e;
   }
+  /* ---- combat helpers (mirror the browser shell) ---- */
+  static int poolKeyOf(const json& rec) {
+    int a = (int)rec["AmmoType"].get<double>();
+    return (a >= 0 && a <= 63) ? 128 + a : -1;
+  }
+  void armShip(Entity& e, const json& rec) {
+    e.shieldMax = e.shields = num(rec, "Shield");
+    e.armorMax = e.armor = num(rec, "Armor");
+    e.shieldRe = (int)num(rec, "ShieldRe");
+    e.mass = std::max(num(rec, "Mass"), 1.0);
+    e.deathDelay = (int)num(rec, "DeathDelay");
+    e.disableFrac = ((int)rec.value("Flags", 0.0) & 0x0010) ? 0.10 : 1.0 / 3.0; // classic shïp has no Flags field
+    e.deathT = -1; e.disabled = e.hostile = e.fleeing = false;
+    e.shieldT = 0;
+    e.weapons.clear(); e.pools.clear(); e.poolCap.clear();
+    for (int i = 1; i <= 4; i++) {
+      int t = (int)num(rec, ("WeapType" + std::to_string(i)).c_str());
+      if (t >= 128 && !data.rec("weap", t).is_null()) {
+        e.weapons.push_back({ t, &data.rec("weap", t),
+          std::max((int)num(rec, ("WeapCount" + std::to_string(i)).c_str()), 1), 0 });
+        int pk = poolKeyOf(data.rec("weap", t));
+        if (pk >= 0) {
+          int load = std::max((int)num(rec, ("AmmoLoad" + std::to_string(i)).c_str()), 0);
+          e.pools[pk] += load;
+          e.poolCap[pk] += load;
+        }
+      }
+    }
+  }
+  void rebuildPlayerWeapons() {
+    Eff s = effective();
+    double sf = player.shieldMax > 0 ? player.shields / player.shieldMax : 1;
+    double af = player.armorMax > 0 ? player.armor / player.armorMax : 1;
+    json merged = data.ship(playerShipId);
+    merged["Shield"] = s.shield; merged["Armor"] = s.armor;
+    armShip(player, merged);
+    player.shields = player.shieldMax * sf;
+    player.armor = player.armorMax * af;
+    for (auto& [oid, n] : outfits) {
+      if (!n) continue;
+      auto& o = data.outf(oid);
+      std::string mt = o["$sem"]["modType"].is_string() ? o["$sem"]["modType"].get<std::string>() : "";
+      int mv = (int)num(o, "ModVal");
+      if (mt == "weapon" && !data.rec("weap", mv).is_null()) {
+        bool found = false;
+        for (auto& w : player.weapons) if (w.id == mv) { w.n += n; found = true; }
+        if (!found) player.weapons.push_back({ mv, &data.rec("weap", mv), n, 0 });
+      } else if (mt == "ammunition" && !data.rec("weap", mv).is_null()) {
+        int pk = poolKeyOf(data.rec("weap", mv));
+        int key = pk >= 0 ? pk : mv;
+        player.pools[key] += n;
+        int mx = (int)num(o, "Max");
+        player.poolCap[key] += mx > 0 ? mx : n;
+      }
+    }
+    bool selOk = false;
+    for (auto& w : player.weapons)
+      if (w.id == player.selSecondary && ((int)num(*w.rec, "MiscFlags") & 2)) selOk = true;
+    if (!selOk) {
+      player.selSecondary = -1;
+      for (auto& w : player.weapons)
+        if ((int)num(*w.rec, "MiscFlags") & 2) { player.selSecondary = w.id; break; }
+    }
+  }
+  double leadAim(const Entity& e, const Entity& t, double shotSpeed) {
+    double dist = std::hypot(t.x - e.x, t.y - e.y);
+    double dt = shotSpeed > 0 ? dist / shotSpeed : 0;
+    return evBearing(t.x + t.vx * dt - e.x, t.y + t.vy * dt - e.y);
+  }
+  static double clampArc(double aim, double base, double arc) {
+    double d = norm360(aim - base);
+    if (d > 180) d -= 360;
+    return norm360(base + std::clamp(d, -arc, arc));
+  }
+  void spawnExplosion(double x, double y, int type) {
+    int spin = 400 + std::clamp(type, 0, 2);
+    auto it = spins.find(spin);
+    if (it != spins.end()) explosions.push_back({ x, y, spin, 0, it->second.frames, 0 });
+  }
+  void grudge(Entity& victim, Entity* attacker) {
+    if (attacker != &player || victim.aiType == 0) return;
+    auto react = [](Entity& s) {
+      if (s.aiType >= 3 || s.aiType == 2) s.hostile = true; else s.fleeing = true;
+    };
+    react(victim);
+    for (auto& s : ai) if (s.govt == victim.govt && s.govt >= 128) react(s);
+  }
+  double shipHalf(const Entity& e) {
+    auto it = spins.find(128 + (e.shipId - 128));
+    return it != spins.end() ? std::max(it->second.frameW, it->second.frameH) / 2.0 : 16;
+  }
+  void hitShip(Entity& v, const Shot& s) {
+    Hit r = evApplyDamage(v, s.massDmg, s.energyDmg);
+    double kick = s.impact / (10 * v.mass);
+    v.vx += std::sin(d2r(s.heading)) * kick;
+    v.vy -= std::cos(d2r(s.heading)) * kick;
+    if (s.explodType >= 0) spawnExplosion(s.x, s.y, 0);
+    if (r == Hit::DESTROYED && v.deathT < 0) v.deathT = std::max(v.deathDelay, 1);
+    else if (r == Hit::DISABLED) v.disabled = true;
+    grudge(v, s.owner);
+  }
+  double maxWeaponRange(const Entity& e) {
+    double r = 0;
+    for (auto& w : e.weapons) {
+      int g = (int)num(*w.rec, "Guidance");
+      if (g == 99) continue;
+      r = std::max(r, (g == 0 || g == 3) ? num(*w.rec, "Speed")
+                                         : num(*w.rec, "Speed") / 100.0 * num(*w.rec, "Count"));
+    }
+    return r;
+  }
+  void fire(Entity& e, Entity* target, bool primary) {
+    for (auto& w : e.weapons) {
+      bool sec = ((int)num(*w.rec, "MiscFlags") & 2) != 0;
+      if (primary ? sec : w.id != e.selSecondary) continue;
+      if (w.cool > 0) continue;
+      int g = (int)num(*w.rec, "Guidance");
+      if (g == 99) continue;
+      int pk = poolKeyOf(*w.rec);
+      if (g == 0 || g == 3) {
+        if (pk >= 0 && e.pools[pk] < 1) continue;
+        if (pk >= 0) e.pools[pk]--;
+        beams.push_back({ &e, w.rec, (int)num(*w.rec, "Count"), g == 3, target });
+        w.cool = (int)(num(*w.rec, "Reload") + num(*w.rec, "Count"));
+        continue;
+      }
+      bool fired = false;
+      for (int i = 0; i < w.n; i++) {
+        if (pk >= 0) { if (e.pools[pk] < 1) break; e.pools[pk]--; }
+        double aim = e.heading;
+        double sp = num(*w.rec, "Speed") / 100.0;
+        if ((g == 1 || g == 2 || g == 4) && target) aim = leadAim(e, *target, sp);
+        if (g == 7 || g == 8) {
+          double base = g == 7 ? e.heading : norm360(e.heading + 180);
+          aim = target ? clampArc(leadAim(e, *target, sp), base, 45) : base;
+        }
+        aim = norm360(aim + (frand() * 2 - 1) * num(*w.rec, "Inaccuracy"));
+        Shot s = evMakeShot(*w.rec, e, aim);
+        s.owner = &e;
+        s.homing = (g == 1 || g == 2) ? target : nullptr;
+        shots.push_back(s);
+        fired = true;
+      }
+      if (fired) w.cool = (int)num(*w.rec, "Reload");
+    }
+  }
+  void forgetEntity(Entity* e) {
+    if (shipTarget == e) shipTarget = nullptr;
+    for (auto& s : shots) { if (s.owner == e) s.owner = nullptr; if (s.homing == e) s.homing = nullptr; }
+    for (auto& b : beams) { if (b.owner == e) b.life = 0; if (b.target == e) b.target = nullptr; }
+  }
+
   void applyStats() {
     Eff e = effective();
     player.maxSpeed = e.speed / kMaxSpeedDiv;
@@ -458,6 +749,7 @@ struct Game {
     player.turn = e.turn;
     holds = e.holds; fuelMax = e.fuelMax;
     fuel = std::min(fuel, fuelMax);
+    rebuildPlayerWeapons();
   }
   int cargoUsed() const { int n = 0; for (int c : cargo) n += c; return n; }
   int priceAt(const Spob& p, int i) const {
@@ -482,6 +774,7 @@ struct Game {
     explored.insert(id);
     spobs = spobsOf(data, id);
     ai.clear();
+    shots.clear(); beams.clear(); explosions.clear();
     shipTarget = nullptr; navTarget = nullptr;
     int want = std::clamp(syst["AvgShips"].get<int>(), 2, 8);
     for (int i = 0; i < want; i++) spawnAI(false);
@@ -520,7 +813,17 @@ struct Game {
     e.accel = num(rec,"Accel") / kAccelDiv;
     e.turn = num(rec,"Maneuver");
     e.dudeId = dudeId; e.govt = dude["Govt"];
+    e.aiType = (int)dude["AIType"].get<double>();
     e.target = spobs.empty() ? nullptr : &spobs[(size_t)(frand() * spobs.size())];
+    armShip(e, rec);
+    if (e.govt >= 128 && e.aiType >= 3 && data.has("govt", e.govt)) {
+      auto& gs = data.rec("govt", e.govt);
+      if (gs.contains("$sem") && gs["$sem"]["flags"].is_array())
+        for (auto& f : gs["$sem"]["flags"]) {
+          std::string fn = f.get<std::string>();
+          if (fn == "alwaysAttacksPlayer" || fn == "xenophobic") e.hostile = true;
+        }
+    }
     ai.push_back(e);
   }
 
@@ -582,6 +885,10 @@ struct Game {
     landedAt = p;
     player.vx = player.vy = 0;
     fuel = fuelMax;
+    player.shields = player.shieldMax;
+    player.armor = player.armorMax;
+    player.disabled = false;
+    rebuildPlayerWeapons(); // rearm (ammo refills on landing — simplification)
   }
   void takeOff() {
     if (!landedAt) return;
@@ -673,6 +980,14 @@ struct Game {
       } else if (jump.active) {
         evThrust(player); evIntegrate(player);
         if (++jump.t >= JUMP_STREAK_FRAMES) completeJump();
+      } else if (player.disabled) {
+        evIntegrate(player);
+      } else if (player.deathT >= 0) {
+        evIntegrate(player);
+        if (--player.deathT <= 0) {
+          spawnExplosion(player.x, player.y, player.deathDelay >= 60 ? 2 : 1);
+          gameOver = true;
+        }
       } else {
         Controls c;
         c.left  = keys[SDL_SCANCODE_LEFT]  || keys[SDL_SCANCODE_A];
@@ -680,23 +995,99 @@ struct Game {
         c.retro = keys[SDL_SCANCODE_DOWN]  || keys[SDL_SCANCODE_S];
         c.thrust = (keys[SDL_SCANCODE_UP]  || keys[SDL_SCANCODE_W]) || forceThrust;
         evStepPlayer(player, c);
+        evStepShields(player, player.shieldMax, player.shieldRe);
+        for (auto& w : player.weapons) if (w.cool > 0) w.cool--;
+        if (keys[SDL_SCANCODE_SPACE] || fireHeld) fire(player, shipTarget, true);
+        if (keys[SDL_SCANCODE_X] && player.selSecondary >= 0) fire(player, shipTarget, false);
       }
     }
     if (pendingSpawns > 0 && frand() < 0.01) { pendingSpawns--; spawnAI(frand() < 0.5); }
-    for (size_t i = 0; i < ai.size();) {
-      Entity& s = ai[i];
-      bool alive = evStepTrader(s, s.target != nullptr,
-        s.target ? s.target->x : 0, s.target ? s.target->y : 0);
-      if (!alive) {
-        if (shipTarget == &s) shipTarget = nullptr;
-        // vector erase invalidates pointers: re-aim shipTarget by index
-        size_t ti = shipTarget ? (size_t)(shipTarget - ai.data()) : SIZE_MAX;
-        ai.erase(ai.begin() + i);
-        if (ti != SIZE_MAX && ti < ai.size() + 1) shipTarget = ti > i ? &ai[ti - 1] : (ti < ai.size() + 1 && ti != i ? &ai[ti] : nullptr);
+
+    for (auto it = ai.begin(); it != ai.end();) {
+      Entity& s = *it;
+      if (s.deathT >= 0) {
+        evIntegrate(s);
+        if (--s.deathT <= 0) {
+          spawnExplosion(s.x, s.y, s.deathDelay >= 60 ? 2 : 1);
+          forgetEntity(&s);
+          it = ai.erase(it);
+          pendingSpawns++;
+          continue;
+        }
+        ++it; continue;
+      }
+      if (s.disabled) { evIntegrate(s); ++it; continue; }
+      evStepShields(s, s.shieldMax, s.shieldRe);
+      for (auto& w : s.weapons) if (w.cool > 0) w.cool--;
+      if (s.hostile && player.deathT < 0 && !gameOver && !landedAt) {
+        bool aligned; double dist;
+        evStepWarship(s, player.x, player.y, aligned, dist);
+        if (aligned && dist < maxWeaponRange(s)) fire(s, &player, true);
+      } else if (s.fleeing) {
+        evStepFlee(s, player.x, player.y);
+      } else if (!evStepTrader(s, s.target != nullptr,
+                   s.target ? s.target->x : 0, s.target ? s.target->y : 0)) {
+        forgetEntity(&s);
+        it = ai.erase(it);
         pendingSpawns++;
         continue;
       }
+      ++it;
+    }
+
+    /* shots */
+    bool playerVulnerable = player.deathT < 0 && !landedAt && !gameOver;
+    for (size_t i = 0; i < shots.size();) {
+      Shot& sh = shots[i];
+      bool alive = evStepShot(sh, sh.homing);
+      bool hit = false;
+      auto tryHit = [&](Entity& v) {
+        if (hit || &v == sh.owner || v.deathT >= 0) return;
+        if (std::hypot(v.x - sh.x, v.y - sh.y) < std::max(sh.proxRadius, shipHalf(v))) {
+          hitShip(v, sh);
+          hit = true;
+        }
+      };
+      if (playerVulnerable) tryHit(player);
+      for (auto& v : ai) tryHit(v);
+      if (hit || !alive) shots.erase(shots.begin() + i);
+      else i++;
+    }
+
+    /* beams */
+    for (size_t i = 0; i < beams.size();) {
+      Beam& b = beams[i];
+      if (!b.owner || b.owner->deathT >= 0 || --b.life <= 0) { beams.erase(beams.begin() + i); continue; }
+      b.heading = (b.turreted && b.target)
+        ? evBearing(b.target->x - b.owner->x, b.target->y - b.owner->y)
+        : b.owner->heading;
+      double dx = std::sin(d2r(b.heading)), dy = -std::cos(d2r(b.heading));
+      double range = num(*b.rec, "Speed");
+      double bestT = 1e18; Entity* bestV = nullptr;
+      auto trace = [&](Entity& v) {
+        if (&v == b.owner || v.deathT >= 0) return;
+        double t = (v.x - b.owner->x) * dx + (v.y - b.owner->y) * dy;
+        if (t < 0 || t > range) return;
+        double px = b.owner->x + dx * t, py = b.owner->y + dy * t;
+        if (std::hypot(v.x - px, v.y - py) < 8 + shipHalf(v) / 2 && t < bestT) { bestT = t; bestV = &v; }
+      };
+      if (playerVulnerable) trace(player);
+      for (auto& v : ai) trace(v);
+      b.len = bestV ? bestT : range;
+      if (bestV) {
+        Hit r = evApplyDamage(*bestV, num(*b.rec, "MassDmg"), num(*b.rec, "EnergyDmg"));
+        if (r == Hit::DESTROYED && bestV->deathT < 0) bestV->deathT = std::max(bestV->deathDelay, 1);
+        else if (r == Hit::DISABLED) bestV->disabled = true;
+        grudge(*bestV, b.owner);
+      }
       i++;
+    }
+
+    /* explosions */
+    for (size_t i = 0; i < explosions.size();) {
+      Expl& ex = explosions[i];
+      if (++ex.tick % 2 == 0 && ++ex.f >= ex.frames) explosions.erase(explosions.begin() + i);
+      else i++;
     }
   }
 };
@@ -814,21 +1205,25 @@ struct Renderer {
 
     /* bars */
     SDL_SetRenderDrawColor(REN, GREEN.r, GREEN.g, GREEN.b, 255);
-    SDL_Rect sb{px+60, py+154, 74, 6}; SDL_RenderFillRect(REN, &sb);
+    SDL_Rect sb{px+60, py+154,
+      (int)std::lround(74 * std::max(0.0, g.player.shieldMax > 0 ? g.player.shields / g.player.shieldMax : 0)), 6};
+    SDL_RenderFillRect(REN, &sb);
     SDL_Rect fb{px+60, py+170, (int)std::lround(74 * (g.fuel / g.fuelMax)), 6}; SDL_RenderFillRect(REN, &fb);
 
-    /* message box */
-    if (g.msgTtl > 0 && !g.message.empty()) {
-      std::string ww = wrap(g.message, 16);
-      int line = 0;
-      size_t pos = 0;
-      while (pos != std::string::npos && line < 3) {
-        size_t nl = ww.find('\n', pos);
-        drawText(px+9, py+195 + line*11, ww.substr(pos, nl == std::string::npos ? nl : nl-pos), GREEN);
-        pos = nl == std::string::npos ? nl : nl+1;
-        line++;
-      }
-    }
+    /* secondary weapon display (classic behavior — not a message mirror) */
+    if (g.player.selSecondary >= 0) {
+      auto& wr = g.data.rec("weap", g.player.selSecondary);
+      drawText(px+9, py+198, wr["name"].is_string() ? asciify(wr["name"].get<std::string>())
+                                                    : "weapon " + std::to_string(g.player.selSecondary), GREEN);
+      int pk = Game::poolKeyOf(wr);
+      if (pk >= 0) {
+        int cur = g.player.pools.count(pk) ? g.player.pools.at(pk) : 0;
+        int cap = g.player.poolCap.count(pk) ? g.player.poolCap.at(pk) : 0;
+        drawText(px+9, py+210, "Ammo: " + std::to_string(cur) +
+          (cap > 0 ? "/" + std::to_string(cap) : ""),
+          cur > 0 ? GREEN : SDL_Color{224,108,117,255});
+      } else drawText(px+9, py+210, "Ready", DGREEN);
+    } else drawText(px+9, py+198, "No secondary", DGREEN);
 
     /* strip: dest / system */
     std::string strip = g.jump.active
@@ -848,7 +1243,10 @@ struct Renderer {
         : "Independent";
       drawTextC(tcx, ty + 80, nm, WHITE);
       drawTextC(tcx, ty + 92, gv, govtColor(g.shipTarget->govt));
-      drawTextC(tcx, ty + 104, "Shields 100%", GREEN);
+      int shp = (int)std::lround(100 * std::max(0.0, g.shipTarget->shields) /
+        std::max(g.shipTarget->shieldMax, 1.0));
+      if (g.shipTarget->disabled) drawTextC(tcx, ty + 104, "DISABLED", {224,108,117,255});
+      else drawTextC(tcx, ty + 104, "Shields " + std::to_string(shp) + "%", GREEN);
     } else if (g.navTarget) {
       drawSpin(spobSpin(*g.navTarget), tcx, ty + 44, 0);
       drawTextC(tcx, ty + 92, g.navTarget->name, WHITE);
@@ -1108,19 +1506,53 @@ struct Renderer {
     for (auto& s : g.ai) {
       double x = sx(s.x), y = sy(s.y);
       if (x < -100 || x > w+100 || y < -100 || y > h+100) continue;
+      if (s.deathT >= 0 && s.deathT % 4 < 2) continue; // disintegration flicker
       Tex* t = tex.get(spinPath(shipSpin(s.shipId)));
       if (t && s.state == Entity::LANDING) SDL_SetTextureAlphaMod(t->t, (Uint8)(255*std::max(s.fade,0.0)));
+      if (t && s.disabled) SDL_SetTextureAlphaMod(t->t, 150);
       drawSpin(shipSpin(s.shipId), x, y, s.heading);
       if (t) SDL_SetTextureAlphaMod(t->t, 255);
       auto it = g.spins.find(shipSpin(s.shipId));
       drawFlame(s, x, y, it != g.spins.end() ? it->second.frameH : 24);
       if (&s == g.shipTarget)
-        drawBrackets(x, y, spinHalf(shipSpin(s.shipId), 32), {255,212,121,230});
+        drawBrackets(x, y, spinHalf(shipSpin(s.shipId), 32),
+          s.hostile ? SDL_Color{224,108,117,230} : SDL_Color{255,212,121,230});
     }
-    if (!g.landedAt) {
+    if (!g.landedAt && !g.gameOver && !(g.player.deathT >= 0 && g.player.deathT % 4 < 2)) {
       drawSpin(shipSpin(g.playerShipId), w/2.0, h/2.0, g.player.heading);
       auto it = g.spins.find(shipSpin(g.playerShipId));
       drawFlame(g.player, w/2.0, h/2.0, it != g.spins.end() ? it->second.frameH : 24);
+    }
+
+    /* beams, shots, explosions */
+    for (auto& b : g.beams) {
+      static const std::map<int, SDL_Color> BC = {
+        {-2,{255,80,80,255}},{-3,{80,255,112,255}},{-4,{80,128,255,255}},
+        {-5,{80,255,255,255}},{-6,{255,80,255,255}},{-7,{255,255,80,255}}};
+      int gcode = (int)g.num(*b.rec, "Graphic");
+      SDL_Color c = BC.count(gcode) ? BC.at(gcode) : SDL_Color{255,255,255,255};
+      SDL_SetRenderDrawColor(REN, c.r, c.g, c.b, 255);
+      double a = d2r(b.heading), len = b.len > 0 ? b.len : g.num(*b.rec, "Speed");
+      double x1 = sx(b.owner->x), y1 = sy(b.owner->y);
+      SDL_RenderDrawLine(REN, (int)x1, (int)y1,
+        (int)(x1 + std::sin(a) * len), (int)(y1 - std::cos(a) * len));
+    }
+    for (auto& shp : g.shots) {
+      double x = sx(shp.x), y = sy(shp.y);
+      if (x < -40 || x > w+40 || y < -40 || y > h+40) continue;
+      int spin = 200 + shp.graphic;
+      if (g.spins.count(spin)) drawSpin(spin, x, y, shp.heading);
+      else { SDL_SetRenderDrawColor(REN,255,255,255,255); SDL_Rect d{(int)x-1,(int)y-1,2,2}; SDL_RenderFillRect(REN,&d); }
+    }
+    for (auto& ex : g.explosions) {
+      auto it = g.spins.find(ex.spin);
+      Tex* t = tex.get(spinPath(ex.spin));
+      if (it == g.spins.end() || !t) continue;
+      const SpinMeta& m = it->second;
+      int fi = std::min(ex.f, m.frames - 1);
+      SDL_Rect srcr{ (fi % m.xTiles) * m.frameW, (fi / m.xTiles) * m.frameH, m.frameW, m.frameH };
+      SDL_Rect dst{ (int)(sx(ex.x) - m.frameW/2.0), (int)(sy(ex.y) - m.frameH/2.0), m.frameW, m.frameH };
+      SDL_RenderCopy(REN, t->t, &srcr, &dst);
     }
     drawPanel(w, h);
 
@@ -1150,8 +1582,13 @@ struct Renderer {
       else if (g.service == "outfitter") drawShop(w, h, false);
       else if (g.service == "shipyard") drawShop(w, h, true);
     }
+    if (g.gameOver) {
+      dim(w, h, 150);
+      drawTextC(w/2, h/2 - 20, "Your ship has been destroyed.", {224,108,117,255}, 2);
+      drawTextC(w/2, h/2 + 8, "Press R to try again", GOLD);
+    }
     drawText(12, h-18,
-      "arrows/wasd fly  down retro  L target/land  N planets  Tab ships  Y hail  M map  J jump  Esc",
+      "arrows fly  Space fire  Q/X secondary  L land  N/Tab target  Y hail  M map  J jump  Esc",
       {77,91,118,255});
   }
 };
@@ -1161,7 +1598,7 @@ struct Renderer {
 int main(int argc, char** argv) {
   int systId = 128, shipId = 128, shotFrames = -1, destArg = -1;
   bool forceThrust = false, fMap = false, fJump = false, fLand = false,
-       fTab = false, fNav = false;
+       fTab = false, fNav = false, fFire = false;
   std::string fService;
   double px = 0, py = 300, ph = 0;
   std::string root = ".", shotPath;
@@ -1185,6 +1622,7 @@ int main(int argc, char** argv) {
     else if (a == "--exchange" || a == "--outfitter" || a == "--shipyard") fService = a.substr(2);
     else if (a == "--tab") fTab = true;
     else if (a == "--nav") fNav = true;
+    else if (a == "--fire") fFire = true;
     else { std::fprintf(stderr, "unknown arg %s\n", a.c_str()); return 1; }
   }
 
@@ -1199,7 +1637,7 @@ int main(int argc, char** argv) {
   g.fuel = g.fuelMax;
 
   SDL_Init(SDL_INIT_VIDEO);
-  SDL_Window* win = SDL_CreateWindow("EV (SDL)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+  SDL_Window* win = SDL_CreateWindow("V_e (SDL)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
     WIN_W, WIN_H, 0);
   REN = SDL_CreateRenderer(win, -1,
     shotPath.empty() ? SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC : SDL_RENDERER_SOFTWARE);
@@ -1215,6 +1653,7 @@ int main(int argc, char** argv) {
   if (!fService.empty()) g.service = fService;
   if (fTab) g.cycleShip();
   if (fNav) g.cyclePlanet();
+  g.fireHeld = fFire;
 
   bool quit = false;
   Uint64 lastMs = SDL_GetTicks64();
@@ -1233,6 +1672,29 @@ int main(int argc, char** argv) {
       if (ev.type == SDL_KEYDOWN && !ev.key.repeat) {
         SDL_Keycode k = ev.key.keysym.sym;
         if (k == SDLK_l) g.tryLand();
+        else if (k == SDLK_r && g.gameOver) {           // restart
+          g.gameOver = false;
+          g.credits = 10000;
+          for (int& c : g.cargo) c = 0;
+          g.outfits.clear();
+          g.playerShipId = g.player.shipId = shipId;
+          g.applyStats();
+          g.player.x = 0; g.player.y = 300; g.player.heading = 0;
+          g.player.vx = g.player.vy = 0;
+          g.loadSystem(systId);
+          g.fuel = g.fuelMax;
+        }
+        else if (k == SDLK_q && !g.landedAt) {          // cycle secondary
+          std::vector<int> secs;
+          for (auto& w : g.player.weapons)
+            if ((int)g.num(*w.rec, "MiscFlags") & 2) secs.push_back(w.id);
+          if (secs.empty()) g.showMsg("No secondary weapons fitted.");
+          else {
+            auto it2 = std::find(secs.begin(), secs.end(), g.player.selSecondary);
+            g.player.selSecondary = secs[(it2 == secs.end() ? 0 : (it2 - secs.begin() + 1)) % secs.size()];
+            g.showMsg("Secondary: " + asciify(g.data.rec("weap", g.player.selSecondary)["name"].get<std::string>()));
+          }
+        }
         else if (k == SDLK_m) g.mapOpen = !g.mapOpen;
         else if (k == SDLK_j) { if (g.mapOpen) g.mapOpen = false; g.beginJump(); }
         else if (k == SDLK_n && !g.landedAt) g.cyclePlanet();

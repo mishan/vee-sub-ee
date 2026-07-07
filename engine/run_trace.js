@@ -13,8 +13,16 @@ const ents = scenario.entities.map(e => {
   const s = EV.makeShip(
     { Speed: e.stats.Speed, Accel: e.stats.Accel, Maneuver: e.stats.Maneuver },
     e.x, e.y, e.heading);
+  s.shields = e.stats.Shield || 0;
+  s.shieldMax = e.stats.Shield || 0;
+  s.armor = e.stats.Armor || 0;
+  s.armorMax = e.stats.Armor || 0;
+  s.mass = e.stats.Mass || 50;
+  s.shieldRe = e.stats.ShieldRe || 0;
   return { s, kind: e.kind, script: e.script || [], target: e.target || null, active: true };
 });
+const TRACE_HIT_RADIUS = 12;
+const shots = [];
 
 function controlsAt(script, frame) {
   for (const seg of script)
@@ -26,15 +34,47 @@ function controlsAt(script, frame) {
 const samples = [];
 const sample = frame => samples.push({
   frame,
-  entities: ents.map(({ s }) => ({ x: s.x, y: s.y, vx: s.vx, vy: s.vy, heading: s.heading })),
+  entities: ents.map(({ s }) => ({ x: s.x, y: s.y, vx: s.vx, vy: s.vy,
+    heading: s.heading, shields: s.shields, armor: s.armor })),
+  shots: shots.map(sh => ({ x: sh.x, y: sh.y })),
 });
 
 sample(0);
 for (let fr = 1; fr <= scenario.frames; fr++) {
+  // 1. entities move
   for (const e of ents) {
     if (e.kind === 'player') EV.stepPlayer(e.s, controlsAt(e.script, fr));
     else if (e.active) e.active = EV.stepTrader(e.s, e.target);
   }
+  // 2. scheduled shots fire
+  for (const sc of scenario.shots || [])
+    if (sc.frame === fr) {
+      const shot = EV.makeShot(sc.weapon, ents[sc.shooter].s, sc.aim);
+      shot.ownerIdx = sc.shooter;
+      shot.homingIdx = sc.homingTarget ?? -1;
+      shots.push(shot);
+    }
+  // 3. shots step and collide (fixed 12 px trace hit radius)
+  for (const shot of [...shots]) {
+    const alive = EV.stepShot(shot, shot.homingIdx >= 0 ? ents[shot.homingIdx].s : null);
+    let hit = false;
+    for (let i = 0; i < ents.length; i++) {
+      if (i === shot.ownerIdx) continue;
+      const v = ents[i].s;
+      if (Math.hypot(v.x - shot.x, v.y - shot.y) <
+          Math.max(shot.rec.ProxRadius, TRACE_HIT_RADIUS)) {
+        EV.applyDamage(v, shot.rec);
+        const kick = shot.rec.Impact / (10 * v.mass);
+        v.vx += Math.sin(EV.rad(shot.heading)) * kick;
+        v.vy -= Math.cos(EV.rad(shot.heading)) * kick;
+        hit = true;
+        break;
+      }
+    }
+    if (hit || !alive) shots.splice(shots.indexOf(shot), 1);
+  }
+  // 4. shields regen
+  for (const e of ents) EV.stepShields(e.s, e.s.shieldMax, e.s.shieldRe);
   if (fr % scenario.sampleEvery === 0) sample(fr);
 }
 process.stdout.write(JSON.stringify({ samples }) + '\n');

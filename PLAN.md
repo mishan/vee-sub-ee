@@ -1,4 +1,4 @@
-# Escape Velocity engine — project plan
+# Vₑ (Escape Velocity engine) — project plan
 
 Goal: clean-room engine that plays classic EV from user-supplied original
 data files. Data layer stays engine-agnostic JSON; platform (C++/SDL vs
@@ -95,12 +95,27 @@ browser) deliberately undecided until sprites are on screen.
   asserts on missing keys ($sem.prices omits untraded commodities) — all
   lookups go through find()-based helpers now.
 
+- **Milestone: combat** (both legs, spec'd + golden-traced). Bible-exact
+  damage model (shields up: Mass/4+Energy; down: Mass+Energy/4; min 1;
+  disabled at ⅓ armor, flag 0x10 → 10%), shield regen (1%/ShieldRe
+  frames), projectiles with inherited velocity (unguided/turret/quadrant/
+  homing @3°/frame/freefall/rocket), beams, ammo pools (AmmoType), stock
+  loadouts + outfitter weapons/ammo, Impact knockback, ExplodType
+  explosions (spïns 400-402), DeathDelay disintegration, warship AI
+  (charge/fly-by/fire-in-range), trader flee/brave reactions, govt
+  hostility (xenophobic/alwaysAttacksPlayer) + player grudges, player
+  death + restart. Panel: real shield bar, target shields %/DISABLED,
+  secondary weapon pane (name + ammo available/capacity — classic
+  behavior, replacing an incorrect message mirror). Golden trace now
+  covers shots, damage, kick, and regen: 959 values, worst Δ 6.75e-13.
+  Deferred: fighter bays (g99), BlastRadius area damage, boarding,
+  friendly-fire between AI ships, bööm/öops sounds.
+
 ## Next
 
-1. **Combat**: wëap stats + shïp Weap slots are decoded, the target
-   display already shows shields — projectiles, damage model (shield →
-   armor → disabled/boom via bööm/öops), düde warship AI, and the
-   outfitter's weapons becoming real. This is the big one.
+1. **Audio** (Misha's pick): weapons already carry Sound IDs (snd
+   200+n), explosions/jump/landing have classic sounds in evassets/sounds
+   (8-bit 11kHz WAVs). Browser: WebAudio; SDL: SDL audio or SDL_mixer.
 2. **Distribution loader** (see README "Distribution"): data-free hosted
    page that accepts a user-built asset bundle (zip of evdata.json +
    evassets), cached client-side. Add an `evexport --bundle` command.
