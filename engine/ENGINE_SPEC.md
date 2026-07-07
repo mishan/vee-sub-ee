@@ -76,6 +76,21 @@ Eligible: nearest spob with `$sem.canLand`, distance < 60 px, and
 `(spob.x, spob.y − 40)`, heading 0, **velocity 0** (launch stationary,
 not drifting). Landing refuels the ship to capacity (see Hyperjump).
 
+**While docked the sim is paused** (the shell's `step()` no-ops when
+`landedAt`), so the system freezes behind the landing screen instead of
+running on. **Takeoff rebuilds the system** (`loadSystem`): the ships that
+were present when you landed are gone and a fresh ambient population +
+mission ships are spawned — matching the original, where the world is
+repopulated each time you launch. (Shell behavior; SDL leg deferred.)
+
+## Time controls (shell; browser leg)
+
+**Caps Lock toggles double speed** (classic EV), read off keyboard events'
+`getModifierState('CapsLock')` since it's a toggle, not a held key. The
+fixed-step loop runs two sim ticks per real tick while on (a `» 2×`
+indicator shows). It only changes how many `step()`s run per frame, not the
+per-step math, so the flight core and golden trace are untouched.
+
 ## Hyperjump
 
 - Fuel: raw shïp `Fuel` field; **one jump costs 100** (classic: 100 = one
