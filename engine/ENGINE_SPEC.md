@@ -466,14 +466,18 @@ date. The date follows classic EV — real date + 250 years at pilot creation,
 When no pilot is loaded (no save) the viewscreen reads **"No Pilot file
 loaded"** instead.
 
-Title music (snd 30000, in the music/ set) plays through the **Web Audio API**:
-the file is fetched and `decodeAudioData`'d up front, and the first splash
-gesture `resume()`s the AudioContext (which is what reliably unlocks audio on
-mobile) and starts the pre-decoded buffer — so the theme begins on the loading
-screen, not on a later menu tap (HTMLAudio's first-gesture `play()` raced the
-file load and stayed silent). It loops through the menu at `0.7·masterVol` via
-a GainNode and stops on entering the game. (Sound effects keep using HTMLAudio;
-they unlock once gameplay begins.) Any test-param run (see Persistence) skips
+Title music (snd 30000, in the music/ set) prefers the **Web Audio API**: the
+file is fetched and `decodeAudioData`'d up front, and the first splash gesture
+`resume()`s the AudioContext (the reliable mobile unlock) and starts the
+pre-decoded buffer — so the theme begins on the loading screen, not on a later
+menu tap. Because some mobile browsers only honour `resume()` from a
+pointerup/touchend/click (not the splash's pointerdown), the unlock is armed on
+every gesture type until the context runs. Some desktop browsers' decode
+**rejects the classic 8-bit PCM WAV**, so on decode failure (or where Web Audio
+is absent) it **falls back to an HTMLAudio element**, which every browser plays;
+the same gesture unlock drives both. Volume tracks `0.7·masterVol`; the theme
+stops on entering the game. (Sound effects keep using HTMLAudio; they unlock
+once gameplay begins.) Any test-param run (see Persistence) skips
 the intro so headless screenshots go straight to the game; `?title`/`?splash`
 force the splash, `?titlemenu` jumps to the menu.
 

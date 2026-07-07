@@ -544,6 +544,7 @@ function setVolume(delta) {
   for (const a of [ambientSnd, warpSnd])
     if (a) a.volume = Math.min((a._baseVol ?? 1) * masterVol, 1);
   if (titleGain) titleGain.gain.value = titleVol();
+  if (titleAudioEl) titleAudioEl.volume = titleVol();
   showMsg(`Volume ${Math.round(masterVol * 100)}%`);
   playSnd(150, 0.6); // audible reference beep at the new level
 }
@@ -570,13 +571,14 @@ function loopSnd(id, vol = 1) {
 }
 const stopSnd = a => { if (a) { a.pause(); a.currentTime = 0; } };
 
-/* Title theme (snd 30000) via the Web Audio API. HTMLAudio's first-gesture
- * play() raced the file load on mobile and stayed silent until a later tap;
- * Web Audio is reliable because resuming the AudioContext *inside* a user
- * gesture unlocks audio, and a pre-decoded buffer then plays instantly — so
- * the theme starts on the very first splash tap. (Sound effects keep using
- * HTMLAudio; they unlock once gameplay begins.) Volume via a GainNode. */
-let audioCtx = null, titleBuffer = null, titleSource = null, titleGain = null, musicWanted = false;
+/* Title theme (snd 30000). Prefer Web Audio — resuming the AudioContext inside
+ * a gesture is the reliable mobile unlock, and a pre-decoded buffer plays
+ * instantly on the first splash tap. But some desktop browsers' decodeAudioData
+ * rejects the classic 8-bit PCM WAV; when decode fails (or Web Audio is absent)
+ * fall back to an HTMLAudio element, which every browser plays. Either path is
+ * driven by the same gesture unlock (armAudioUnlock). Effects stay on HTMLAudio. */
+let audioCtx = null, titleBuffer = null, titleSource = null, titleGain = null;
+let titleAudioEl = null, musicWanted = false;
 function ensureAudioCtx() {
   if (!audioCtx) {
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -585,36 +587,51 @@ function ensureAudioCtx() {
   return audioCtx;
 }
 const titleVol = () => Math.min(0.7 * masterVol, 1);
-// Decode the theme up front so it's ready the instant a gesture unlocks audio.
-// Skipped in test mode (the intro is bypassed) and where Web Audio is absent,
-// so headless/scripted runs stay fast and deterministic.
-if (!TEST_MODE && (window.AudioContext || window.webkitAudioContext)) {
-  fetch('evassets/music/snd_30000.wav')
-    .then(r => r.arrayBuffer())
-    .then(buf => ensureAudioCtx() ? audioCtx.decodeAudioData(buf) : Promise.reject())
-    .then(b => { titleBuffer = b; if (musicWanted) startTitleMusic(); })
-    .catch(() => {});
+const musicPlaying = () => !!titleSource || (titleAudioEl && !titleAudioEl.paused);
+function useHtmlAudioFallback() {
+  audioCtx = null; titleBuffer = null;         // give up on Web Audio for the theme
+  titleAudioEl = new Audio('evassets/music/snd_30000.wav');
+  titleAudioEl.loop = true;
+  if (musicWanted) startTitleMusic();
+}
+// Prepare the theme up front (skipped in test mode; the intro is bypassed).
+if (!TEST_MODE) {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (AC) {
+    fetch('evassets/music/snd_30000.wav')
+      .then(r => r.arrayBuffer())
+      .then(buf => ensureAudioCtx().decodeAudioData(buf))
+      .then(b => { titleBuffer = b; if (musicWanted) startTitleMusic(); })
+      .catch(useHtmlAudioFallback);            // e.g. 8-bit WAV desktop decode fails
+  } else {
+    useHtmlAudioFallback();
+  }
 }
 function startTitleMusic() {
   if (!soundOn || masterVol <= 0 || !introUp()) return;
   musicWanted = true;
-  const ctx = ensureAudioCtx();
-  if (!ctx) return;
-  if (ctx.state === 'suspended') ctx.resume();  // unlock inside the gesture
-  if (titleSource || !titleBuffer) return;      // already playing, or decode pending
-  titleGain = ctx.createGain();
-  titleGain.gain.value = titleVol();
-  titleGain.connect(ctx.destination);
-  titleSource = ctx.createBufferSource();
-  titleSource.buffer = titleBuffer;
-  titleSource.loop = true;
-  titleSource.connect(titleGain);
-  titleSource.start();
+  if (titleBuffer && audioCtx) {                // Web Audio path
+    if (audioCtx.state === 'suspended') audioCtx.resume(); // unlock inside the gesture
+    if (titleSource) return;                    // already playing
+    titleGain = audioCtx.createGain();
+    titleGain.gain.value = titleVol();
+    titleGain.connect(audioCtx.destination);
+    titleSource = audioCtx.createBufferSource();
+    titleSource.buffer = titleBuffer;
+    titleSource.loop = true;
+    titleSource.connect(titleGain);
+    titleSource.start();
+  } else if (titleAudioEl) {                     // HTMLAudio fallback
+    titleAudioEl.volume = titleVol();
+    titleAudioEl.play().catch(() => {});
+  }
+  // neither ready yet → the decode/fallback handler will call us again
 }
 function stopTitleMusic() {
   musicWanted = false;
   if (titleSource) { try { titleSource.stop(); } catch {} try { titleSource.disconnect(); } catch {} titleSource = null; }
   if (titleGain) { try { titleGain.disconnect(); } catch {} titleGain = null; }
+  if (titleAudioEl) { titleAudioEl.pause(); titleAudioEl.currentTime = 0; }
 }
 /* Some mobile browsers only honour AudioContext.resume() from certain gesture
  * types (a pointerup/touchend/click — not the pointerdown the splash advances
@@ -626,9 +643,9 @@ function armAudioUnlock() {
   audioUnlockArmed = true;
   const evs = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
   const tryUnlock = () => {
-    startTitleMusic();                        // resumes the ctx + starts the buffer
-    // stop listening once audio is running, or once we've left the intro
-    if ((audioCtx && audioCtx.state === 'running') || !introUp()) {
+    startTitleMusic();                        // resumes the ctx / plays the theme
+    // stop listening once the theme is playing, or once we've left the intro
+    if (musicPlaying() || !introUp()) {
       for (const e of evs) removeEventListener(e, tryUnlock, true);
       audioUnlockArmed = false;
     }
