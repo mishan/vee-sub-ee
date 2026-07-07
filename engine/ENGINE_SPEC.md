@@ -409,6 +409,40 @@ and no saving, so headless runs never touch a real pilot. Death: R
 returns to the last landing (reload restores the save), N abandons the
 pilot and starts fresh; `?new=1` does the same from a URL.
 
+## Title screen (shell responsibility; browser leg)
+
+On a normal load the boot sequence echoes the original: a **loading splash**
+(PICT 131 in EV Titles) with a blinking "Press any key to continue" comes up
+first. The first key or pointer gesture unlocks audio (browser autoplay
+policy) and starts the title theme, the prompt becomes "Loading…", and after
+a short beat the splash fades to reveal the **title menu** (PICT 8000), which
+fades/scales in. (Classic's Ambrosia-logo intro is intentionally skipped.)
+
+The title menu is shown over the already-initialised game as a full-screen
+overlay, and the sim is paused until the player chooses an option. The splash
+and title are treated like a modal: while either is up the sim is frozen and
+every gameplay hotkey is swallowed (any key merely advances the splash), so
+the game can't be driven behind the overlay. The art carries its own baked
+menu labels; the shell places transparent hotspots over them:
+
+- **New Pilot** — erases the saved pilot (after confirmation) and reloads
+  fresh (Levo, Shuttlecraft, 10 000 cr).
+- **Open Pilot** / **Enter Ship** — dismiss the title and resume the
+  loaded pilot (docked at the saved spöb, or a fresh start if none). Open
+  Pilot is dimmed when no save exists.
+- **Set Prefs** — toggles sound.
+- **About EV…** — shows the STR# 20000 intro text plus a clean-room note.
+- **Quit EV** — no-op in the browser (note to close the tab).
+
+The central viewscreen shows the player ship's spin sheet slowly rotating,
+echoing the original's animated panel. Title music (snd 30000, in the
+music/ set) loops from the splash gesture through the menu and tracks
+`masterVol`/`soundOn` like every other loop. Because `play()` is async,
+stopping the music re-pauses once the play promise settles, so entering the
+game never leaves the theme bleeding into flight. Any test-param run (see
+Persistence) skips the intro so headless screenshots go straight to the
+game; `?title`/`?splash` force the splash, `?titlemenu` jumps to the menu.
+
 ## Sprite ID conventions (from the EV bible, see semantics.js)
 
 ship spïn = 128 + (shïp − 128); stellar spïn = 300 + spöb.Type;

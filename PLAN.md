@@ -185,15 +185,29 @@ browser) deliberately undecided until sprites are on screen.
   record-gated missions were previously mishandled (rating-gated ones were
   always hidden; record-gated ones unchecked). Verified across all cases.
 
+- **Milestone: title screen + music** (browser). Boot sequence echoes the
+  original: a loading splash (PICT 131) with "Press any key to continue" →
+  first gesture unlocks/starts the theme → brief hold → fade to the classic
+  PICT 8000 menu (which fades in). Menu is a full-screen overlay; sim paused
+  and gameplay hotkeys swallowed while splash/title is up. Transparent
+  hotspots over the baked labels (New/Open Pilot, Enter Ship, Set Prefs,
+  About, Quit); player ship rotates in the centre viewscreen; STR# 20000
+  intro text behind About. Title theme (snd 30000, music/ set) loops from
+  the splash gesture, race-safe on stop so it never bleeds into flight.
+  Test params skip the intro; `?title`/`?splash` force the splash,
+  `?titlemenu` the menu. Spec: "Title screen". Verified via headless
+  screenshots + a scripted flow harness (key-swallow, gesture-started music,
+  splash→title advance, sim paused, enter stops music).
+
 ## Next
 
 1. **Distribution loader** (deferred per Misha; see README "Distribution"):
    data-free hosted page that accepts a user-built asset bundle (zip of
    evdata.json + evassets), cached client-side. Add `evexport --bundle`.
 2. **Also open**: SDL parity catch-up (audio, combat UI, missions, legal
-   record), real Mac pilot-file read/write via `buildFork`, title screen +
-   music, ship-offered missions (AvailLoc 2, needs hail integration),
-   fighter bays (weap g99 + Voice Targ sound).
+   record), real Mac pilot-file read/write via `buildFork`, ship-offered
+   missions (AvailLoc 2, needs hail integration), fighter bays (weap g99 +
+   Voice Targ sound).
 
 ## Notes
 
