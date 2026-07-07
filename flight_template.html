@@ -959,8 +959,16 @@ function demandSurrender(s) {
   if (!s.disabled) { hailSay(pickFrom(3002, 7, 9) || 'Surrender? To you? Ha!'); return; }
   const loot = 500 + Math.floor(Math.random() * 2000);
   credits += loot;
-  hailSay(`You plunder the disabled ship. (+${loot.toLocaleString('en-US')} cr)`);
+  // same consequences as boarding: it's piracy, and the ship is gone once
+  // plundered (was repeatable free loot, and left defenders "in the fight").
+  commitCrime(s.govt, penaltyOf(s.govt, 'BoardPenalty'));
+  const i = aiShips.indexOf(s);
+  if (i >= 0) aiShips.splice(i, 1);
+  if (shipTarget === s) shipTarget = null;
+  checkDefenseCleared(s.defOf, s);
+  showMsg(`You plunder the disabled ship. (+${loot.toLocaleString('en-US')} cr)`);
   playSnd(150, 0.5);
+  closeHail();
 }
 
 function renderHail() {
