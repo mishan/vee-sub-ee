@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Vₑ</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
@@ -120,10 +123,74 @@
   #about p { color: #aab6cc; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
   #about button { margin-top: 14px; background: #1a2338; color: #cfd6e4;
     border: 1px solid #2a3550; border-radius: 4px; padding: 6px 14px; cursor: pointer; }
+
+  /* ---- touch controls (mobile only; shown when body.touch) ---- */
+  #touch { display: none; }
+  body.touch #touch { display: block; }
+  /* the whole layer ignores pointers; only its interactive children opt back in */
+  #touch { position: fixed; inset: 0; z-index: 40; touch-action: none; pointer-events: none; }
+  #touchJoyZone { position: fixed; left: 0; top: 0; bottom: 0; right: 38%;
+    pointer-events: auto; touch-action: none; }     /* left-thumb steering area */
+  body.touch.no-fly #touch { display: none; }        /* hidden off the flight screen */
+  #touch > *:not(#touchJoyZone) { pointer-events: auto; }
+  /* while the galaxy map is up, hide joystick+fire so canvas taps pick a system */
+  #touch.map #touchJoyZone, #touch.map #touchFire,
+  #touch.map #touchJoyBase, #touch.map #touchJoyKnob { display: none; pointer-events: none; }
+  /* floating joystick: base + knob drawn where the thumb lands */
+  #touchJoyBase, #touchJoyKnob { position: fixed; border-radius: 50%; display: none;
+    pointer-events: none; opacity: .5; }
+  #touchJoyBase { width: 132px; height: 132px; margin: -66px 0 0 -66px;
+    border: 2px solid rgba(150,190,255,.55); background: rgba(120,160,220,.10); }
+  #touchJoyKnob { width: 60px; height: 60px; margin: -30px 0 0 -30px;
+    border: 2px solid rgba(180,210,255,.8); background: rgba(150,190,255,.30); }
+  #touch.on #touchJoyBase, #touch.on #touchJoyKnob { display: block; }
+  /* fire button, bottom-right but clear of the 144px sidebar panel */
+  #touchFire { position: fixed; right: 158px; bottom: 20px; width: 90px; height: 90px;
+    border-radius: 50%; border: 2px solid rgba(255,120,120,.55);
+    background: rgba(220,70,70,.14); color: rgba(255,190,190,.85);
+    font: 600 15px/90px system-ui, sans-serif; text-align: center; letter-spacing: .05em;
+    opacity: .55; transition: opacity .15s, background .1s; user-select: none; }
+  #touchFire.press { opacity: 1; background: rgba(220,70,70,.4); }
+  /* always-on mini action bar, top-centre, single row */
+  #touchBar { position: fixed; top: 6px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 4px; padding: 4px; border-radius: 10px; flex-wrap: nowrap;
+    background: rgba(8,14,26,.5); backdrop-filter: blur(2px); }
+  #touchBar button { min-width: 42px; height: 36px; padding: 0 7px; border-radius: 7px;
+    border: 1px solid rgba(90,120,170,.4); background: rgba(26,35,56,.7); color: #cfd6e4;
+    font: 600 12px system-ui, sans-serif; user-select: none; opacity: .85; }
+  #touchBar button:active { background: rgba(60,90,140,.85); opacity: 1; }
+  /* keyboard hint bar is meaningless on touch */
+  body.touch #help { display: none; }
+  /* rotate-to-landscape nudge (portrait on a touch device) */
+  #rotate { display: none; position: fixed; inset: 0; z-index: 70; background: #05070d;
+    color: #9fb4d8; align-items: center; justify-content: center; text-align: center;
+    font-size: 16px; padding: 24px; }
+  body.touch.portrait #rotate { display: flex; }
+  #rotate .glyph { font-size: 46px; display: block; margin-bottom: 14px;
+    animation: rotateHint 2s ease-in-out infinite; }
+  @keyframes rotateHint { 0%,60% { transform: rotate(0); } 80%,100% { transform: rotate(-90deg); } }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
+<div id="touch">
+  <div id="touchJoyZone"></div>
+  <div id="touchJoyBase"></div>
+  <div id="touchJoyKnob"></div>
+  <div id="touchFire">FIRE</div>
+  <div id="touchBar">
+    <button data-act="target">Tgt</button>
+    <button data-act="nav">Nav</button>
+    <button data-act="land">Land</button>
+    <button data-act="board">Board</button>
+    <button data-act="hail">Hail</button>
+    <button data-act="map">Map</button>
+    <button data-act="jump">Jump</button>
+    <button data-act="missions">Msn</button>
+    <button data-act="sound">♪</button>
+  </div>
+</div>
+<div id="rotate"><div><span class="glyph">▭</span>Rotate your device to landscape to play Vₑ.</div></div>
 <div id="hud"></div>
 <div id="target"></div>
 <div id="prompt"></div>
@@ -800,6 +867,11 @@ function completeJump() {
 /* ---------------- input ---------------- */
 
 const keys = {};
+/* Touch control state (mobile). The joystick doesn't drive the engine
+ * directly — it synthesizes the same left/right/thrust the keyboard produces
+ * (see step's player branch), so the flight core and golden trace are
+ * untouched. touchHeading is the absolute facing the stick points at. */
+const touchCtl = { steer: false, heading: 0, thrust: false, fire: false };
 addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   // Splash/title overlays pause the sim; swallow every gameplay hotkey so the
@@ -852,6 +924,108 @@ addEventListener('keydown', e => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
 });
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+/* ---------------- touch controls (mobile) ----------------
+ * A floating joystick (left thumb) synthesizes the same left/right/thrust the
+ * keyboard produces, a Fire button holds the trigger, and an always-on mini
+ * bar reaches the secondary actions. Shown only on touch devices (or forced
+ * with ?mobile=1; ?mobile=0 forces off) and only while actually flying. */
+const TOUCH = params.has('mobile')
+  ? params.get('mobile') !== '0'
+  : (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window ||
+     navigator.maxTouchPoints > 0);
+const touchEl = document.getElementById('touch');
+const joyBase = document.getElementById('touchJoyBase');
+const joyKnob = document.getElementById('touchJoyKnob');
+const JOY_MAX = 60;      // px the knob travels from the origin
+const JOY_DEAD = 0.22;   // fraction of radius before steering engages
+const JOY_THRUST = 0.55; // fraction before the engine burns
+let joyId = null, joyOX = 0, joyOY = 0;
+
+function updateJoyKnob(x, y) {
+  let dx = x - joyOX, dy = y - joyOY;
+  const len = Math.hypot(dx, dy) || 1;
+  if (len > JOY_MAX) { dx *= JOY_MAX / len; dy *= JOY_MAX / len; }
+  joyKnob.style.left = (joyOX + dx) + 'px';
+  joyKnob.style.top = (joyOY + dy) + 'px';
+  const frac = Math.min(len / JOY_MAX, 1);
+  touchCtl.steer = frac > JOY_DEAD;
+  if (touchCtl.steer) touchCtl.heading = EV.bearing(dx, dy); // up (−y) = heading 0
+  touchCtl.thrust = frac > JOY_THRUST;
+}
+function releaseJoy() {
+  joyId = null; touchEl.classList.remove('on');
+  touchCtl.steer = false; touchCtl.thrust = false;
+}
+function touchAction(act) {
+  switch (act) {
+    case 'target': cycleShipTarget(); break;
+    case 'nav': cyclePlanetTarget(); break;
+    case 'land': tryLand(); break;
+    case 'board': boardTarget(); break;
+    case 'hail': hail(); break;
+    case 'map': mapOpen = !mapOpen; break;
+    case 'jump': if (mapOpen) mapOpen = false; beginJump(); break;
+    case 'missions': showMissionBriefing(); break;
+    case 'sound':
+      soundOn = !soundOn;
+      if (!soundOn) stopAllLoops();
+      showMsg(soundOn ? 'Sound on.' : 'Sound off.');
+      break;
+  }
+}
+function updateOrientation() {
+  document.body.classList.toggle('portrait', innerHeight > innerWidth * 1.1);
+}
+/* Called from render(): only show flight controls while actually flying; on
+ * the galaxy map, hide joystick+fire so canvas taps can pick a destination. */
+function updateTouchUI() {
+  if (!TOUCH) return;
+  const flying = !splashShown && !titleShown && !landedAt && !gameOver &&
+                 !hailOpen && !serviceOpen;
+  document.body.classList.toggle('no-fly', !flying);
+  touchEl.classList.toggle('map', flying && mapOpen);
+  if (!flying || mapOpen) { // joystick/fire unusable → release everything
+    if (joyId !== null) releaseJoy();
+    if (touchCtl.fire) { touchCtl.fire = false; document.getElementById('touchFire').classList.remove('press'); }
+  }
+}
+
+if (TOUCH) {
+  document.body.classList.add('touch');
+  const zone = document.getElementById('touchJoyZone');
+  zone.addEventListener('pointerdown', e => {
+    if (joyId !== null) return;
+    joyId = e.pointerId; joyOX = e.clientX; joyOY = e.clientY;
+    try { zone.setPointerCapture(joyId); } catch {}
+    joyBase.style.left = joyOX + 'px'; joyBase.style.top = joyOY + 'px';
+    updateJoyKnob(joyOX, joyOY);
+    touchEl.classList.add('on');
+    e.preventDefault();
+  });
+  zone.addEventListener('pointermove', e => {
+    if (e.pointerId !== joyId) return;
+    updateJoyKnob(e.clientX, e.clientY); e.preventDefault();
+  });
+  const endJoy = e => { if (e.pointerId === joyId) releaseJoy(); };
+  zone.addEventListener('pointerup', endJoy);
+  zone.addEventListener('pointercancel', endJoy);
+
+  const fireBtn = document.getElementById('touchFire');
+  const pressFire = on => { touchCtl.fire = on; fireBtn.classList.toggle('press', on); };
+  fireBtn.addEventListener('pointerdown', e => { pressFire(true); e.preventDefault(); });
+  fireBtn.addEventListener('pointerup', e => { pressFire(false); e.preventDefault(); });
+  fireBtn.addEventListener('pointercancel', () => pressFire(false));
+  fireBtn.addEventListener('pointerleave', () => pressFire(false));
+
+  document.getElementById('touchBar').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (b) touchAction(b.dataset.act);
+  });
+
+  addEventListener('resize', updateOrientation);
+  addEventListener('orientationchange', updateOrientation);
+  updateOrientation();
+}
 
 /* ---------------- landing ---------------- */
 
@@ -2152,15 +2326,27 @@ function step() {
         document.getElementById('dead').style.display = 'flex';
       }
     } else {
+      let cl = keys['arrowleft'] || keys['a'];
+      let cr = keys['arrowright'] || keys['d'];
+      let cThrust = keys['arrowup'] || keys['w'];
+      // Joystick → same booleans: turn toward the stick's absolute heading,
+      // stopping within half a turn-step so it doesn't oscillate; a firm push
+      // (touchCtl.thrust) burns the engine.
+      if (touchCtl.steer) {
+        let diff = EV.norm(touchCtl.heading - player.heading);
+        if (diff > 180) diff -= 360;
+        if (diff > player.turn * 0.5) cr = true;
+        else if (diff < -player.turn * 0.5) cl = true;
+      }
+      if (touchCtl.thrust) cThrust = true;
       EV.stepPlayer(player, {
-        left: keys['arrowleft'] || keys['a'],
-        right: keys['arrowright'] || keys['d'],
+        left: cl, right: cr,
         retro: keys['arrowdown'] || keys['s'],
-        thrust: keys['arrowup'] || keys['w'],
+        thrust: cThrust,
       });
       EV.stepShields(player, player.shieldMax, player.shieldRe);
       for (const w of player.weapons) if (w.cool > 0) w.cool--;
-      if (keys[' ']) fire(player, shipTarget, true);
+      if (keys[' '] || touchCtl.fire) fire(player, shipTarget, true);
       if (keys['x'] && player.selSecondary) fire(player, shipTarget, false);
       /* klaxxon on shield collapse, re-armed on recovery */
       if (player.shields <= 0 && klaxxonArmed) { playSnd(350, 0.8); klaxxonArmed = false; }
@@ -2544,13 +2730,14 @@ function drawMap(w, h) {
     `   ·   click a linked system, then J to jump` +
     (fuel < EV.JUMP_FUEL ? '  (out of fuel!)' : ''), mx + 14, my + mh - 12);
 }
-canvas.addEventListener('mousedown', e => {
+canvas.addEventListener('pointerdown', e => {
   if (!mapOpen) return;
-  for (const t of mapHit)
-    if (Math.hypot(e.clientX - t.x, e.clientY - t.y) < 12) { jumpDest = t.id; return; }
+  for (const t of mapHit) // generous hit radius so it works with a fingertip too
+    if (Math.hypot(e.clientX - t.x, e.clientY - t.y) < (TOUCH ? 22 : 12)) { jumpDest = t.id; return; }
 });
 
 function render() {
+  updateTouchUI();
   const w = innerWidth, h = innerHeight;
   ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   ctx.clearRect(0, 0, w, h);

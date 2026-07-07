@@ -467,6 +467,31 @@ game never leaves the theme bleeding into flight. Any test-param run (see
 Persistence) skips the intro so headless screenshots go straight to the
 game; `?title`/`?splash` force the splash, `?titlemenu` jumps to the menu.
 
+## Touch controls (shell responsibility; browser leg)
+
+On touch devices (detected via `pointer: coarse` / `ontouchstart` /
+`maxTouchPoints`, forceable with `?mobile=1`, off with `?mobile=0`) the shell
+overlays on-screen controls; the game is landscape-only and shows a
+rotate-to-landscape nudge in portrait. The controls are shown only while
+actually flying (hidden on the splash/title, landing, service, hail, and
+game-over screens).
+
+- **Floating joystick** (left thumb): appears wherever the thumb presses in
+  the left region. Its angle is an *absolute* facing — the ship steers toward
+  it — and pushing past ~55% of the knob radius burns the engine (past ~22% to
+  steer at all; a small deadzone). Crucially the joystick does **not** touch
+  the flight core: it synthesizes the same `left`/`right`/`thrust` booleans the
+  keyboard produces (turn toward the target heading, stopping within half a
+  turn-step so it doesn't oscillate), so physics and the golden trace are
+  unaffected.
+- **Fire button** (bottom-right, clear of the sidebar panel): holds the
+  primary trigger while pressed.
+- **Mini action bar** (always-on, top-centre): Target/Nav cycle, Land, Board,
+  Hail, Map, Jump, Missions, and a sound toggle — each just calls the same
+  handler as its keyboard shortcut. On the galaxy map the joystick and fire
+  button hide so canvas taps can pick a destination (fingertip hit radius is
+  enlarged).
+
 ## Sprite ID conventions (from the EV bible, see semantics.js)
 
 ship spïn = 128 + (shïp − 128); stellar spïn = 300 + spöb.Type;

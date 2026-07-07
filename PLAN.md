@@ -211,6 +211,18 @@ browser) deliberately undecided until sprites are on screen.
   flag + unboardable, capture success→ship switch, failure→self-destruct)
   and a dialog screenshot. SDL leg deferred.
 
+- **Milestone: mobile / touch support** (browser). Viewport meta + touch
+  detection (`?mobile=1/0` to force); landscape-only with a rotate nudge in
+  portrait. Floating left-thumb joystick (absolute-heading steer + push-to-
+  thrust) that synthesizes the same left/right/thrust booleans as the keyboard
+  — flight core and golden trace untouched. Fire button (clear of the sidebar
+  panel) and an always-on top-centre mini bar (Target/Nav/Land/Board/Hail/Map/
+  Jump/Missions/sound) wired to the existing handlers; joystick+fire hide on
+  the galaxy map so canvas taps pick a destination; keyboard-hint bar hidden on
+  touch. Controls show only while flying. Spec: "Touch controls". Verified via
+  headless landscape/portrait screenshots + a scripted harness (steer→heading,
+  push→thrust/speed, fire hold, bar actions, map hide). SDL leg unaffected.
+
 ## Next
 
 1. **Distribution loader** (deferred per Misha; see README "Distribution"):
