@@ -323,7 +323,9 @@ let masterVol = (() => {
 function setVolume(delta) {
   masterVol = Math.max(0, Math.min(1, Math.round((masterVol + delta) * 10) / 10));
   try { localStorage.setItem('ve_volume', String(masterVol)); } catch {}
-  if (ambientSnd) ambientSnd.volume = Math.min(ambientSnd._baseVol * masterVol, 1);
+  // adjust every currently-playing long sound live
+  for (const a of [ambientSnd, warpSnd])
+    if (a) a.volume = Math.min((a._baseVol ?? 1) * masterVol, 1);
   showMsg(`Volume ${Math.round(masterVol * 100)}%`);
   playSnd(150, 0.6); // audible reference beep at the new level
 }
@@ -576,8 +578,14 @@ function beginJump() {
     return;
   }
   jump = { destId: jumpDest, phase: 'engage', t: 0 };
-  warpSnd = soundOn ? sndEl(128).cloneNode() : null; // Warp Up: 8.3s spin-up
-  if (warpSnd) { warpSnd.play().catch(() => {}); }
+  // Warp Up (8.3s spin-up) — kept as a handle so it can be cut on abort;
+  // routed through masterVol like every other sound, and adjustable live.
+  if (soundOn && masterVol > 0) {
+    warpSnd = sndEl(128).cloneNode();
+    warpSnd._baseVol = 1;
+    warpSnd.volume = Math.min(masterVol, 1);
+    warpSnd.play().catch(() => {});
+  } else warpSnd = null;
 }
 function abortJump() {
   jump = null;
