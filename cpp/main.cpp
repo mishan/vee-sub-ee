@@ -686,7 +686,7 @@ struct Game {
     double kick = s.impact / (10 * v.mass);
     v.vx += std::sin(d2r(s.heading)) * kick;
     v.vy -= std::cos(d2r(s.heading)) * kick;
-    if (s.explodType >= 0) spawnExplosion(s.x, s.y, 0);
+    if (s.explodType >= 0) spawnExplosion(s.x, s.y, s.explodType);
     if (r == Hit::DESTROYED && v.deathT < 0) v.deathT = std::max(v.deathDelay, 1);
     else if (r == Hit::DISABLED) v.disabled = true;
     grudge(v, s.owner);

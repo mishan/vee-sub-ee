@@ -906,7 +906,7 @@ function step() {
       if (Math.hypot(v.x - shot.x, v.y - shot.y) <
           Math.max(shot.rec.ProxRadius, shipHalf(v))) {
         hitShip(v, shot.rec, shot.heading, shot.owner);
-        if (shot.rec.ExplodType >= 0) spawnExplosion(shot.x, shot.y, 0);
+        if (shot.rec.ExplodType >= 0) spawnExplosion(shot.x, shot.y, shot.rec.ExplodType);
         hit = true;
         break;
       }

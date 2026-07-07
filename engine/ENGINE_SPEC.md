@@ -180,7 +180,10 @@ present): AI stops, engines dead, still targetable. **Destroyed** at
 armor ≤ 0: the ship disintegrates for `DeathDelay` frames (drawn
 flickering), then explodes — spïn 401 fireball, or 402 + sparks when
 DeathDelay ≥ 60 ("huge"). **Shield regen**: +1% of max shields every
-`ShieldRe` frames.
+`ShieldRe` frames — **except while disabled**: a disabled ship drifts
+with collapsed shields and stays a boarding target (the bible is silent
+on this; classic gameplay — e.g. mïsn rescue goals that require boarding
+a disabled ship — settles it).
 
 **Warship AI** (AIType 3/4 when hostile): steer toward the enemy; thrust
 while `dist > 260` px and aligned; inside 120 px keep thrusting (fly-by,
@@ -195,7 +198,7 @@ and every same-govt ship in the system — holds a grudge for the session.
 
 **Player loadout**: the shïp record's stock `WeapType/WeapCount/AmmoLoad
 1–4` plus outfitter weapons (ModType 1; ModType 3 adds ammo to the
-matching weapon). Space fires all primary weapons; W cycles secondary
+matching weapon). Space fires all primary weapons; Q cycles secondary
 (MiscFlags 0x0002) weapons, X fires the selected one.
 
 ## Sprite ID conventions (from the EV bible, see semantics.js)
