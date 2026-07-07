@@ -1624,7 +1624,6 @@ function missionAvailable(m, p, loc) {
   if (m.AvailRecord === -32000) { if (!dominated.has(p.id)) return false; }
   else if (m.AvailRecord > 0) { if (legalOf(p.Govt) < m.AvailRecord) return false; }
   else if (m.AvailRecord < 0) { if (legalOf(p.Govt) > m.AvailRecord) return false; }
-  if (activeMissions.some(a => a.id === m.id)) return false;
   const ai = playerAI();
   if ((m.Flags & 0x2000) && ai <= 2) return false;
   if ((m.Flags & 0x4000) && ai >= 3) return false;
@@ -1643,8 +1642,10 @@ let availRandom = {}; // misnId -> rolled %, reset each system arrival
 
 function offeredMissions(p, loc) {
   const out = [];
-  for (const [id, m] of Object.entries(misns))
-    if (missionAvailable(m, p, +loc === loc ? loc : loc)) out.push({ id: +id, ...m });
+  for (const [id, m] of Object.entries(misns)) {
+    if (activeMissions.some(a => a.id === +id)) continue; // already accepted (raw records have no id)
+    if (missionAvailable(m, p, loc)) out.push({ id: +id, ...m });
+  }
   // critical missions (Flags 0x1000) first, else by id
   out.sort((a, b) => (b.Flags & 0x1000) - (a.Flags & 0x1000) || a.id - b.id);
   return out;
@@ -2243,7 +2244,7 @@ function renderMissionBoard(loc) { // loc 0 = computer, 1 = bar
       (offer.deadline != null ? `<div class="row">Deliver by: <b>${formatDate(offer.deadline)}</b> <span class="sub">(${sel.TimeLimit} days)</span></div>` : '') +
       `<div class="row">Pay: <b>${pay}</b></div>
       <div style="margin-top:10px">
-        <button class="svc" onclick="doAcceptMission(${sel.id})">Accept</button>
+        <button class="svc" onclick="doAcceptMission(${selMisnId})">Accept</button>
       </div>`;
   } else if (active.length) {
     pane += `<div class="sub">Select an available mission, or check your active missions (press I in flight for the briefing).</div>`;
