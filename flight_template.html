@@ -1076,7 +1076,11 @@ let resolvedOffers = {};
  * field, so keying off m.id silently collapsed every offer onto one
  * cache slot — the bug where every briefing showed the same destination. */
 function getOffer(id, here) {
-  if (resolvedOffers[id]) return resolvedOffers[id];
+  // Key by mission AND offering spöb: ReturnStel −4 ("return here") resolves
+  // relative to `here`, so the same mission offered at a second spöb in the
+  // same system must not reuse the first spöb's resolution.
+  const key = `${id}@${here ? here.id : ''}`;
+  if (resolvedOffers[key]) return resolvedOffers[key];
   const m = misns[id];
   const qty = m.CargoQty <= -2 ? Math.round(Math.abs(m.CargoQty) * (0.5 + Math.random()))
             : Math.max(m.CargoQty, 0);
@@ -1088,7 +1092,7 @@ function getOffer(id, here) {
     cargoQty: qty,
     deadline: m.TimeLimit > 0 ? gameDay + m.TimeLimit : null,
   };
-  resolvedOffers[id] = o;
+  resolvedOffers[key] = o;
   return o;
 }
 
