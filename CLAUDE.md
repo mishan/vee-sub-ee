@@ -20,6 +20,10 @@ the game data is not — see "Data hygiene" below.
 
 ## Commands
 
+A top-level `Makefile` wraps the common ones: `make` builds flight.html,
+plus `make galaxy`/`data`/`assets`/`schemas`/`check`/`selftest`/`cpp`/`clean`
+(`make help` lists targets). The raw commands are below.
+
 ```sh
 node evrsrc.js selftest                                  # resource-fork lib sanity
 node tmpl2schema.js "EV_data/EV Data.rsrc" -o schemas/   # regenerate schemas (rarely needed)
