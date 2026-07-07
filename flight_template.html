@@ -112,7 +112,7 @@
   #titleFrame { position: relative; aspect-ratio: 832 / 624; max-width: 100vw;
     max-height: 100vh; width: min(100vw, calc(100vh * 832 / 624));
     background: url(evassets/titles/PICT_8000.png) center/contain no-repeat; }
-  #titleShip { position: absolute; left: 42.4%; top: 51.5%; width: 16.6%; height: 28.5%; }
+  #titleView { position: absolute; left: 44%; top: 53.5%; width: 13%; height: 29.5%; }
   #titleFrame .hot { position: absolute; background: transparent; border: 2px solid transparent;
     border-radius: 6px; cursor: pointer; padding: 0; }
   #titleFrame .hot:hover { border-color: rgba(120,255,140,.6); background: rgba(120,255,140,.08); }
@@ -225,7 +225,7 @@
 </div>
 <div id="title">
   <div id="titleFrame">
-    <canvas id="titleShip"></canvas>
+    <canvas id="titleView"></canvas>
     <button class="hot" id="hotNew"   title="New Pilot"></button>
     <button class="hot" id="hotOpen"  title="Open Pilot"></button>
     <button class="hot" id="hotQuit"  title="Quit"></button>
@@ -577,19 +577,31 @@ fetch('evassets/music/snd_30000.wav')
   .then(r => r.ok ? r.blob() : Promise.reject(r.status))
   .then(b => { titleMusicEl.src = URL.createObjectURL(b); })
   .catch(() => { titleMusicEl.src = 'evassets/music/snd_30000.wav'; titleMusicEl.load(); });
-let titleMusic = null;
+let titleMusic = null, musicWanted = false;
 function startTitleMusic() {
-  if (titleMusic || !soundOn || masterVol <= 0 || !introUp()) return;
+  if (!soundOn || masterVol <= 0 || !introUp()) return;
+  musicWanted = true;                       // a gesture has asked for music
+  if (titleMusic) return;                   // already playing/attempted
   const a = titleMusicEl;
   a._baseVol = 0.7;
   a.volume = Math.min(0.7 * masterVol, 1);
   titleMusic = a;
   a._playP = a.play();
-  // If the gesture didn't unlock in time, clear the handle so the next
-  // gesture (e.g. tapping the title menu) can retry instead of no-opping.
-  if (a._playP) a._playP.catch(() => { if (titleMusic === a) titleMusic = null; });
+  // On mobile the first splash tap may hit a still-loading file: play()
+  // rejects, but the gesture has now unlocked audio. Retry the moment the
+  // (blob) source is buffered — so the theme starts on the loading screen
+  // rather than waiting for a second tap on the menu.
+  if (a._playP) a._playP.catch(() => {
+    if (titleMusic === a) titleMusic = null;
+    const retry = () => {
+      a.removeEventListener('canplay', retry);
+      if (musicWanted && introUp() && !titleMusic) startTitleMusic();
+    };
+    a.addEventListener('canplay', retry);
+  });
 }
 function stopTitleMusic() {
+  musicWanted = false;
   const a = titleMusic; titleMusic = null;
   if (!a) return;
   const kill = () => { a.pause(); a.currentTime = 0; };
@@ -2928,7 +2940,11 @@ function showTitle() {
   setTimeout(() => titleEl.classList.remove('intro'), 1100);
   // Open Pilot only means something when there's a save to resume.
   document.getElementById('hotOpen').style.opacity = SAVED ? '' : '0.35';
-  startTitleShipSpin();
+  // draw the pilot summary once layout settles, and keep it sized on resize
+  requestAnimationFrame(renderTitleSummary);
+  setTimeout(renderTitleSummary, 200); // fonts/bg may lag a frame
+  titleSummaryResize = () => renderTitleSummary();
+  addEventListener('resize', titleSummaryResize);
   // Music normally started at the splash; if we came straight to the menu
   // (e.g. ?titlemenu=1), arm the first pointer gesture as a fallback. Keys
   // are swallowed while the title is up, so only pointer needs arming here.
@@ -2940,7 +2956,7 @@ function enterGame() {
   titleShown = false;
   titleEl.style.display = 'none';
   stopTitleMusic();
-  stopTitleShipSpin();
+  if (titleSummaryResize) { removeEventListener('resize', titleSummaryResize); titleSummaryResize = null; }
   render();
 }
 function titleAbout() {
@@ -2966,34 +2982,57 @@ function escapeHtml(s) {
   return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 }
 
-/* Little rotating ship in the title viewscreen, like the original's
- * animated centre panel. Uses the player ship's spin sheet if ready. */
-let titleSpinRAF = 0, titleSpinAng = 0;
-function startTitleShipSpin() {
-  const cv = document.getElementById('titleShip');
-  const g = cv.getContext('2d');
-  const spinId = spinOfShip(playerShipId);
-  const draw = () => {
-    const w = cv.clientWidth, h = cv.clientHeight;
-    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
-    g.clearRect(0, 0, cv.width, cv.height);
-    const sp = sprites.get(spinId);
-    if (sp && sp.ready) {
-      const { frameW, frameH, xTiles, frames } = sp.meta;
-      const fi = EV.frameIndex(titleSpinAng, frames);
-      const sc = Math.min(cv.width / frameW, cv.height / frameH) * 0.85;
-      const dw = frameW * sc, dh = frameH * sc;
-      g.drawImage(sp.img, (fi % xTiles) * frameW, Math.floor(fi / xTiles) * frameH,
-        frameW, frameH, (cv.width - dw) / 2, (cv.height - dh) / 2, dw, dh);
-    }
-    titleSpinAng = EV.norm(titleSpinAng + 1.2);
-    titleSpinRAF = requestAnimationFrame(draw);
-  };
-  cancelAnimationFrame(titleSpinRAF);
-  preloadSprites([spinId]);
-  draw();
+/* The title viewscreen shows a summary of the current pilot's game (as the
+ * original does), drawn on the canvas so it scales with the framed art. */
+function gameDate() {
+  // Classic EV starts the calendar at the real date + 250 years and advances
+  // it one day per hyperspace jump (gameDay). A fresh pilot made today reads
+  // the same as the original would.
+  const now = new Date();
+  const d = new Date(now.getFullYear() + 250, now.getMonth(), now.getDate());
+  d.setDate(d.getDate() + gameDay);
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+    'August', 'September', 'October', 'November', 'December'];
+  const day = d.getDate();
+  const suf = (day % 10 === 1 && day !== 11) ? 'st' : (day % 10 === 2 && day !== 12) ? 'nd'
+            : (day % 10 === 3 && day !== 13) ? 'rd' : 'th';
+  return `${months[d.getMonth()]} ${day}${suf}, ${d.getFullYear()}`;
 }
-function stopTitleShipSpin() { cancelAnimationFrame(titleSpinRAF); titleSpinRAF = 0; }
+function renderTitleSummary() {
+  const cv = document.getElementById('titleView');
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;                     // not laid out yet
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  const g = cv.getContext('2d');
+  g.clearRect(0, 0, cv.width, cv.height);
+  const shipName = ships[playerShipId] ? ships[playerShipId].name : 'Shuttlecraft';
+  const sysName = syst ? syst.name : '';
+  const fields = [
+    ['Ship', shipName],
+    ['System', sysName],
+    ['Legal status', legalStatus(systemGovt())],
+    ['Combat rating', combatRating()],
+    ['Credits', credits.toLocaleString('en-US')],
+    ['Date', gameDate()],
+  ];
+  const pad = Math.round(cv.width * 0.07);
+  const avail = cv.width - pad * 2;
+  const lh = cv.height / (fields.length * 2 + 0.5); // label+value per field
+  const labelSz = Math.max(6, Math.round(lh * 0.72));
+  const valueSz = Math.max(7, Math.round(lh * 0.92));
+  g.textBaseline = 'top';
+  let y = pad * 0.6;
+  for (const [label, val] of fields) {
+    g.fillStyle = '#3f8f63'; g.font = `${labelSz}px monospace`;
+    g.fillText(label + ':', pad, y); y += lh * 0.95;
+    // shrink the value to fit the narrow viewscreen if needed
+    let vs = valueSz; g.font = `bold ${vs}px monospace`;
+    while (vs > 6 && g.measureText(val).width > avail) { vs -= 1; g.font = `bold ${vs}px monospace`; }
+    g.fillStyle = '#86ffb6'; g.fillText(val, pad, y); y += lh * 1.05;
+  }
+}
+// re-render on resize while the title is up (the canvas is sized from layout)
+let titleSummaryResize = null;
 
 document.getElementById('hotEnter').onclick = () => enterGame();
 document.getElementById('hotOpen').onclick  = () => { if (SAVED) enterGame(); };

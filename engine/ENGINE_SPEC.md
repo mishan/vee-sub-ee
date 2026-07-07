@@ -458,12 +458,18 @@ menu labels; the shell places transparent hotspots over them:
 - **About EV…** — shows the STR# 20000 intro text plus a clean-room note.
 - **Quit EV** — no-op in the browser (note to close the tab).
 
-The central viewscreen shows the player ship's spin sheet slowly rotating,
-echoing the original's animated panel. Title music (snd 30000, in the
-music/ set) loops from the splash gesture through the menu and tracks
-`masterVol`/`soundOn` like every other loop. Because `play()` is async,
-stopping the music re-pauses once the play promise settles, so entering the
-game never leaves the theme bleeding into flight. Any test-param run (see
+The central viewscreen shows a **summary of the current pilot's game** (as the
+original does), drawn on a canvas so it scales with the framed art: ship type,
+current system, legal status in that system, combat rating, credits, and the
+date. The date follows classic EV — real date + 250 years at pilot creation,
++1 day per hyperjump (`gameDay`) — so a fresh pilot reads like the original's.
+Title music (snd 30000, in the music/ set) loops from the splash gesture
+through the menu and tracks `masterVol`/`soundOn` like every other loop.
+Because `play()` is async, stopping the music re-pauses once the play promise
+settles, so entering the game never leaves the theme bleeding into flight. On
+mobile the first splash tap may hit a still-loading file — the gesture unlocks
+audio and the theme retries on the element's `canplay`, so it starts on the
+loading screen rather than waiting for a second tap. Any test-param run (see
 Persistence) skips the intro so headless screenshots go straight to the
 game; `?title`/`?splash` force the splash, `?titlemenu` jumps to the menu.
 
