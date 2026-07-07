@@ -474,11 +474,19 @@ every gameplay hotkey is swallowed (any key merely advances the splash), so
 the game can't be driven behind the overlay. The art carries its own baked
 menu labels; the shell places transparent hotspots over them:
 
-- **New Pilot** — erases the saved pilot (after confirmation) and reloads
-  fresh (Levo, Shuttlecraft, 10 000 cr).
-- **Open Pilot** / **Enter Ship** — dismiss the title and resume the
-  loaded pilot (docked at the saved spöb, or a fresh start if none). Open
-  Pilot is dimmed when no save exists.
+- **New Pilot** — a two-step dialog (echoing the original): name the pilot
+  with a **Strict Play** (permadeath) option, then name the starting
+  Shuttlecraft. Each field is pre-seeded with a random suggestion. The
+  suggestions come from the EV app's STR# 128 ("Default Names", first half
+  pilots / second half ships), injected at build via `--app`; the committed
+  template keeps generic fallbacks (data-free). Confirming writes a fresh
+  pilot (Levo, Shuttlecraft, 10 000 cr, with name/shipName/strict) and
+  reloads to the menu.
+- **Open Pilot** / **Enter Ship** — dismiss the title and resume the loaded
+  pilot (docked at the saved spöb, or in flight if none). **They do nothing
+  without a loaded pilot** (New Pilot must create one first).
+- **Strict Play**: on death the pilot is deleted (no R-restore); the
+  game-over hint says so.
 - **Set Prefs** — toggles sound.
 - **About EV…** — shows the STR# 20000 intro text plus a clean-room note.
 - **Quit EV** — no-op in the browser (note to close the tab).
