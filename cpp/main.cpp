@@ -114,7 +114,8 @@ static bool evStepTrader(Entity& s, bool hasTarget, double tx, double ty) {
   if (!hasTarget) { evIntegrate(s); return true; }
   double dx = tx - s.x, dy = ty - s.y;
   double dist = std::hypot(dx, dy), speed = std::hypot(s.vx, s.vy);
-  double stopDist = speed * speed / (2 * s.accel) + 40;
+  // brake distance + coast while turning 180° to retrograde + pad
+  double stopDist = speed * speed / (2 * s.accel) + speed * (180 / s.turn) + 40;
   if (s.state == Entity::CRUISE) {
     bool aligned = evSteer(s, evBearing(dx, dy));
     if (dist > stopDist) { if (aligned) evThrust(s); }
@@ -122,7 +123,7 @@ static bool evStepTrader(Entity& s, bool hasTarget, double tx, double ty) {
   } else if (s.state == Entity::BRAKE) {
     bool aligned = evSteer(s, evRetro(s));
     if (speed > 0.15) { if (aligned) evThrust(s); }
-    else if (dist < 60) s.state = Entity::LANDING;
+    else if (dist < 80) s.state = Entity::LANDING;
     else s.state = Entity::CRUISE;
   } else {
     s.fade -= 0.02;

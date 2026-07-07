@@ -56,13 +56,18 @@ States: CRUISE → BRAKE → LANDING. Deterministic given a fixed target
 (spawn-time randomness — dude/ship/target selection — lives outside the
 core; see "Spawning").
 
-- `stopDist = |v|² / (2 · accel) + 40`  (kinematic stopping distance + pad)
+- `stopDist = |v|²/(2·accel) + |v|·(180/turn) + 40` — kinematic stopping
+  distance, **plus the distance coasted while flipping 180° to face
+  retrograde** (`180/turn` frames at speed `|v|`), plus a pad. The
+  turn-around term is what stops slow-turning ships from sailing past the
+  planet before their brake burn bites.
 - CRUISE: steer toward target; if `dist > stopDist` and aligned, thrust;
   if `dist ≤ stopDist`, → BRAKE.
 - BRAKE: steer toward retrograde; if `|v| > 0.15`, thrust when aligned;
-  else if `dist < 60` → LANDING, otherwise → CRUISE (overshot; go around).
+  else if `dist < 80` → LANDING, otherwise → CRUISE (overshot; go around).
 - LANDING: fade −= 0.02 per frame (no motion changes); at fade ≤ 0 the
-  entity despawns (shell schedules a respawn).
+  entity despawns (shell schedules a respawn). The shell may dock the ship
+  instantly instead of fading — the core only reports arrival.
 
 ## Landing (player)
 

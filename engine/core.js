@@ -75,7 +75,8 @@ function stepTrader(s, target) {
   const dx = target.x - s.x, dy = target.y - s.y;
   const dist = Math.hypot(dx, dy);
   const speed = Math.hypot(s.vx, s.vy);
-  const stopDist = speed * speed / (2 * s.accel) + 40;
+  // brake distance + coast while turning 180° to retrograde + pad
+  const stopDist = speed * speed / (2 * s.accel) + speed * (180 / s.turn) + 40;
   if (s.state === 'cruise') {
     const aligned = steerToward(s, bearing(dx, dy));
     if (dist > stopDist) { if (aligned) thrust(s); }
@@ -83,7 +84,7 @@ function stepTrader(s, target) {
   } else if (s.state === 'brake') {
     const aligned = steerToward(s, retrograde(s));
     if (speed > 0.15) { if (aligned) thrust(s); }
-    else if (dist < 60) s.state = 'landing';
+    else if (dist < 80) s.state = 'landing';
     else s.state = 'cruise';
   } else { // landing
     s.fade = (s.fade ?? 1) - 0.02;
