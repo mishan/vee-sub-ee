@@ -79,7 +79,7 @@
   <h1>Your ship has been destroyed.</h1>
   <div id="deadHint">Press R to try again</div>
 </div></div>
-<div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · N/Tab target · Y hail · M map · J jump · V sound · [ ] volume · Esc</div>
+<div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · Esc</div>
 <script>/*__ENGINE__*/</script>
 <script>
 'use strict';
@@ -98,7 +98,7 @@ const params = new URLSearchParams(location.search);
  * from headless screenshot runs. ?new=1 starts a fresh pilot. */
 const TEST_MODE = ['new', 'syst', 'ship', 'x', 'y', 'heading', 'ff', 'land',
   'exchange', 'outfitter', 'shipyard', 'map', 'dest', 'jump', 'tab', 'nav',
-  'fire'].some(k => params.has(k));
+  'fire', 'bar', 'computer', 'allmissions'].some(k => params.has(k));
 const SAVED = (() => {
   if (TEST_MODE) return null;
   try {
@@ -117,12 +117,22 @@ let credits = SAVED ? SAVED.credits : 10000;
 const cargo = Object.fromEntries(COMMODITIES.map(c => [c, (SAVED && SAVED.cargo[c]) || 0]));
 const explored = new Set(SAVED ? SAVED.explored : []);
 
+/* mission state (spec: "Missions") — also part of the pilot file */
+const missionBits = new Uint8Array(256);
+if (SAVED && SAVED.bits) for (const b of SAVED.bits) missionBits[b] = 1;
+let gameDay = SAVED ? (SAVED.day || 0) : 0;
+const reputation = SAVED && SAVED.rep ? { ...SAVED.rep } : {}; // govtId -> number
+/* active missions: resolved, live copies (not the raw records) */
+let activeMissions = SAVED && SAVED.missions ? SAVED.missions.map(m => ({ ...m })) : [];
+
 let storageWarned = false;
 function savePilot(spobId) {
   if (TEST_MODE) return;
   const blob = JSON.stringify({
     v: 1, syst: SYSTEM_ID, spob: spobId, ship: playerShipId,
     credits, cargo, outfits, explored: [...explored],
+    bits: [...missionBits.keys()].filter(b => missionBits[b]),
+    day: gameDay, rep: reputation, missions: activeMissions,
   });
   let ok = false;
   try {
@@ -215,6 +225,20 @@ function loadSystem(systId) {
     }
   const n = Math.min(Math.max(syst.AvgShips, 2), 8);
   for (let i = 0; i < n; i++) spawnAI(false);
+  // missions: AvailRandom rerolls per arrival; place this system's ships;
+  // mark observe goals satisfied when we arrive in the right system.
+  availRandom = {};
+  for (const A of activeMissions) {
+    maybeSpawnMissionShips(A);
+    if (A.shipGoal === 4 && !A.observed) {
+      const sys = A.shipSyst;
+      if ((sys >= 128 && sys === SYSTEM_ID) ||
+          (A.travelStel && spobById(A.travelStel) && spobById(A.travelStel).System === SYSTEM_ID)) {
+        A.observed = true;
+        showMsg(`${A.name}: target observed — return for payment.`);
+      }
+    }
+  }
 }
 
 /* ---------------- AI spawning (shell; see spec "Spawning") ------------- */
@@ -537,12 +561,14 @@ function abortJump() {
 }
 function completeJump() {
   const from = SYSTEM_ID;
+  gameDay++;                    // a day passes each hyperspace jump (spec)
   loadSystem(jump.destId);
   // placeAtArrival wants the inbound bearing (origin → dest); from the
   // destination, mapBearingTo(origin) is the reverse bearing, so flip it.
   EV.placeAtArrival(player, EV.norm(mapBearingTo(from) + 180));
   fuel -= EV.JUMP_FUEL;
   jump = null; jumpDest = null;
+  checkExpiredMissions();
   warpSnd = null; // Warp Up ends naturally as the streak completes
   playSnd(130); // Warp Out
 }
@@ -559,6 +585,7 @@ addEventListener('keydown', e => {
   if (k === 'n' && gameOver) { newPilot(); return; }
   if (k === 'n' && !landedAt) cyclePlanetTarget();
   if (k === 'y' && !landedAt) hail();
+  if (k === 'i' && !landedAt) showMissionBriefing();
   if (k === 'r' && gameOver) location.reload();
   if (k === 'v') {
     soundOn = !soundOn;
@@ -658,7 +685,8 @@ function hail() {
 
 const cargoNames = DATA.strings[4000].list.slice(0, 6);
 const basePrices = DATA.strings[4004].list.slice(0, 6).map(Number);
-const cargoUsed = () => COMMODITIES.reduce((n, c) => n + cargo[c], 0);
+const missionCargoUsed = () => activeMissions.reduce((n, a) => n + (a.cargoLoaded ? a.cargoQty : 0), 0);
+const cargoUsed = () => COMMODITIES.reduce((n, c) => n + cargo[c], 0) + missionCargoUsed();
 
 function priceAt(spob, i) {
   const lvl = spob.$sem && spob.$sem.prices[COMMODITIES[i]];
@@ -677,10 +705,11 @@ function trade(i, qty) {
 
 /* ---- service dialogs: exchange / outfitter / shipyard ---- */
 
-let serviceOpen = null; // 'exchange' | 'outfitter' | 'shipyard' | null
+let serviceOpen = null; // 'exchange' | 'outfitter' | 'shipyard' | 'bar' | 'missioncomputer' | null
 const SERVICE_RENDER = {};
 function openService(kind) {
-  const gate = { exchange: 'commodityExchange', outfitter: 'outfitter', shipyard: 'shipyard' }[kind];
+  const gate = { exchange: 'commodityExchange', outfitter: 'outfitter', shipyard: 'shipyard',
+    bar: 'bar', missioncomputer: 'canLand' }[kind];
   if (!landedAt || !(landedAt.$sem && landedAt.$sem[gate])) return;
   if (kind === 'outfitter' && !outfitterStock(landedAt).length) return;
   if (kind === 'shipyard' && !shipyardStock(landedAt).length) return;
@@ -761,6 +790,301 @@ function buyOutfit(id, qty) {
     cargo[c]--;
   }
   rerenderService();
+}
+
+/* ================= missions (spec: "Missions") ================= */
+
+const misns = DATA.types.misn;
+const govts = DATA.types.govt;
+const MISN_ALL = params.has('allmissions'); // test: ignore AvailRandom roll
+const allSpobs = () => Object.entries(DATA.types.spob).map(([id, p]) => ({ id: +id, ...p }));
+const spobById = id => DATA.types.spob[id];
+const systOfSpob = p => p && systs[p.System];
+const bitReq = (v, want) => { // AvailBitSet-style code check
+  if (v < 0) return true;
+  if (v >= 1000) return !missionBits[v - 1000];
+  return !!missionBits[v];
+};
+function setBitCode(v) { // CompBitSet-style: 0-511 set, 1000-1511 clear
+  if (v == null || v < 0) return;      // classic misn lacks some Nova bit fields
+  if (v >= 1000) missionBits[v - 1000] = 0; else missionBits[v] = 1;
+}
+const field = (m, k, dflt = -1) => (m[k] == null ? dflt : m[k]); // classic vs Nova
+
+// govt relations (from $sem flags we don't have allies as data; use gövt Ally/Enemy)
+function govtAllies(g) { const r = govts[g]; return r ? [r.Ally].filter(a => a >= 128) : []; }
+function govtEnemies(g) { const r = govts[g]; return r ? [r.Enemy].filter(a => a >= 128) : []; }
+
+/* Resolve an AvailStel/TravelStel/ReturnStel code to a concrete spob id.
+ * `here` is the spob the mission is being offered/accepted at. Returns a
+ * spob id, or null if unresolvable. */
+function resolveStel(code, here) {
+  const inhabited = () => allSpobs().filter(p => p.$sem && !p.$sem.uninhabited && p.$sem.canLand);
+  const uninhab = () => allSpobs().filter(p => p.$sem && p.$sem.uninhabited);
+  const pick = arr => arr.length ? arr[Math.floor(Math.random() * arr.length)].id : null;
+  if (code === -1) return null;              // no specific dest / any (caller decides)
+  if (code === -2) return pick(inhabited());
+  if (code === -3) return pick(uninhab());
+  if (code === -4) return here ? here.id : null;
+  if (code >= 128 && code <= 1627) return spobById(code) ? code : null;
+  const govtPick = (g, filter) => pick(inhabited().filter(p => filter(p.Govt, g)));
+  if (code >= 9999 && code <= 10127) return govtPick(code - 9999, (pg, g) => pg === g);
+  if (code >= 15000 && code <= 15127) return govtPick(code - 15000, (pg, g) => govtAllies(g).includes(pg));
+  if (code >= 20000 && code <= 20127) return govtPick(code - 20000, (pg, g) => pg !== g);
+  if (code >= 25000 && code <= 25127) return govtPick(code - 25000, (pg, g) => govtEnemies(g).includes(pg));
+  return null;
+}
+
+/* Does mission m's AvailStel match the spob `p`? */
+function availStelMatch(code, p) {
+  if (code === -1) return p.$sem && !p.$sem.uninhabited && p.$sem.canLand;
+  if (code >= 128 && code <= 1627) return p.id === code;
+  const g = c => code - c;
+  if (code >= 9999 && code <= 10127) return p.Govt === g(9999);
+  if (code >= 15000 && code <= 15127) return govtAllies(g(15000)).includes(p.Govt);
+  if (code >= 20000 && code <= 20127) return p.Govt !== g(20000);
+  if (code >= 25000 && code <= 25127) return govtEnemies(g(25000)).includes(p.Govt);
+  return false;
+}
+
+/* Which goal types can we actually complete? Others aren't offered. */
+function goalSupported(m) {
+  if (m.ShipCount > 0 && m.ShipGoal >= 0) return [0, 4, 6].includes(m.ShipGoal);
+  return true; // cargo delivery / plain go-to
+}
+function playerAI() { return ships[playerShipId].InherentAI; }
+
+/* Is mission m available at spob p (in this system), for the given loc? */
+function missionAvailable(m, p, loc) {
+  if (m.AvailLoc !== loc) return false;
+  if (loc === 2) return false;               // ship-offered: deferred
+  if (!goalSupported(m)) return false;
+  if (!availStelMatch(m.AvailStel, p)) return false;
+  if (!bitReq(m.AvailBitSet)) return false;
+  if (m.AvailBitClr >= 0 && missionBits[m.AvailBitClr]) return false;
+  if (m.AvailRating > 0) return false;       // combat rating not tracked yet
+  if (activeMissions.some(a => a.id === m.id)) return false;
+  const ai = playerAI();
+  if ((m.Flags & 0x2000) && ai <= 2) return false;
+  if ((m.Flags & 0x4000) && ai >= 3) return false;
+  const ast = m.AvailShipType;
+  if (ast >= 128 && ast <= 255 && playerShipId !== ast) return false;
+  if (ast >= 1128 && ast <= 1255 && playerShipId === ast - 1000) return false;
+  if (ast >= 2128 && ast <= 2255 && ships[playerShipId].InherentGovt !== ast - 2000) return false;
+  // AvailRandom rerolled per system arrival, cached on the spob-visit
+  if (!MISN_ALL && m.AvailRandom > 0 && m.AvailRandom < 100) {
+    availRandom[m.id] = availRandom[m.id] ?? (Math.random() * 100);
+    if (availRandom[m.id] >= m.AvailRandom) return false;
+  }
+  return true;
+}
+let availRandom = {}; // misnId -> rolled %, reset each system arrival
+
+function offeredMissions(p, loc) {
+  const out = [];
+  for (const [id, m] of Object.entries(misns))
+    if (missionAvailable(m, p, +loc === loc ? loc : loc)) out.push({ id: +id, ...m });
+  // critical missions (Flags 0x1000) first, else by id
+  out.sort((a, b) => (b.Flags & 0x1000) - (a.Flags & 0x1000) || a.id - b.id);
+  return out;
+}
+
+/* Substitute EV text placeholders. <DST>/<RST> = travel/return stellar
+ * names; the rest we leave alone (govt/player names come later). */
+function subst(text, A) {
+  if (!text) return text;
+  return text
+    .replace(/<DST>/g, A && A.travelStel != null ? stelName(A.travelStel) : 'your destination')
+    .replace(/<RST>/g, A && A.returnStel != null ? stelName(A.returnStel) : 'your destination');
+}
+const descText = (id, A) => {
+  const d = DATA.types.desc[id];
+  return d && d.Description ? subst(d.Description, A) : '';
+};
+const misnCargoName = m => {
+  if (m.CargoType < 0) return null;
+  if (m.CargoType === 1000) return DATA.strings[4000].list[Math.floor(Math.random() * 6)];
+  return DATA.strings[4000].list[m.CargoType] || 'cargo';
+};
+
+/* Accept a mission at spob `here`: resolve destinations, load cargo,
+ * spawn any special ships if their system is the current one. */
+function acceptMission(id, here) {
+  const m = misns[id];
+  const qty = m.CargoQty <= -2 ? Math.round(Math.abs(m.CargoQty) * (0.5 + Math.random()))
+            : Math.max(m.CargoQty, 0);
+  const A = {
+    id, name: m.name,
+    accepted: gameDay,
+    travelStel: resolveStel(m.TravelStel, here),
+    returnStel: m.ReturnStel === -1 ? null : resolveStel(m.ReturnStel, here),
+    cargoName: misnCargoName(m), cargoQty: qty,
+    cargoLoaded: false,
+    pickupMode: m.PickupMode, dropoffMode: m.DropoffMode,
+    shipGoal: m.ShipCount > 0 ? m.ShipGoal : -1,
+    shipsLeft: m.ShipCount > 0 ? m.ShipCount : 0,
+    shipSyst: m.ShipSyst, shipDude: m.ShipDude, shipBehav: m.ShipBehav, shipNameID: m.ShipNameID,
+    observed: false,
+    timeLimit: m.TimeLimit,
+  };
+  // prepaid outfit (PayVal -30128-g)
+  if (m.PayVal >= -30255 && m.PayVal <= -30128) {
+    const oid = -m.PayVal - 30000;
+    if (DATA.types.outf[oid]) { outfits[oid] = (outfits[oid] || 0) + 1; applyShipStats(); }
+  }
+  // cargo picked up at accept
+  if (A.cargoName && A.pickupMode === 0) A.cargoLoaded = true;
+  activeMissions.push(A);
+  maybeSpawnMissionShips(A);
+  showMsg(`Mission accepted: ${A.name}`);
+}
+
+function abortMission(id) {
+  const i = activeMissions.findIndex(a => a.id === id);
+  if (i < 0) return;
+  const m = misns[id];
+  if (m.Flags & 0x0040) adjustRep(m.CompGovt, -5 * m.CompReward); // abort reversal
+  activeMissions.splice(i, 1);
+  // clear its mission ships from the system
+  aiShips = aiShips.filter(s => s.misnId !== id);
+  showMsg(`Mission abandoned: ${m.name}`);
+}
+
+function adjustRep(govt, amt) {
+  if (govt < 0 || !amt) return;
+  reputation[govt] = (reputation[govt] || 0) + amt;
+}
+
+/* Spawn a mission's special ships if their target system is the one we're
+ * in (called on accept and on each system load). */
+function maybeSpawnMissionShips(A) {
+  if (A.shipGoal < 0 || A.shipsLeft <= 0) return;
+  const sys = A.shipSyst;
+  const inThisSystem =
+    sys === -6 || sys === -1 ||                             // follow / initial
+    (sys >= 128 && sys <= 1127 && sys === SYSTEM_ID) ||
+    (A.travelStel && systOfSpob(spobById(A.travelStel)) && sys === -3 &&
+       spobById(A.travelStel).System === SYSTEM_ID) ||
+    (A.returnStel && sys === -4 && spobById(A.returnStel).System === SYSTEM_ID);
+  if (!inThisSystem) return;
+  if (aiShips.some(s => s.misnId === A.id)) return; // already present
+  const dude = dudes[A.shipDude];
+  if (!dude) return;
+  for (let i = 0; i < A.shipsLeft; i++) {
+    const shipId = weighted(dudeShipPairs(dude));
+    if (shipId == null) continue;
+    const a = Math.random() * Math.PI * 2, r = 900 + Math.random() * 700;
+    const e = EV.makeShip(ships[shipId], player.x + Math.cos(a) * r, player.y + Math.sin(a) * r, Math.random() * 360);
+    e.shipId = shipId; e.govt = dude.Govt; e.aiType = 3;
+    e.misnId = A.id;
+    e.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
+    armShip(e, ships[shipId]);
+    if (A.shipBehav === 0 || A.shipBehav === 10) e.hostile = true; // attack player
+    if (A.shipNameID >= 128 && DATA.strings[A.shipNameID])
+      e.misnName = DATA.strings[A.shipNameID].list[i % DATA.strings[A.shipNameID].list.length];
+    aiShips.push(e);
+  }
+}
+function dudeShipPairs(dude) {
+  const out = [];
+  for (let i = 1; i <= 4; i++) {
+    const s = dude['ShipTypes' + i], w = dude['Prob' + i];
+    if (s >= 128 && ships[s] && w > 0) out.push([s, w]);
+  }
+  return out;
+}
+
+/* Called when a mission ship is destroyed (from hitShip). */
+function onMissionShipDestroyed(s) {
+  const A = activeMissions.find(a => a.id === s.misnId);
+  if (!A) return;
+  A.shipsLeft--;
+  if (A.shipsLeft <= 0 && (A.shipGoal === 0 || A.shipGoal === 6))
+    showMsg(`${A.name}: objective complete — return for payment.`);
+}
+
+/* Goal met? (used at ReturnStel). */
+function goalMet(A) {
+  if (A.shipGoal === 0 || A.shipGoal === 6) return A.shipsLeft <= 0;
+  if (A.shipGoal === 4) return A.observed;
+  return true; // cargo / go-to: arriving at returnStel is the goal
+}
+
+/* Handle landing on spob p for every active mission: cargo pickup/dropoff
+ * at TravelStel, and completion/failure at ReturnStel. Returns dialog
+ * chunks to append to the planet screen. */
+function missionLandingEvents(p) {
+  const notes = [];
+  for (const A of [...activeMissions]) {
+    const m = misns[A.id];
+    // cargo pickup at TravelStel
+    if (A.cargoName && !A.cargoLoaded && A.pickupMode === 1 && A.travelStel === p.id) {
+      A.cargoLoaded = true;
+      notes.push(descText(m.LoadCargText) || `Loaded ${A.cargoQty}t of ${A.cargoName}.`);
+    }
+    // cargo dropoff at TravelStel
+    if (A.cargoName && A.cargoLoaded && A.dropoffMode === 0 && A.travelStel === p.id) {
+      A.cargoLoaded = false;
+      notes.push(descText(m.DropCargText, A) || `Delivered ${A.cargoQty}t of ${A.cargoName}.`);
+    }
+    // completion / failure at ReturnStel
+    const ret = A.returnStel != null ? A.returnStel : (A.travelStel === p.id ? p.id : null);
+    const isReturn = (A.returnStel != null && A.returnStel === p.id) ||
+                     (A.returnStel == null && A.travelStel === p.id);
+    if (isReturn) {
+      const expired = A.timeLimit > 0 && gameDay - A.accepted > A.timeLimit;
+      if (!expired && goalMet(A)) {
+        notes.push(descText(m.CompText) || `Mission complete: ${A.name}.`);
+        payMission(m);
+        setBitCode(m.CompBitSet); setBitCode(m.CompBitSet2); setBitCode(m.CompBitSet4);
+        adjustRep(m.CompGovt, m.CompReward);
+        removeMission(A.id);
+      } else if (expired || m.CanAbort) {
+        notes.push(descText(m.FailText) || `Mission failed: ${A.name}.`);
+        setBitCode(m.FailBitSet); setBitCode(m.FailBitSet2);
+        adjustRep(m.CompGovt, -Math.round(m.CompReward / 2));
+        removeMission(A.id);
+      }
+    }
+  }
+  return notes;
+}
+function removeMission(id) {
+  activeMissions = activeMissions.filter(a => a.id !== id);
+  aiShips = aiShips.filter(s => s.misnId !== id);
+}
+function checkExpiredMissions() {
+  for (const A of [...activeMissions]) {
+    if (A.timeLimit > 0 && gameDay - A.accepted > A.timeLimit) {
+      const m = misns[A.id];
+      setBitCode(m.FailBitSet); setBitCode(m.FailBitSet2);
+      adjustRep(m.CompGovt, -Math.round(m.CompReward / 2));
+      removeMission(A.id);
+      showMsg(`Mission failed (out of time): ${A.name}`);
+    }
+  }
+}
+/* I in flight: briefing for the active missions (QuickBrief). */
+function showMissionBriefing() {
+  if (!activeMissions.length) { showMsg('No active missions.'); return; }
+  const lines = activeMissions.map(a => {
+    const m = misns[a.id];
+    const dest = a.travelStel != null ? stelName(a.travelStel)
+               : a.returnStel != null ? stelName(a.returnStel) : '—';
+    const days = a.timeLimit > 0 ? `, ${Math.max(0, a.timeLimit - (gameDay - a.accepted))}d left` : '';
+    const goal = a.shipsLeft > 0 ? `${a.shipsLeft} ships remain` :
+                 a.cargoName ? `deliver ${a.cargoQty}t ${a.cargoName}` : `go to ${dest}`;
+    return `${a.name}: ${goal} → ${dest}${days}`;
+  });
+  showMsg(lines.join('  |  '));
+}
+function payMission(m) {
+  const v = m.PayVal;
+  if (v > 0) credits += v;
+  else if (v >= -20255 && v <= -20128) { const oid = -v - 20000; if (DATA.types.outf[oid]) { outfits[oid] = (outfits[oid] || 0) + 1; applyShipStats(); } }
+  else if (v >= -40099 && v <= -40001) credits = Math.round(credits * (1 - (-v - 40000) / 100));
+  // -10128..-10255 clean legal record: reputation reset with that govt
+  else if (v >= -10255 && v <= -10128) reputation[-v - 10000] = Math.max(0, reputation[-v - 10000] || 0);
 }
 
 /* Classic shop layout. Menu-sheet thumbnails: outfit i (id−128) lives at
@@ -893,10 +1217,91 @@ SERVICE_RENDER.shipyard = function () {
     walletHtml();
 };
 
+/* ---- mission bar / computer dialog ---- */
+
+let selMisnId = null;
+function stelName(id) { const p = spobById(id); return p && p.name ? p.name : (id != null ? 'stellar ' + id : '—'); }
+
+function renderMissionBoard(loc) { // loc 0 = computer, 1 = bar
+  const p = landedAt;
+  const offers = offeredMissions(p, loc);
+  const active = activeMissions;
+  if (selMisnId == null || !offers.some(o => o.id === selMisnId))
+    selMisnId = offers.length ? offers[0].id : null;
+  const sel = selMisnId != null ? misns[selMisnId] : null;
+
+  let list = '<div style="flex:1;min-width:210px;max-height:340px;overflow-y:auto">';
+  if (active.length) {
+    list += `<div class="meta" style="margin:0 0 4px">Active missions</div>`;
+    for (const a of active) {
+      const m = misns[a.id];
+      const days = a.timeLimit > 0 ? ` <span class="sub">(${Math.max(0, a.timeLimit - (gameDay - a.accepted))}d left)</span>` : '';
+      list += `<div class="row" style="color:#98c379">${a.name}${days}</div>`;
+    }
+    list += `<hr style="border-color:#26304a;margin:8px 0">`;
+  }
+  list += `<div class="meta" style="margin:0 0 4px">Available here (${offers.length})</div>`;
+  if (!offers.length) list += `<div class="sub">Nothing right now.</div>`;
+  for (const o of offers)
+    list += `<div class="row" style="cursor:pointer;color:${o.id === selMisnId ? '#ffd479' : '#cfd6e4'}"
+      onclick="selMisnId=${o.id};rerenderService()">${o.name}</div>`;
+  list += '</div>';
+
+  let pane = '<div style="flex:1.3;min-width:240px">';
+  if (sel) {
+    const brief = descText(sel.BriefText) || descText(sel.QuickBrief) || 'No further details are offered.';
+    const pay = sel.PayVal > 0 ? `${sel.PayVal.toLocaleString('en-US')} cr` :
+      sel.PayVal <= -20128 && sel.PayVal >= -20255 ? 'an outfit' : 'see briefing';
+    const cargo = sel.CargoType >= 0 && sel.CargoQty ? `${misnCargoName(sel)}` : null;
+    const goalTxt = ['Destroy the ships', null, 'Board', 'Escort', 'Observe', 'Rescue', 'Drive off the ships'][sel.ShipGoal] || null;
+    const destShown = sel.TravelStel >= 128 ? stelName(sel.TravelStel)
+      : sel.ReturnStel >= 128 ? stelName(sel.ReturnStel)
+      : sel.ReturnStel === -4 ? p.name + ' (return here)'
+      : 'revealed on acceptance';
+    pane += `<h3>${sel.name}</h3>
+      <div class="desc" style="max-height:150px;overflow-y:auto">${brief}</div>
+      <div class="row">Destination: <b>${destShown}</b></div>` +
+      (cargo ? `<div class="row">Cargo: <b>${sel.CargoQty}t ${cargo}</b></div>` : '') +
+      (sel.ShipCount > 0 && goalTxt ? `<div class="row">Objective: <b>${goalTxt}</b> (${sel.ShipCount})</div>` : '') +
+      (sel.TimeLimit > 0 ? `<div class="row">Time limit: <b>${sel.TimeLimit} days</b></div>` : '') +
+      `<div class="row">Pay: <b>${pay}</b></div>
+      <div style="margin-top:10px">
+        <button class="svc" onclick="doAcceptMission(${sel.id})">Accept</button>
+      </div>`;
+  } else if (active.length) {
+    pane += `<div class="sub">Select an available mission, or check your active missions (press I in flight for the briefing).</div>`;
+  } else {
+    pane += `<div class="sub">No missions are available here right now. Try the ${loc === 0 ? 'bar' : 'mission computer'}, or another world.</div>`;
+  }
+  pane += '</div>';
+
+  document.getElementById('serviceCard').innerHTML =
+    `<h2>${loc === 0 ? 'Mission Computer' : 'Spaceport Bar'}</h2>
+     <div class="meta">${p.name}</div>
+     <div class="shop">${list}${pane}</div>
+     <div class="wallet">${credits.toLocaleString('en-US')} credits · cargo ${cargoUsed()}/${holds} tons · day ${gameDay}</div>
+     <div style="margin-top:10px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
+}
+SERVICE_RENDER.bar = () => renderMissionBoard(1);
+SERVICE_RENDER.missioncomputer = () => renderMissionBoard(0);
+
+function doAcceptMission(id) {
+  const m = misns[id];
+  const need = (m.CargoType >= 0 && m.CargoQty && m.PickupMode === 0)
+    ? (m.CargoQty <= -2 ? Math.abs(m.CargoQty) : m.CargoQty) : 0;
+  if (need > holds - cargoUsed()) { showMsg('Not enough cargo space for this mission.'); return; }
+  acceptMission(id, landedAt);
+  savePilot(landedAt.id);
+  rerenderService();
+}
+
+let missionNotes = []; // dialog text queued by the last landing
 function renderPlanetScreen() {
   const p = landedAt;
   const m = p.$sem || {};
   const desc = DATA.types.desc[p.id];
+  const compOffers = offeredMissions(p, 0).length;
+  const barOffers = offeredMissions(p, 1).length;
   const svc = ['commodityExchange', 'outfitter', 'shipyard', 'bar']
     .filter(k => m[k])
     .filter(k => k !== 'outfitter' || outfitterStock(p).length)  // flags lie on
@@ -917,15 +1322,19 @@ function renderPlanetScreen() {
     <div class="meta">${(m.stellarType || '').replace(/[()]/g, '')}` +
     `${m.govt ? ' · ' + m.govt : ''}${svc ? ' · ' + svc : ''} · fuel topped up</div>
     <div class="desc">${desc && desc.Description ? desc.Description : ''}</div>`;
+  // mission events from this landing (deliveries, completions) shown up top
+  for (const note of missionNotes)
+    html += `<div class="desc" style="color:#98c379;border-left:2px solid #98c379;padding-left:8px">${note}</div>`;
   // services row — a shop with nothing to show doesn't get a button
   html += `<div>` +
     (m.commodityExchange ? `<button class="svc" onclick="openService('exchange')">Commodity Exchange</button>` : '') +
     (m.outfitter && outfitterStock(p).length ? `<button class="svc" onclick="openService('outfitter')">Outfitter</button>` : '') +
     (m.shipyard && shipyardStock(p).length ? `<button class="svc" onclick="openService('shipyard')">Shipyard</button>` : '') +
-    (m.bar ? `<button class="svc" disabled title="coming soon">Bar</button>` : '') +
+    (m.bar ? `<button class="svc" onclick="openService('bar')">Spaceport Bar${barOffers ? ` (${barOffers})` : ''}</button>` : '') +
+    (m.canLand && compOffers ? `<button class="svc" onclick="openService('missioncomputer')">Mission BBS (${compOffers})</button>` : '') +
     `</div>`;
   html += `<div class="wallet"><b>${credits.toLocaleString('en-US')}</b> credits ·
-    cargo ${cargoUsed()}/${holds} tons</div>
+    cargo ${cargoUsed()}/${holds} tons${activeMissions.length ? ` · ${activeMissions.length} active mission${activeMissions.length > 1 ? 's' : ''}` : ''}</div>
     <div class="hint">Press Esc to take off</div>`;
   document.getElementById('landedCard').innerHTML = html;
 }
@@ -952,7 +1361,8 @@ function tryLand() {
   rebuildPlayerWeapons(); // rearm (simplification: ammo refills on landing)
   stopAllLoops();
   if (p.CustSndID >= 0) ambientSnd = loopSnd(p.CustSndID, 0.6); // planet ambient
-  savePilot(p.id); // classic: the game saves when you land
+  missionNotes = missionLandingEvents(p); // cargo pickup/dropoff, completion
+  savePilot(p.id); // classic: the game saves when you land (after mission events)
   renderPlanetScreen();
   document.getElementById('landed').style.display = 'flex';
 }
@@ -964,6 +1374,8 @@ function takeOff() {
   EV.placeAtTakeoff(player, landedAt);
   navTarget = null; // fresh start off the pad — no stale landing target
   landedAt = null;
+  missionNotes = [];
+  maybeSpawnMissionShips && activeMissions.forEach(maybeSpawnMissionShips); // ships that follow the player
   document.getElementById('landed').style.display = 'none';
 }
 
@@ -1031,6 +1443,7 @@ function step() {
       if (--s.deathT <= 0) {
         spawnExplosion(s.x, s.y, s.deathDelay >= 60 ? 2 : 1);
         playSnd(303, attenuate(s.x, s.y)); // the final boom
+        if (s.misnId != null) onMissionShipDestroyed(s);
         aiShips.splice(aiShips.indexOf(s), 1);
         if (shipTarget === s) shipTarget = null;
         const epoch = systEpoch;
@@ -1494,6 +1907,8 @@ addEventListener('load', () => {
   if (params.has('land')) { tryLand(); tryLand(); } // select, then land
   for (const svc of ['exchange', 'outfitter', 'shipyard'])
     if (params.has(svc)) openService(svc);
+  if (params.has('bar')) openService('bar');
+  if (params.has('computer')) openService('missioncomputer');
   if (params.has('tab')) cycleShipTarget();
   if (params.has('nav')) cyclePlanetTarget();
   last = performance.now(); render(); requestAnimationFrame(frame);

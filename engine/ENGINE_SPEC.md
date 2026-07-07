@@ -118,6 +118,61 @@ names the levels but not the multipliers; revisit if original-engine
 measurements disagree). Buy and sell use the same price at a given spöb.
 Cargo capacity = raw shïp `Holds`; starting credits **10,000**.
 
+## Missions (game rules, not flight core; browser leg)
+
+The mïsn resource ("the crown jewel", per the bible). We implement a
+faithful, completable subset; missions whose goals we can't yet resolve
+are simply not offered, so no mission ever dead-ends.
+
+**Mission bits.** 256 boolean flags (persisted). Set/cleared by
+`CompBitSet/2/4` (on completion) and `FailBitSet/2` (on failure); codes
+0–511 set bit n, 1000–1511 clear bit n−1000. Availability reads them via
+`AvailBitSet` (−1 ignore; 0–511 require set; 1000–1511 require clear) and
+`AvailBitClr` (require clear).
+
+**Day counter.** A calendar day advances on each hyperspace jump (classic
+EV's model). `TimeLimit` (days) is checked against days-elapsed-since-
+accept; expiry fails the mission.
+
+**Availability** (evaluated per spöb on landing; `AvailRandom` rerolled
+per system arrival): `AvailLoc` 0 = mission computer, 1 = bar, 2 = from a
+ship (offered on hail — deferred). `AvailStel`: −1 any inhabited spöb, a
+specific ID, or govt-relative codes (9999+g govt's own, 15000+g ally's,
+20000+g anyone-but, 25000+g enemy's). `AvailRating`/`AvailRecord`
+(combat rating, legal record — not yet tracked, so treated as ignored
+unless they'd forbid; missions requiring a positive rating are skipped).
+Ship-type gates: Flags 0x2000 (not for cargo ships, player inherentAI
+1–2), 0x4000 (not for warships, 3–4), and `AvailShipType`
+(128–255 must fly / 1128–1255 must not / 2128–2255 must be govt).
+Only missions with a supported goal are offered.
+
+**Goals supported now:** cargo delivery (CargoType/CargoQty, PickupMode
+0 = at accept / 1 = at TravelStel, DropOffMode 0 = TravelStel / 1 =
+ReturnStel), destroy special ships (ShipGoal 0), chase-off (6, satisfied
+by destroying or the ship leaving), observe (4, be in the ShipSyst), and
+plain go-to (TravelStel/ReturnStel with no cargo or ships). Deferred
+(not offered): board (2), disable (1), escort (3), rescue (5),
+ship-offered missions, aux ships. TravelStel/ReturnStel resolve their
+codes to a concrete spöb at accept time (−2 random inhabited, −3 random
+uninhabited, −4 the accept spöb, specific ID, govt codes).
+
+**Special ships** (ShipGoal 0/6): `ShipCount` ships from `ShipDude`,
+placed in `ShipSyst` (−1 accept system, −6 follow the player, specific
+ID, …), named from `ShipNameID` STR#. `ShipBehav`: 0/10 attack the
+player, 1/11 protect, 9/hyper-in delay. They reuse the combat system;
+the goal completes when all are destroyed (or, for chase-off, gone).
+
+**Flow.** Accept in the bar/computer shows `BriefText` (a dësc); unless
+Flags 0x0004 (can't refuse) the player may decline (`RefuseText`). `I`
+shows the accepted mission's `QuickBrief`. Loading/dropping cargo shows
+`LoadCargText`/`DumpCargoText`. At `ReturnStel` with the goal met,
+`CompText` + payout: `PayVal` > 0 credits; −10128−g clears legal record
+with govt g; −20128−g / −30128−g grant outfit; −40001−n take n% cash.
+`CompGovt`/`CompReward` adjust reputation (a simple per-govt integer we
+track; failure subtracts ½·CompReward, per the bible). Failure at
+ReturnStel shows `FailText`. Missions persist (bits, active list with
+resolved destinations, accept-day, day counter, reputation) in the pilot.
+
 ## Outfitter and shipyard
 
 Availability gate for both: item `TechLevel ≤ spöb.TechLevel`, or an exact
