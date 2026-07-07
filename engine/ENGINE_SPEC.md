@@ -478,14 +478,13 @@ game-over screens).
 
 - **Floating joystick** (left thumb): appears wherever the thumb presses in
   the left region. Its angle is an *absolute* facing — the ship steers toward
-  it — and pushing past ~55% of the knob radius burns the engine (past ~22% to
-  steer at all; a small deadzone). Crucially the joystick does **not** touch
-  the flight core: it synthesizes the same `left`/`right`/`thrust` booleans the
-  keyboard produces (turn toward the target heading, stopping within half a
-  turn-step so it doesn't oscillate), so physics and the golden trace are
-  unaffected.
-- **Fire button** (bottom-right, clear of the sidebar panel): holds the
-  primary trigger while pressed.
+  it (past a small ~18% deadzone). Steering is **decoupled from thrust** so
+  aiming never accidentally burns the engine. The joystick does **not** touch
+  the flight core: it synthesizes the same `left`/`right` booleans the keyboard
+  produces (turn toward the target heading, stopping within half a turn-step so
+  it doesn't oscillate), so physics and the golden trace are unaffected.
+- **Thrust and Fire buttons** (bottom-right, side by side, clear of the sidebar
+  panel): each holds its control (`thrust` / primary trigger) while pressed.
 - **Mini action bar** (always-on, top-centre): Target/Nav cycle, Land, Board,
   Hail, Map, Jump, Missions, and a sound toggle — each just calls the same
   handler as its keyboard shortcut. On the galaxy map the joystick and fire

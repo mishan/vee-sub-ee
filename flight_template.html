@@ -142,8 +142,8 @@
     pointer-events: auto; touch-action: none; }     /* left-thumb steering area */
   body.touch.no-fly #touch { display: none; }        /* hidden off the flight screen */
   #touch > *:not(#touchJoyZone) { pointer-events: auto; }
-  /* while the galaxy map is up, hide joystick+fire so canvas taps pick a system */
-  #touch.map #touchJoyZone, #touch.map #touchFire,
+  /* while the galaxy map is up, hide joystick+thrust+fire so canvas taps pick a system */
+  #touch.map #touchJoyZone, #touch.map #touchFire, #touch.map #touchThrust,
   #touch.map #touchJoyBase, #touch.map #touchJoyKnob { display: none; pointer-events: none; }
   /* floating joystick: base + knob drawn where the thumb lands */
   #touchJoyBase, #touchJoyKnob { position: fixed; border-radius: 50%; display: none;
@@ -153,13 +153,19 @@
   #touchJoyKnob { width: 60px; height: 60px; margin: -30px 0 0 -30px;
     border: 2px solid rgba(180,210,255,.8); background: rgba(150,190,255,.30); }
   #touch.on #touchJoyBase, #touch.on #touchJoyKnob { display: block; }
-  /* fire button, bottom-right but clear of the 144px sidebar panel */
-  #touchFire { position: fixed; right: 158px; bottom: 20px; width: 90px; height: 90px;
-    border-radius: 50%; border: 2px solid rgba(255,120,120,.55);
+  /* thrust + fire buttons, bottom-right, clear of the 144px sidebar panel */
+  #touchThrust, #touchFire { position: fixed; bottom: 20px; width: 90px; height: 90px;
+    border-radius: 50%; text-align: center; opacity: .55; user-select: none;
+    transition: opacity .15s, background .1s; }
+  #touchFire { right: 158px; border: 2px solid rgba(255,120,120,.55);
     background: rgba(220,70,70,.14); color: rgba(255,190,190,.85);
-    font: 600 15px/90px system-ui, sans-serif; text-align: center; letter-spacing: .05em;
-    opacity: .55; transition: opacity .15s, background .1s; user-select: none; }
+    font: 600 15px/90px system-ui, sans-serif; letter-spacing: .05em; }
   #touchFire.press { opacity: 1; background: rgba(220,70,70,.4); }
+  #touchThrust { right: 262px; border: 2px solid rgba(120,190,255,.55);
+    background: rgba(70,140,220,.14); color: rgba(195,220,255,.9);
+    font: 600 11px/1.3 system-ui, sans-serif; letter-spacing: .04em;
+    display: grid; place-items: center; }
+  #touchThrust.press { opacity: 1; background: rgba(70,140,220,.42); }
   /* always-on mini action bar, top-centre, single row */
   #touchBar { position: fixed; top: 6px; left: 50%; transform: translateX(-50%);
     display: flex; gap: 4px; padding: 4px; border-radius: 10px; flex-wrap: nowrap;
@@ -186,6 +192,7 @@
   <div id="touchJoyZone"></div>
   <div id="touchJoyBase"></div>
   <div id="touchJoyKnob"></div>
+  <div id="touchThrust">▲<br>THRUST</div>
   <div id="touchFire">FIRE</div>
   <div id="touchBar">
     <button data-act="target">Tgt</button>
@@ -559,12 +566,17 @@ const stopSnd = a => { if (a) { a.pause(); a.currentTime = 0; } };
 /* Title theme (snd 30000) lives in evassets/music/, not sounds/. Looped
  * while the title screen is up; deferred until a user gesture because
  * browsers block autoplay. Volume tracks masterVol like every other loop.
- * The element is created and preloaded up front: on mobile, calling play()
- * on a freshly-made, still-loading Audio during the very first gesture races
- * the audio-unlock and silently fails, whereas a preloaded element plays. */
-const titleMusicEl = new Audio('evassets/music/snd_30000.wav');
-titleMusicEl.loop = true; titleMusicEl.preload = 'auto';
-try { titleMusicEl.load(); } catch {}
+ * Mobile browsers defer <audio> preload until a gesture, so a first-tap
+ * play() on a still-loading file silently fails (the theme then only starts
+ * on a later tap). Fetch the file into a blob up front instead — fetch isn't
+ * deferred, so the element is fully buffered and plays on the very first tap;
+ * fall back to a direct src if fetch is unavailable (e.g. file://). */
+const titleMusicEl = new Audio();
+titleMusicEl.loop = true;
+fetch('evassets/music/snd_30000.wav')
+  .then(r => r.ok ? r.blob() : Promise.reject(r.status))
+  .then(b => { titleMusicEl.src = URL.createObjectURL(b); })
+  .catch(() => { titleMusicEl.src = 'evassets/music/snd_30000.wav'; titleMusicEl.load(); });
 let titleMusic = null;
 function startTitleMusic() {
   if (titleMusic || !soundOn || masterVol <= 0 || !introUp()) return;
@@ -943,10 +955,12 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
 /* ---------------- touch controls (mobile) ----------------
- * A floating joystick (left thumb) synthesizes the same left/right/thrust the
- * keyboard produces, a Fire button holds the trigger, and an always-on mini
- * bar reaches the secondary actions. Shown only on touch devices (or forced
- * with ?mobile=1; ?mobile=0 forces off) and only while actually flying. */
+ * A floating joystick (left thumb) steers, dedicated Thrust and Fire buttons
+ * (right thumb) drive and shoot, and an always-on mini bar reaches the
+ * secondary actions. The joystick only sets heading — thrust is its own
+ * button — so aiming never accidentally burns the engine. All of it just
+ * synthesizes the same booleans the keyboard produces (see step). Shown on
+ * touch devices (or forced with ?mobile=1; ?mobile=0 off), only while flying. */
 const TOUCH = params.has('mobile')
   ? params.get('mobile') !== '0'
   : (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window ||
@@ -955,8 +969,7 @@ const touchEl = document.getElementById('touch');
 const joyBase = document.getElementById('touchJoyBase');
 const joyKnob = document.getElementById('touchJoyKnob');
 const JOY_MAX = 60;      // px the knob travels from the origin
-const JOY_DEAD = 0.22;   // fraction of radius before steering engages
-const JOY_THRUST = 0.55; // fraction before the engine burns
+const JOY_DEAD = 0.18;   // fraction of radius before steering engages
 let joyId = null, joyOX = 0, joyOY = 0;
 
 function updateJoyKnob(x, y) {
@@ -965,14 +978,12 @@ function updateJoyKnob(x, y) {
   if (len > JOY_MAX) { dx *= JOY_MAX / len; dy *= JOY_MAX / len; }
   joyKnob.style.left = (joyOX + dx) + 'px';
   joyKnob.style.top = (joyOY + dy) + 'px';
-  const frac = Math.min(len / JOY_MAX, 1);
-  touchCtl.steer = frac > JOY_DEAD;
+  touchCtl.steer = Math.min(len / JOY_MAX, 1) > JOY_DEAD;
   if (touchCtl.steer) touchCtl.heading = EV.bearing(dx, dy); // up (−y) = heading 0
-  touchCtl.thrust = frac > JOY_THRUST;
 }
 function releaseJoy() {
   joyId = null; touchEl.classList.remove('on');
-  touchCtl.steer = false; touchCtl.thrust = false;
+  touchCtl.steer = false;
 }
 function touchAction(act) {
   switch (act) {
@@ -1002,9 +1013,10 @@ function updateTouchUI() {
                  !hailOpen && !serviceOpen;
   document.body.classList.toggle('no-fly', !flying);
   touchEl.classList.toggle('map', flying && mapOpen);
-  if (!flying || mapOpen) { // joystick/fire unusable → release everything
+  if (!flying || mapOpen) { // joystick/thrust/fire unusable → release everything
     if (joyId !== null) releaseJoy();
     if (touchCtl.fire) { touchCtl.fire = false; document.getElementById('touchFire').classList.remove('press'); }
+    if (touchCtl.thrust) { touchCtl.thrust = false; document.getElementById('touchThrust').classList.remove('press'); }
   }
 }
 
@@ -1028,12 +1040,16 @@ if (TOUCH) {
   zone.addEventListener('pointerup', endJoy);
   zone.addEventListener('pointercancel', endJoy);
 
-  const fireBtn = document.getElementById('touchFire');
-  const pressFire = on => { touchCtl.fire = on; fireBtn.classList.toggle('press', on); };
-  fireBtn.addEventListener('pointerdown', e => { pressFire(true); e.preventDefault(); });
-  fireBtn.addEventListener('pointerup', e => { pressFire(false); e.preventDefault(); });
-  fireBtn.addEventListener('pointercancel', () => pressFire(false));
-  fireBtn.addEventListener('pointerleave', () => pressFire(false));
+  // hold-button helper: sets a touchCtl flag while pressed
+  const holdButton = (el, set) => {
+    const on = v => { set(v); el.classList.toggle('press', v); };
+    el.addEventListener('pointerdown', e => { on(true); e.preventDefault(); });
+    el.addEventListener('pointerup', e => { on(false); e.preventDefault(); });
+    el.addEventListener('pointercancel', () => on(false));
+    el.addEventListener('pointerleave', () => on(false));
+  };
+  holdButton(document.getElementById('touchFire'), v => touchCtl.fire = v);
+  holdButton(document.getElementById('touchThrust'), v => touchCtl.thrust = v);
 
   document.getElementById('touchBar').addEventListener('click', e => {
     const b = e.target.closest('button'); if (b) touchAction(b.dataset.act);
