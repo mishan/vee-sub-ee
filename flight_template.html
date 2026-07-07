@@ -75,6 +75,13 @@
   .shoppane .row { color: #aab6cc; font-size: 12px; margin: 2px 0; }
   .shoppane .row b { color: #fff; }
   #help { position: fixed; bottom: 8px; left: 12px; color: #4d5b76; font-size: 11px; }
+  #ff { position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
+    color: #ffd479; font-size: 13px; font-weight: 600; letter-spacing: .1em;
+    text-shadow: 0 1px 3px #000; user-select: none; cursor: pointer; opacity: .32;
+    padding: 2px 9px; border: 1px solid transparent; border-radius: 6px; }
+  #ff:hover { opacity: .6; }
+  #ff.on { opacity: 1; border-color: rgba(255,212,121,.45); background: rgba(255,212,121,.12); }
+  body.touch #ff { display: none; }   /* mobile uses the action-bar 2× button */
   #dead { position: fixed; inset: 0; display: none; align-items: center;
     justify-content: center; text-align: center; background: rgba(0,0,0,.6); }
   #dead h1 { color: #e06c75; font-size: 24px; margin-bottom: 8px; }
@@ -177,6 +184,8 @@
     border: 1px solid rgba(90,120,170,.4); background: rgba(26,35,56,.7); color: #cfd6e4;
     font: 600 12px system-ui, sans-serif; user-select: none; opacity: .85; }
   #touchBar button:active { background: rgba(60,90,140,.85); opacity: 1; }
+  #touchBar button.on { background: rgba(255,212,121,.28); color: #ffd479;
+    border-color: rgba(255,212,121,.5); opacity: 1; } /* 2× active */
   /* keyboard hint bar is meaningless on touch */
   body.touch #help { display: none; }
   /* rotate-to-landscape nudge (portrait on a touch device) */
@@ -206,6 +215,7 @@
     <button data-act="map">Map</button>
     <button data-act="jump">Jump</button>
     <button data-act="missions">Msn</button>
+    <button data-act="ff">2×</button>
     <button data-act="sound">♪</button>
   </div>
 </div>
@@ -239,7 +249,8 @@
   <div id="titleHint">select a menu option · original EV title theme</div>
 </div>
 <div id="about"><div class="card" id="aboutCard"></div></div>
-<div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · B board · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · Esc</div>
+<div id="ff" onclick="toggleFastForward()" title="Toggle double speed (Caps Lock)">» 2×</div>
+<div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · B board · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · CapsLock 2× · Esc</div>
 <script>/*__ENGINE__*/</script>
 <script>
 'use strict';
@@ -950,6 +961,32 @@ function completeJump() {
 /* ---------------- input ---------------- */
 
 const keys = {};
+/* Double speed (like the original's Caps Lock). Driven by either Caps Lock or
+ * an on-screen button (usable when Caps Lock is disabled, and on mobile). The
+ * effective flag is the OR of the two so a keypress can't undo a manual
+ * toggle. Caps Lock is a lock key: browsers fire keydown on engage and keyup
+ * on disengage (or a keydown/keyup pair), and getModifierState is stale on the
+ * event itself — so we flip on either event, debounced to one flip per press. */
+let fastForward = false, capsFF = false, manualFF = false, capsLatch = -1e9;
+function applyFF() {
+  const on = capsFF || manualFF;
+  if (on === fastForward) return;
+  fastForward = on;
+  document.getElementById('ff').classList.toggle('on', on);
+  const bar = document.querySelector('#touchBar [data-act="ff"]');
+  if (bar) bar.classList.toggle('on', on);
+  showMsg(on ? 'Fast forward (2×) on' : 'Fast forward off');
+}
+function capsToggle() {
+  // Only in flight — behind the splash/title/hail/service/landing/dead overlays
+  // gameplay keys are swallowed (the splash even advances on any key), so a
+  // Caps Lock press there must not silently arm 2× for when you enter the game.
+  if (gameOver || hailOpen || introUp() || landedAt || serviceOpen) return;
+  const t = performance.now();
+  if (t - capsLatch < 200) return; // absorb the keydown/keyup pair into one flip
+  capsLatch = t; capsFF = !capsFF; applyFF();
+}
+function toggleFastForward() { manualFF = !manualFF; applyFF(); }
 /* Touch control state (mobile). The joystick doesn't drive the engine
  * directly — it synthesizes the same left/right/thrust the keyboard produces
  * (see step's player branch), so the flight core and golden trace are
@@ -957,6 +994,7 @@ const keys = {};
 const touchCtl = { steer: false, heading: 0, thrust: false, fire: false };
 addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
+  if (e.key === 'CapsLock') capsToggle(); // Caps Lock → toggle double speed
   // Splash/title overlays pause the sim; swallow every gameplay hotkey so the
   // game can't be driven behind them. Any key advances the loading splash.
   if (splashShown) { advanceSplash(); e.preventDefault(); return; }
@@ -1009,7 +1047,7 @@ addEventListener('keydown', e => {
   }
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
 });
-addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; if (e.key === 'CapsLock') capsToggle(); });
 
 /* ---------------- touch controls (mobile) ----------------
  * A floating joystick (left thumb) steers, dedicated Thrust and Fire buttons
@@ -1052,6 +1090,7 @@ function touchAction(act) {
     case 'map': mapOpen = !mapOpen; break;
     case 'jump': if (mapOpen) mapOpen = false; beginJump(); break;
     case 'missions': showMissionBriefing(); break;
+    case 'ff': toggleFastForward(); break;
     case 'sound':
       soundOn = !soundOn;
       if (!soundOn) stopAllLoops();
@@ -2354,14 +2393,16 @@ function tryLand() {
 function takeOff() {
   if (!landedAt) return;
   if (serviceOpen) closeService();
-  savePilot(landedAt.id); // captures docked purchases/trades
+  const spob = landedAt;
+  savePilot(spob.id);         // captures docked purchases/trades
   stopAllLoops();
-  EV.placeAtTakeoff(player, landedAt);
-  navTarget = null; // fresh start off the pad — no stale landing target
   landedAt = null;
   missionNotes = [];
-  maybeSpawnMissionShips && activeMissions.forEach(maybeSpawnMissionShips); // ships that follow the player
   document.getElementById('landed').style.display = 'none';
+  // Rebuild the system fresh: the ships that were here when you landed are
+  // gone; loadSystem respawns the ambient population and any mission ships.
+  loadSystem(SYSTEM_ID);
+  EV.placeAtTakeoff(player, spob); // then place on the pad (loadSystem doesn't move you)
 }
 
 /* ---------------- logic step (30Hz) ---------------- */
@@ -2387,7 +2428,9 @@ function checkHostileAlert() {
 }
 
 function step() {
-  if (gameOver || hailOpen || introUp()) return; // dialogs/splash/title pause the sim
+  // dialogs/splash/title pause the sim; landed pauses too — the system is
+  // frozen while docked and rebuilt fresh on takeoff.
+  if (gameOver || hailOpen || introUp() || landedAt) return;
   maybeSpawnBountyHunter();
   checkHostileAlert();
   if (!landedAt) {
@@ -3139,7 +3182,8 @@ let last = performance.now(), acc = 0;
 function frame(now) {
   acc += Math.min(now - last, 250); last = now;
   const dt = 1000 / EV.FPS;
-  while (acc >= dt) { step(); acc -= dt; }
+  const steps = fastForward ? 2 : 1; // Caps Lock: two sim ticks per real tick
+  while (acc >= dt) { for (let s = 0; s < steps; s++) step(); acc -= dt; }
   render();
   requestAnimationFrame(frame);
 }
