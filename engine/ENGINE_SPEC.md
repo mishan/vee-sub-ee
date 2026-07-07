@@ -1,4 +1,4 @@
-# EV engine spec
+# Vₑ engine spec
 
 The normative description of flight physics and entity behavior shared by
 every implementation (currently `engine/core.js` for the browser and
@@ -134,6 +134,72 @@ spawn) or 400 + rand·1200 (initial population). Target: uniform over the
 system's spobs. Despawned traders respawn after a delay (browser: 2–8 s
 timer; SDL: 1% chance per frame — intentionally loose, not part of the
 golden trace).
+
+## Combat
+
+Sources: wëap/shïp sections of the resource bible. Deterministic parts
+live in the core and are golden-traced; randomness (Inaccuracy roll, AI
+jitter) is rolled by the shell and passed in.
+
+**Weapon stats** (wëap record): `Reload` frames between shots; `Count`
+shot lifetime in frames; shot speed = `Speed/100` px/frame; `AmmoType`
+−1 = unlimited, 0–63 = draws from weapon 128+n's ammo pool; `Graphic` →
+spïn 200+n; `Inaccuracy` = uniform ±n° at launch; `Sound` → snd 200+n
+(audio milestone); `Impact` = velocity kick to the victim, applied along
+the shot heading as `Impact / (10 · victim Mass)` px/frame
+(approximation — bible says only "inversely proportional to mass");
+`ExplodType` −1 none / 0 small / 1 big / 2 huge → explosion spïns
+400/401/402; `ProxRadius` detonation distance (0 = contact);
+`MiscFlags` 0x0002 = secondary-trigger weapon.
+
+**Shot kinematics.** All shots inherit the shooter's velocity at launch
+(freefall bombs inherit 80% and add no muzzle velocity). Muzzle velocity
+`Speed/100` is added along the launch heading. Launch heading: shooter
+heading for guidance −1/5/6; aim-at-target for 4 (turret) and 1/2
+(homing); quadrant turrets 7/8 clamp the aim to ±45° of the nose/tail.
+Per frame after controls: homing shots (1/2) steer toward the target at
+**3°/frame** (approximation; classic's homing rate is unrecorded) and fly
+at full speed along their heading (no inertia); rockets (6) hold heading
+and accelerate along it by `Speed/100/15` per frame up to max; everything
+else flies ballistically. `life` decrements each frame; the shot expires
+at 0. A shot hits a ship (never its shooter) when
+`dist < max(ProxRadius, half the ship sprite)`.
+
+**Beams** (guidance 0, 3): no projectile — a ray of length `Speed` px
+(beam reuses the field) from the shooter's nose along its heading
+(turreted beams aim at the target), lasting `Count` frames per trigger
+pull, applying damage each frame to the first ship within 8 px of the
+ray. `Graphic` is a color code (−2 red, −3 green, −4 blue, −5 cyan,
+−6 magenta, −7 yellow).
+
+**Damage** (bible, exact): shields up → `MassDmg/4 + EnergyDmg` off
+shields; shields down (≤0) → `MassDmg + EnergyDmg/4` off armor; always
+at least 1. Shield overflow does not carry into armor. **Disabled** at
+armor ≤ ⅓ of max (shïp flag 0x0010 lowers this to 10% — honored when
+present): AI stops, engines dead, still targetable. **Destroyed** at
+armor ≤ 0: the ship disintegrates for `DeathDelay` frames (drawn
+flickering), then explodes — spïn 401 fireball, or 402 + sparks when
+DeathDelay ≥ 60 ("huge"). **Shield regen**: +1% of max shields every
+`ShieldRe` frames — **except while disabled**: a disabled ship drifts
+with collapsed shields and stays a boarding target (the bible is silent
+on this; classic gameplay — e.g. mïsn rescue goals that require boarding
+a disabled ship — settles it).
+
+**Warship AI** (AIType 3/4 when hostile): steer toward the enemy; thrust
+while `dist > 260` px and aligned; inside 120 px keep thrusting (fly-by,
+classic's charge-past behavior); fire all ready weapons whose range
+(`Speed/100 · Count`) covers the distance whenever within `2·turn`
+degrees of the firing solution. Traders under fire: wimpy (1) flees —
+steer to the attack bearing + 180° and thrust; brave (2) turns warship
+against its attacker. **Hostility**: govt flag `alwaysAttacksPlayer` →
+hostile to the player on sight; `xenophobic` → hostile to everyone
+except allies (approximated: everyone); any ship the player damages —
+and every same-govt ship in the system — holds a grudge for the session.
+
+**Player loadout**: the shïp record's stock `WeapType/WeapCount/AmmoLoad
+1–4` plus outfitter weapons (ModType 1; ModType 3 adds ammo to the
+matching weapon). Space fires all primary weapons; Q cycles secondary
+(MiscFlags 0x0002) weapons, X fires the selected one.
 
 ## Sprite ID conventions (from the EV bible, see semantics.js)
 

@@ -1,12 +1,24 @@
 {
-  "comment": "Golden-trace scenario (see ENGINE_SPEC.md). Self-contained: stats inline, no data files. Exercises thrust, turning while thrusting, retrograde autopilot, coasting, and the full AI trader state machine including brake and landing fade.",
+  "comment": "Golden-trace scenario (see ENGINE_SPEC.md). Self-contained: stats inline, no data files. Exercises thrust, turning while thrusting, retrograde autopilot, coasting, the full AI trader state machine, and combat: an unguided volley and a homing shot with damage, impact kick, and shield regen. Trace hit radius is a fixed 12 px (no sprites here).",
   "frames": 420,
   "sampleEvery": 10,
+  "shots": [
+    { "frame": 30, "shooter": 0, "aim": 20, "homingTarget": 1,
+      "weapon": { "Guidance": 1, "Speed": 650, "Count": 300, "MassDmg": 10,
+                  "EnergyDmg": 25, "Impact": 30, "ProxRadius": 0 } },
+    { "frame": 40, "shooter": 0, "aim": 65,
+      "weapon": { "Guidance": -1, "Speed": 1200, "Count": 60, "MassDmg": 4,
+                  "EnergyDmg": 6, "Impact": 3, "ProxRadius": 0 } },
+    { "frame": 60, "shooter": 2, "aim": 300,
+      "weapon": { "Guidance": 6, "Speed": 900, "Count": 90, "MassDmg": 45,
+                  "EnergyDmg": 0, "Impact": 60, "ProxRadius": 25 } }
+  ],
   "entities": [
     {
       "name": "player-shuttle",
       "kind": "player",
-      "stats": { "Speed": 275, "Accel": 435, "Maneuver": 4 },
+      "stats": { "Speed": 275, "Accel": 435, "Maneuver": 4,
+                 "Shield": 180, "Armor": 100, "Mass": 30, "ShieldRe": 36 },
       "x": 0, "y": 300, "heading": 0,
       "script": [
         { "until": 60,  "thrust": true },
@@ -20,14 +32,16 @@
     {
       "name": "trader-frigate",
       "kind": "trader",
-      "stats": { "Speed": 200, "Accel": 300, "Maneuver": 1 },
+      "stats": { "Speed": 200, "Accel": 300, "Maneuver": 1,
+                 "Shield": 350, "Armor": 400, "Mass": 200, "ShieldRe": 60 },
       "x": 700, "y": -350, "heading": 180,
       "target": { "x": 0, "y": 0 }
     },
     {
       "name": "trader-courier-close",
       "kind": "trader",
-      "stats": { "Speed": 350, "Accel": 600, "Maneuver": 6 },
+      "stats": { "Speed": 350, "Accel": 600, "Maneuver": 6,
+                 "Shield": 150, "Armor": 250, "Mass": 60, "ShieldRe": 45 },
       "x": 120, "y": 80, "heading": 90,
       "target": { "x": 60, "y": 40 }
     }

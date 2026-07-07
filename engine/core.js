@@ -128,6 +128,87 @@ function placeAtArrival(s, inBearing) {
   s.vy = -Math.cos(b) * s.maxSpeed;
 }
 
+/* ---- combat (spec: "Combat") ---- */
+const HOMING_TURN = 3;          // deg/frame (approximation, see spec)
+const ROCKET_ACCEL_DIV = 15;    // rocket reaches max speed in 15 frames
+const shotSpeedOf = rec => rec.Speed / 100;
+
+/* aim: launch heading (shell resolves turret/quadrant aim + inaccuracy).
+ * shooter: {x, y, vx, vy, heading}. */
+function makeShot(rec, shooter, aim) {
+  const g = rec.Guidance;
+  const freefall = g === 5;
+  const heading = freefall ? shooter.heading : norm(aim);
+  const mv = (freefall || g === 6) ? 0 : shotSpeedOf(rec);
+  return {
+    rec, guidance: g,
+    x: shooter.x, y: shooter.y, heading,
+    vx: shooter.vx * (freefall ? 0.8 : 1) + Math.sin(rad(heading)) * mv,
+    vy: shooter.vy * (freefall ? 0.8 : 1) - Math.cos(rad(heading)) * mv,
+    speed: shotSpeedOf(rec),
+    life: rec.Count,
+  };
+}
+
+/* target: {x, y} or null. Returns false when the shot expires. */
+function stepShot(shot, target) {
+  const g = shot.guidance;
+  if ((g === 1 || g === 2) && target) {
+    let diff = norm(bearing(target.x - shot.x, target.y - shot.y) - shot.heading);
+    if (diff > 180) diff -= 360;
+    shot.heading = norm(shot.heading + Math.max(-HOMING_TURN, Math.min(HOMING_TURN, diff)));
+    shot.vx = Math.sin(rad(shot.heading)) * shot.speed;
+    shot.vy = -Math.cos(rad(shot.heading)) * shot.speed;
+  } else if (g === 6) {
+    const acc = shot.speed / ROCKET_ACCEL_DIV;
+    shot.vx += Math.sin(rad(shot.heading)) * acc;
+    shot.vy -= Math.cos(rad(shot.heading)) * acc;
+    const v = Math.hypot(shot.vx, shot.vy);
+    if (v > shot.speed) { shot.vx *= shot.speed / v; shot.vy *= shot.speed / v; }
+  }
+  shot.x += shot.vx; shot.y += shot.vy;
+  return --shot.life > 0;
+}
+
+/* st: {shields, armor, armorMax, disableFrac?}. Returns the ship's new
+ * condition after one hit: 'shielded' | 'hit' | 'disabled' | 'destroyed'. */
+function applyDamage(st, rec) {
+  const up = st.shields > 0;
+  const dmg = Math.max(1, up ? rec.MassDmg / 4 + rec.EnergyDmg
+                             : rec.MassDmg + rec.EnergyDmg / 4);
+  if (up) { st.shields = Math.max(0, st.shields - dmg); return 'shielded'; }
+  st.armor -= dmg;
+  if (st.armor <= 0) return 'destroyed';
+  if (st.armor <= st.armorMax * (st.disableFrac ?? (1 / 3))) return 'disabled';
+  return 'hit';
+}
+
+/* +1% of max every ShieldRe frames (st gains a shieldT counter). */
+function stepShields(st, shieldMax, shieldRe) {
+  if (st.shields >= shieldMax || shieldRe <= 0) return;
+  st.shieldT = (st.shieldT ?? 0) + 1;
+  if (st.shieldT >= shieldRe) {
+    st.shieldT = 0;
+    st.shields = Math.min(shieldMax, st.shields + shieldMax / 100);
+  }
+}
+
+/* Warship attack step (spec: "Warship AI"): steer, thrust per distance
+ * bands, integrate. Returns {aligned, dist} so the shell decides firing. */
+function stepWarship(s, ex, ey) {
+  const dist = Math.hypot(ex - s.x, ey - s.y);
+  const aligned = steerToward(s, bearing(ex - s.x, ey - s.y));
+  if ((dist > 260 && aligned) || dist < 120) thrust(s);
+  integrate(s);
+  return { aligned, dist };
+}
+/* Flee: turn tail to the threat and burn. */
+function stepFlee(s, ex, ey) {
+  const aligned = steerToward(s, norm(bearing(ex - s.x, ey - s.y) + 180));
+  if (aligned) thrust(s);
+  integrate(s);
+}
+
 const EV = {
   FPS, maxSpeedOf, accelOf, turnOf,
   rad, norm, frameIndex, bearing,
@@ -135,6 +216,8 @@ const EV = {
   stepPlayer, stepTrader,
   LAND_DIST, LAND_SPEED, canLand, placeAtTakeoff,
   JUMP_FUEL, JUMP_STREAK_FRAMES, ARRIVE_DIST, stepJumpEngage, placeAtArrival,
+  HOMING_TURN, shotSpeedOf, makeShot, stepShot, applyDamage, stepShields,
+  stepWarship, stepFlee,
 };
 
 if (typeof module !== 'undefined' && module.exports) module.exports = EV;

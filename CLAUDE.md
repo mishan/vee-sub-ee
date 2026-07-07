@@ -1,6 +1,8 @@
 # CLAUDE.md
 
-Clean-room reimplementation of Escape Velocity (Ambrosia, classic Mac).
+**Vₑ** (`V_e`, "vee-sub-e") — clean-room reimplementation of Escape
+Velocity (Ambrosia, classic Mac). The name is the physics symbol for
+escape velocity, and EV backwards.
 Browser-first engine with an SDL port kept in lockstep. The engine is ours;
 the game data is not — see "Data hygiene" below.
 

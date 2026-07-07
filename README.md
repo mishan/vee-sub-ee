@@ -1,4 +1,7 @@
-# evrsrc — Escape Velocity data extraction pipeline
+# Vₑ — a clean-room Escape Velocity engine
+
+*(Working name: **Vₑ** / `V_e` — the physics symbol for escape velocity,
+and "EV" backwards. The data pipeline below began life as `evrsrc`.)*
 
 Zero-dependency Node.js tooling for reading classic Escape Velocity data
 files and plugins on Linux. This is stage 1–2 of an engine reimplementation:
