@@ -967,8 +967,7 @@ function demandSurrender(s) {
   if (shipTarget === s) shipTarget = null;
   checkDefenseCleared(s.defOf, s);
   showMsg(`You plunder the disabled ship. (+${loot.toLocaleString('en-US')} cr)`);
-  playSnd(390, 0.7); // Airlock — boarding
-  closeHail();
+  closeHail(); // a comm demand, not a physical boarding — no airlock sound
 }
 
 function renderHail() {
