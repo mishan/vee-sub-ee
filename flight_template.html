@@ -26,10 +26,19 @@
   #landed, #service { position: fixed; inset: 0; display: none;
     align-items: center; justify-content: center; background: rgba(0,0,0,.72); }
   #service { background: rgba(0,0,0,.45); }
-  #landed .card, #service .card { width: 560px; max-height: 86vh; overflow-y: auto;
+  #landed .card, #service .card { width: min(560px, 94vw); max-height: 88vh; overflow-y: auto;
     background: #0c1120; border: 1px solid #2a3550;
     border-radius: 8px; padding: 20px 24px; }
-  #service .card { width: 540px; box-shadow: 0 12px 48px rgba(0,0,0,.8); }
+  #service .card { width: min(540px, 94vw); box-shadow: 0 12px 48px rgba(0,0,0,.8); }
+  /* persistent leave button, pinned to the overlay so it's reachable without
+     scrolling (essential on mobile, where there is no Esc key) */
+  .leaveBtn { position: fixed; top: 10px; right: 12px; z-index: 3;
+    background: #24304d; color: #eaf0fb; border: 1px solid #3a4a6a; border-radius: 6px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0,0,0,.5); }
+  .leaveBtn:hover { background: #2e3c5e; }
+  /* on short/mobile screens keep the landscape image from dominating the scroll */
+  @media (max-height: 560px) { #landed img.scape { max-height: 34vh; width: auto; max-width: 100%; } }
   #landed h2, #service h2 { margin: 0 0 4px; color: #fff; }
   #landed .meta, #service .meta { color: #6b7a96; font-size: 12px; margin-bottom: 10px; }
   #landed .desc { white-space: pre-wrap; color: #aab6cc; font-size: 13px; }
@@ -195,8 +204,8 @@
 <div id="target"></div>
 <div id="prompt"></div>
 <div id="msg"></div>
-<div id="landed"><div class="card" id="landedCard"></div></div>
-<div id="service"><div class="card" id="serviceCard"></div></div>
+<div id="landed"><button class="leaveBtn" onclick="takeOff()">Take Off ▲</button><div class="card" id="landedCard"></div></div>
+<div id="service"><button class="leaveBtn" onclick="closeService()">◀ Back</button><div class="card" id="serviceCard"></div></div>
 <div id="dead"><div>
   <h1>Your ship has been destroyed.</h1>
   <div id="deadHint">Press R to try again</div>
@@ -549,16 +558,24 @@ const stopSnd = a => { if (a) { a.pause(); a.currentTime = 0; } };
 
 /* Title theme (snd 30000) lives in evassets/music/, not sounds/. Looped
  * while the title screen is up; deferred until a user gesture because
- * browsers block autoplay. Volume tracks masterVol like every other loop. */
+ * browsers block autoplay. Volume tracks masterVol like every other loop.
+ * The element is created and preloaded up front: on mobile, calling play()
+ * on a freshly-made, still-loading Audio during the very first gesture races
+ * the audio-unlock and silently fails, whereas a preloaded element plays. */
+const titleMusicEl = new Audio('evassets/music/snd_30000.wav');
+titleMusicEl.loop = true; titleMusicEl.preload = 'auto';
+try { titleMusicEl.load(); } catch {}
 let titleMusic = null;
 function startTitleMusic() {
   if (titleMusic || !soundOn || masterVol <= 0 || !introUp()) return;
-  const a = new Audio('evassets/music/snd_30000.wav');
+  const a = titleMusicEl;
   a._baseVol = 0.7;
   a.volume = Math.min(0.7 * masterVol, 1);
-  a.loop = true;
   titleMusic = a;
-  a._playP = a.play().catch(() => {});
+  a._playP = a.play();
+  // If the gesture didn't unlock in time, clear the handle so the next
+  // gesture (e.g. tapping the title menu) can retry instead of no-opping.
+  if (a._playP) a._playP.catch(() => { if (titleMusic === a) titleMusic = null; });
 }
 function stopTitleMusic() {
   const a = titleMusic; titleMusic = null;
@@ -2225,7 +2242,7 @@ function renderPlanetScreen() {
     `</div>`;
   html += `<div class="wallet"><b>${credits.toLocaleString('en-US')}</b> credits ·
     cargo ${cargoUsed()}/${holds} tons${activeMissions.length ? ` · ${activeMissions.length} active mission${activeMissions.length > 1 ? 's' : ''}` : ''}</div>
-    <div class="hint">Press Esc to take off</div>`;
+    <div class="hint">Take Off ▲ (top-right) — or press Esc</div>`;
   document.getElementById('landedCard').innerHTML = html;
 }
 
@@ -2580,7 +2597,13 @@ function panelText(x, y, text, color = GREEN, align = 'left', font = '10px Genev
 
 function drawPanel(w, h) {
   const pw = 144, ph = 480;
-  const px = w - pw, py = Math.max(0, Math.round((h - ph) / 2));
+  // Shrink the fixed 144×480 sidebar to fit short (mobile landscape) screens;
+  // no-op on desktop where the viewport is taller than the panel.
+  const psc = Math.min(1, h / ph);
+  ctx.save();
+  ctx.translate(w - pw * psc, Math.max(0, (h - ph * psc) / 2));
+  ctx.scale(psc, psc);
+  const px = 0, py = 0;
   if (panelImg.complete && panelImg.naturalWidth) ctx.drawImage(panelImg, px, py);
   else { ctx.fillStyle = '#041004'; ctx.fillRect(px, py, pw, ph); }
 
@@ -2662,6 +2685,7 @@ function drawPanel(w, h) {
   const held = COMMODITIES.map((c, i) => [cargoNames[i], cargo[c]]).filter(([, q]) => q > 0);
   if (held.length === 0) panelText(cb.x, cy, `Cargo: ${holds} tons free`, DIMGREEN);
   else for (const [name, q] of held.slice(0, 4)) { panelText(cb.x, cy, `${q}t ${name}`); cy += 12; }
+  ctx.restore();
 }
 
 /* ---- galaxy map overlay ---- */

@@ -492,6 +492,16 @@ game-over screens).
   button hide so canvas taps can pick a destination (fingertip hit radius is
   enlarged).
 
+Fitting the small screen: the fixed 144×480 sidebar panel is scaled down to
+fit the viewport height (no-op on desktop, where the viewport is taller).
+The landing and service dialogs cap their width to the viewport and, since
+there is no Esc key, carry a **persistent Take Off / Back button pinned to the
+overlay** (reachable without scrolling past the dialog body); the keyboard-hint
+strip is hidden on touch. The title theme's Audio element is created and
+preloaded up front so its `play()` on the first tap isn't racing a still-
+loading file (which silently fails on mobile); a failed unlock clears the
+handle so the next tap retries.
+
 ## Sprite ID conventions (from the EV bible, see semantics.js)
 
 ship spïn = 128 + (shïp − 128); stellar spïn = 300 + spöb.Type;
