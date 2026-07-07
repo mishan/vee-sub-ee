@@ -1000,7 +1000,7 @@ function renderHail() {
       <div class="who">${label}${tag}</div>
       <div class="say">“${t.said}”</div>
       ${buttons}
-      <button onclick="closeHail()">Close channel</button>`;
+      <button onclick="hailClick();closeHail()">Close channel</button>`;
   } else {
     const p = t.obj, m = p.$sem || {};
     const greet = t.said || (pickFrom(3002, 0, 4) || 'Channel open to ') + p.name + '.';
@@ -1010,7 +1010,7 @@ function renderHail() {
       <div class="say">“${greet}”</div>
       <button onclick="hailClick();hailSay(pickFrom(3002,15,24) || 'They have nothing to tell you.')">Request information</button>
       <button onclick="hailClick();demandTribute(hailTarget.obj)"${p.Govt < 128 ? ' disabled' : ''}>Demand tribute</button>
-      <button onclick="closeHail()">Close channel</button>`;
+      <button onclick="hailClick();closeHail()">Close channel</button>`;
   }
   document.getElementById('hailCard').innerHTML = html;
   document.getElementById('hail').style.display = 'flex';
@@ -1870,12 +1870,17 @@ function tryLand() {
   const p = (navTarget && (!navTarget.$sem || navTarget.$sem.canLand))
     ? navTarget : nearestLandable();
   if (!p) { showMsg('There is nowhere to land in this system.'); return; }
-  if (navTarget !== p) { navTarget = p; showMsg(`Targeting ${p.name}.`); return; }
+  if (navTarget !== p) {
+    navTarget = p; showMsg(`Targeting ${p.name}.`);
+    playSnd(710, 0.6); // Voice Targ — targeting acknowledgment
+    return;
+  }
   if (distTo(p) >= EV.LAND_DIST) { showMsg(`Landing on ${p.name}: too far away.`); return; }
   if (Math.hypot(player.vx, player.vy) > EV.LAND_SPEED) {
     showMsg('You are moving too fast to land.'); return;
   }
   landedAt = p;
+  playSnd(390, 0.7); // Airlock — the docking/landing sound
   player.vx = player.vy = 0;
   fuel = fuelMax; // landing refuels (spec)
   player.shields = player.shieldMax; // ...and repairs

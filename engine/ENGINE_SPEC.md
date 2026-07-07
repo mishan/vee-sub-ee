@@ -312,7 +312,12 @@ ship destruction → **302** "ShipBreaksUp" when disintegration starts,
 **303** "ShipExplodes" at the final fireball. There is **no thrust
 sound** — classic flight is silent, and snd 223 "Engine", despite the
 name, is a weapon sound (the Forklift's, weap 191 Sound 23 → 200+23; the
-name describes the sound, not its role). Target-cycle beep **150**. Klaxxon **350** once when the
+name describes the sound, not its role). Target-cycle beep **150**;
+targeting a planet for landing plays **710** "Voice Targ"; touchdown on a
+planet plays **390** "Airlock". Hail dialog buttons (incl. Close channel)
+click with **600**. Red Alert **370** when the count of ships hostile to
+the player rises (grudge / bounty hunter / defense fleet), suppressed for
+the ambient population on system entry. Klaxxon **350** once when the
 player's shields first hit 0 (re-armed when they recover). Planet
 ambient: spöb `CustSndID` (bible: 11 kHz ambient) loops while landed.
 Distance attenuation (approximation): `volume × max(0, 1 − dist/1200)`
