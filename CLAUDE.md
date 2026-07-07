@@ -76,7 +76,10 @@ README "Legal shape of the project" and "Distribution".
 - Commodity price multipliers 0.80/1.00/1.25 are community values; the
   bible names levels only. Ship trade-in (25% of hull+upgrades) IS from
   the bible.
-- Shield bar reads 100% — no damage model until the combat milestone.
+- Homing turn rate (3°/frame) and warship AI distance bands (260/120 px)
+  are approximations; the damage formula itself is bible-exact.
+- Audio is browser-only for now (spec "Audio"); the SDL leg is also
+  behind on combat-adjacent UI — sync at the next parity checkpoint.
 
 ## C++ gotchas
 

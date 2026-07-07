@@ -111,15 +111,22 @@ browser) deliberately undecided until sprites are on screen.
   Deferred: fighter bays (g99), BlastRadius area damage, boarding,
   friendly-fire between AI ships, bööm/öops sounds.
 
+- **Milestone: audio, browser leg** (SDL deferred per Misha). Spec'd
+  ("Audio"): weapon fire snd 200+Sound per volley w/ distance attenuation
+  (1 − d/1200), Warp Up/Out on jump, Med/HeavyExplosion on impacts,
+  ShipBreaksUp + ShipExplodes on kills, Engine loop while thrusting
+  (6-frame release), target beeps, shield-collapse Klaxxon, planet
+  ambient loops from CustSndID (Thunder/Seagull/Sandpiper are real!).
+  V toggles, ?mute=1. Plain Audio elements — file:// safe, unlocked by
+  first keypress. snd_<id>.wav aliases added to evconvert.sh. Title
+  music (30000+) waits for a title screen.
+
 ## Next
 
-1. **Audio** (Misha's pick): weapons already carry Sound IDs (snd
-   200+n), explosions/jump/landing have classic sounds in evassets/sounds
-   (8-bit 11kHz WAVs). Browser: WebAudio; SDL: SDL audio or SDL_mixer.
-2. **Distribution loader** (see README "Distribution"): data-free hosted
+1. **Distribution loader** (see README "Distribution"): data-free hosted
    page that accepts a user-built asset bundle (zip of evdata.json +
    evassets), cached client-side. Add an `evexport --bundle` command.
-3. **Then**: missions (mïsn + mission bits, bar) → persistence (pilot
+2. **Then**: missions (mïsn + mission bits, bar) → persistence (pilot
    file read/write via `buildFork` — credits, cargo, outfits, explored
    set all live in player state now).
 

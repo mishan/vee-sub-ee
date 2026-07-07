@@ -80,7 +80,7 @@
   <h1>Your ship has been destroyed.</h1>
   <div>Press R to try again</div>
 </div></div>
-<div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · N/Tab target · Y hail · M map · J jump · Esc</div>
+<div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · N/Tab target · Y hail · M map · J jump · V sound · Esc</div>
 <script>/*__ENGINE__*/</script>
 <script>
 'use strict';
@@ -228,6 +228,38 @@ let fuelMax = ships[playerShipId].Fuel;
 let holds = ships[playerShipId].Holds;
 let landedAt = null;
 
+/* ---- audio (spec: "Audio") ----
+ * Plain Audio elements (file:// safe). Browsers block playback until the
+ * first user gesture; failed play()s are swallowed until then. */
+let soundOn = !params.has('mute');
+const sndCache = new Map();
+function sndEl(id) {
+  let a = sndCache.get(id);
+  if (!a) { a = new Audio('evassets/sounds/snd_' + id + '.wav'); sndCache.set(id, a); }
+  return a;
+}
+function playSnd(id, vol = 1) {
+  if (!soundOn || vol <= 0.02) return;
+  const a = sndEl(id).cloneNode();
+  a.volume = Math.min(vol, 1);
+  a.play().catch(() => {});
+}
+function loopSnd(id, vol = 1) {
+  if (!soundOn) return null;
+  const a = sndEl(id).cloneNode();
+  a.volume = Math.min(vol, 1);
+  a.loop = true;
+  a.play().catch(() => {});
+  return a;
+}
+const stopSnd = a => { if (a) { a.pause(); a.currentTime = 0; } };
+const attenuate = (x, y) => Math.max(0, 1 - Math.hypot(x - player.x, y - player.y) / 1200);
+let engineSnd = null, engineHold = 0, ambientSnd = null, klaxxonArmed = true;
+function stopAllLoops() {
+  stopSnd(engineSnd); engineSnd = null;
+  stopSnd(ambientSnd); ambientSnd = null;
+}
+
 /* ---- combat state (spec: "Combat") ---- */
 const weaps = DATA.types.weap;
 let shots = [], beams = [], explosions = [];
@@ -310,6 +342,7 @@ function fire(e, target, primary) {
       if (pk) e.pools[pk]--;
       beams.push({ owner: e, rec: w.rec, life: w.rec.Count, turreted: g === 3, target });
       w.cool = w.rec.Reload + w.rec.Count;
+      if (w.rec.Sound >= 0) playSnd(200 + w.rec.Sound, attenuate(e.x, e.y));
       continue;
     }
     let fired = false;
@@ -328,7 +361,10 @@ function fire(e, target, primary) {
       shots.push(shot);
       fired = true;
     }
-    if (fired) w.cool = w.rec.Reload;
+    if (fired) {
+      w.cool = w.rec.Reload;
+      if (w.rec.Sound >= 0) playSnd(200 + w.rec.Sound, attenuate(e.x, e.y));
+    }
   }
 }
 
@@ -353,8 +389,12 @@ function hitShip(victim, rec, heading, attacker) {
   const kick = rec.Impact / (10 * victim.mass);
   victim.vx += Math.sin(EV.rad(heading)) * kick;
   victim.vy -= Math.cos(EV.rad(heading)) * kick;
-  if (result === 'destroyed' && victim.deathT < 0) victim.deathT = Math.max(victim.deathDelay, 1);
-  else if (result === 'disabled') victim.disabled = true;
+  if (rec.ExplodType >= 0)
+    playSnd(rec.ExplodType >= 1 ? 300 : 301, attenuate(victim.x, victim.y) * 0.8);
+  if (result === 'destroyed' && victim.deathT < 0) {
+    victim.deathT = Math.max(victim.deathDelay, 1);
+    playSnd(302, attenuate(victim.x, victim.y)); // breaking up
+  } else if (result === 'disabled') victim.disabled = true;
   grudge(victim, attacker);
 }
 
@@ -432,6 +472,7 @@ function completeJump() {
   EV.placeAtArrival(player, EV.norm(mapBearingTo(from) + 180));
   fuel -= EV.JUMP_FUEL;
   jump = null; jumpDest = null;
+  playSnd(130); // Warp Out
 }
 
 /* ---------------- input ---------------- */
@@ -446,6 +487,11 @@ addEventListener('keydown', e => {
   if (k === 'n' && !landedAt) cyclePlanetTarget();
   if (k === 'y' && !landedAt) hail();
   if (k === 'r' && gameOver) location.reload();
+  if (k === 'v') {
+    soundOn = !soundOn;
+    if (!soundOn) stopAllLoops();
+    showMsg(soundOn ? 'Sound on.' : 'Sound off.');
+  }
   if (k === 'q' && !landedAt) { // cycle secondary weapon
     const secs = player.weapons.filter(w => w.rec.MiscFlags & 2);
     if (!secs.length) { showMsg('No secondary weapons fitted.'); }
@@ -504,6 +550,7 @@ function cyclePlanetTarget() {
   const i = navTarget ? sorted.indexOf(navTarget) : -1;
   navTarget = (i + 1 < sorted.length) ? sorted[i + 1] : null;
   if (!navTarget) showMsg('Navigation target cleared.');
+  playSnd(150, 0.5);
 }
 function cycleShipTarget() {
   if (!aiShips.length) { showMsg('No ships on scope.'); shipTarget = null; return; }
@@ -511,6 +558,7 @@ function cycleShipTarget() {
   const i = shipTarget ? sorted.indexOf(shipTarget) : -1;
   shipTarget = (i + 1 < sorted.length) ? sorted[i + 1] : null;
   if (!shipTarget) showMsg('Target cleared.');
+  playSnd(150, 0.5);
 }
 
 /* hail (Y): govt greeting lists live at STR# 7000+(govt-128), generic at
@@ -812,12 +860,15 @@ function tryLand() {
   player.armor = player.armorMax;
   player.disabled = false;
   rebuildPlayerWeapons(); // rearm (simplification: ammo refills on landing)
+  stopAllLoops();
+  if (p.CustSndID >= 0) ambientSnd = loopSnd(p.CustSndID, 0.6); // planet ambient
   renderPlanetScreen();
   document.getElementById('landed').style.display = 'flex';
 }
 function takeOff() {
   if (!landedAt) return;
   if (serviceOpen) closeService();
+  stopAllLoops();
   EV.placeAtTakeoff(player, landedAt);
   navTarget = null; // fresh start off the pad — no stale landing target
   landedAt = null;
@@ -839,8 +890,10 @@ function step() {
   if (gameOver) return;
   if (!landedAt) {
     if (jump && jump.phase === 'engage') {
-      if (EV.stepJumpEngage(player, mapBearingTo(jump.destId)))
+      if (EV.stepJumpEngage(player, mapBearingTo(jump.destId))) {
         jump = { ...jump, phase: 'streak', t: 0 };
+        playSnd(128); // Warp Up
+      }
     } else if (jump && jump.phase === 'streak') {
       EV.thrust(player); EV.integrate(player);
       if (++jump.t >= EV.JUMP_STREAK_FRAMES) completeJump();
@@ -850,6 +903,8 @@ function step() {
       EV.integrate(player);
       if (--player.deathT <= 0) {
         spawnExplosion(player.x, player.y, player.deathDelay >= 60 ? 2 : 1);
+        playSnd(303);
+        stopAllLoops();
         gameOver = true;
         document.getElementById('dead').style.display = 'flex';
       }
@@ -864,6 +919,16 @@ function step() {
       for (const w of player.weapons) if (w.cool > 0) w.cool--;
       if (keys[' ']) fire(player, shipTarget, true);
       if (keys['x'] && player.selSecondary) fire(player, shipTarget, false);
+      /* engine loop with a short release so frame flicker doesn't stutter */
+      if (player.thrusting) {
+        engineHold = 6;
+        if (!engineSnd) engineSnd = loopSnd(223, 0.35);
+      } else if (engineSnd && --engineHold <= 0) {
+        stopSnd(engineSnd); engineSnd = null;
+      }
+      /* klaxxon on shield collapse, re-armed on recovery */
+      if (player.shields <= 0 && klaxxonArmed) { playSnd(350, 0.8); klaxxonArmed = false; }
+      else if (player.shields > player.shieldMax * 0.25) klaxxonArmed = true;
     }
   }
 
@@ -872,6 +937,7 @@ function step() {
       EV.integrate(s);
       if (--s.deathT <= 0) {
         spawnExplosion(s.x, s.y, s.deathDelay >= 60 ? 2 : 1);
+        playSnd(303, attenuate(s.x, s.y)); // the final boom
         aiShips.splice(aiShips.indexOf(s), 1);
         if (shipTarget === s) shipTarget = null;
         const epoch = systEpoch;

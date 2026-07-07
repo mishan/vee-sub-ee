@@ -43,13 +43,20 @@ convert_file() { # <source .rsrc> <short name> <kind: img|snd>
 convert_file "EV Graphics.rsrc" graphics img
 convert_file "EV Titles.rsrc"   titles   img
 
-# Named resources export as PICT_<id>_<name>.png; the engine looks images up
-# by ID, so give every named PICT a suffix-free alias (PICT_<id>.png).
+# Named resources export as PICT_<id>_<name>.png / snd_<id>_<name>.wav; the
+# engine looks assets up by ID, so give every named one a suffix-free alias.
 for dir in "$OUT/graphics" "$OUT/titles"; do
   for f in "$dir"/PICT_*_*.png; do
     [ -e "$f" ] || continue
     id="$(basename "$f" | cut -d_ -f2)"
     [ -e "$dir/PICT_$id.png" ] || cp "$f" "$dir/PICT_$id.png"
+  done
+done
+for dir in "$OUT/sounds" "$OUT/music"; do
+  for f in "$dir"/snd_*_*.wav; do
+    [ -e "$f" ] || continue
+    id="$(basename "$f" | cut -d_ -f2)"
+    [ -e "$dir/snd_$id.wav" ] || cp "$f" "$dir/snd_$id.wav"
   done
 done
 convert_file "EV Sounds.rsrc"   sounds   snd
