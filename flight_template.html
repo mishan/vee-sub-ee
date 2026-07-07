@@ -439,7 +439,9 @@ function armShip(e, rec) {
   e.armorMax = rec.Armor; e.armor = rec.Armor;
   e.shieldRe = rec.ShieldRe; e.mass = Math.max(rec.Mass, 1);
   e.deathDelay = rec.DeathDelay;
-  e.disableFrac = (rec.Flags & 0x0010) ? 0.10 : 1 / 3;
+  // Only AI ships can be disabled and boarded; the player is destroyed
+  // outright (no disabled limbo), so damage never returns 'disabled' for it.
+  e.disableFrac = e === player ? 0 : (rec.Flags & 0x0010) ? 0.10 : 1 / 3;
   e.deathT = -1; e.disabled = false; e.hostile = false; e.fleeing = false;
   e.weapons = []; e.pools = {}; e.poolCap = {};
   for (let i = 1; i <= 4; i++) {
@@ -543,6 +545,7 @@ function spawnExplosion(x, y, type) {
  * then fades out over deathDelay frames; big ships get a final blast. */
 function beginDestruction(v) {
   v.deathT = Math.max(v.deathDelay, 1);
+  v.thrusting = false; // no engine flame on a hull that's breaking up
   spawnExplosion(v.x, v.y, v.deathDelay >= 60 ? 1 : 0);
   playSnd(302, attenuate(v.x, v.y)); // breaking up
 }
@@ -1940,10 +1943,8 @@ function step() {
     } else if (jump && jump.phase === 'streak') {
       EV.thrust(player); EV.integrate(player);
       if (++jump.t >= EV.JUMP_STREAK_FRAMES) completeJump();
-    } else if (player.disabled) {
-      EV.integrate(player); // dead in the water — classic would let you be boarded
     } else if (player.deathT >= 0) {
-      EV.integrate(player);
+      EV.integrate(player); // breaking up: drift while the death timer runs
       if (--player.deathT <= 0) {
         spawnExplosion(player.x, player.y, player.deathDelay >= 60 ? 2 : 1);
         playSnd(303);

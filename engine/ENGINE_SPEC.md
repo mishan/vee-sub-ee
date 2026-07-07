@@ -276,10 +276,13 @@ ray. `Graphic` is a color code (−2 red, −3 green, −4 blue, −5 cyan,
 shields; shields down (≤0) → `MassDmg + EnergyDmg/4` off armor; always
 at least 1. Shield overflow does not carry into armor. **Disabled** at
 armor ≤ ⅓ of max (shïp flag 0x0010 lowers this to 10% — honored when
-present): AI stops, engines dead, still targetable. **Destroyed** at
-armor ≤ 0: the ship disintegrates for `DeathDelay` frames (drawn
-flickering), then explodes — spïn 401 fireball, or 402 + sparks when
-DeathDelay ≥ 60 ("huge"). **Shield regen**: +1% of max shields every
+present): AI stops, engines dead, still targetable. **Only AI ships can
+be disabled** — the player is destroyed outright when armor hits 0, never
+left in a disabled limbo (the player's `disableFrac` is forced to 0 so
+damage never yields 'disabled'). **Destroyed** at armor ≤ 0: the ship
+disintegrates for `DeathDelay` frames (its engine flame cuts out), then
+explodes — spïn 401 fireball, or 402 + sparks when DeathDelay ≥ 60
+("huge"). **Shield regen**: +1% of max shields every
 `ShieldRe` frames — **except while disabled**: a disabled ship drifts
 with collapsed shields and stays a boarding target (the bible is silent
 on this; classic gameplay — e.g. mïsn rescue goals that require boarding
