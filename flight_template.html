@@ -2,14 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Vₑ</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
     font: 13px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif; color: #cfd6e4; }
-  canvas { display: block; }
+  /* allow pinch-zoom (accessibility) but suppress double-tap zoom over the
+     play area; the touch controls capture their own gestures (touch-action:none) */
+  canvas { display: block; touch-action: manipulation; }
   #hud { position: fixed; top: 10px; left: 12px; color: #8fa3c8; font-size: 12px;
     text-shadow: 0 1px 2px #000; user-select: none; }
   #hud b { color: #fff; font-size: 14px; }
@@ -535,8 +537,9 @@ function setVolume(delta) {
   masterVol = Math.max(0, Math.min(1, Math.round((masterVol + delta) * 10) / 10));
   try { localStorage.setItem('ve_volume', String(masterVol)); } catch {}
   // adjust every currently-playing long sound live
-  for (const a of [ambientSnd, warpSnd, titleMusic])
+  for (const a of [ambientSnd, warpSnd])
     if (a) a.volume = Math.min((a._baseVol ?? 1) * masterVol, 1);
+  if (titleGain) titleGain.gain.value = titleVol();
   showMsg(`Volume ${Math.round(masterVol * 100)}%`);
   playSnd(150, 0.6); // audible reference beep at the new level
 }
@@ -563,52 +566,47 @@ function loopSnd(id, vol = 1) {
 }
 const stopSnd = a => { if (a) { a.pause(); a.currentTime = 0; } };
 
-/* Title theme (snd 30000) lives in evassets/music/, not sounds/. Looped
- * while the title screen is up; deferred until a user gesture because
- * browsers block autoplay. Volume tracks masterVol like every other loop.
- * Mobile browsers defer <audio> preload until a gesture, so a first-tap
- * play() on a still-loading file silently fails (the theme then only starts
- * on a later tap). Fetch the file into a blob up front instead — fetch isn't
- * deferred, so the element is fully buffered and plays on the very first tap;
- * fall back to a direct src if fetch is unavailable (e.g. file://). */
-const titleMusicEl = new Audio();
-titleMusicEl.loop = true;
+/* Title theme (snd 30000) via the Web Audio API. HTMLAudio's first-gesture
+ * play() raced the file load on mobile and stayed silent until a later tap;
+ * Web Audio is reliable because resuming the AudioContext *inside* a user
+ * gesture unlocks audio, and a pre-decoded buffer then plays instantly — so
+ * the theme starts on the very first splash tap. (Sound effects keep using
+ * HTMLAudio; they unlock once gameplay begins.) Volume via a GainNode. */
+let audioCtx = null, titleBuffer = null, titleSource = null, titleGain = null, musicWanted = false;
+function ensureAudioCtx() {
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) audioCtx = new AC();               // starts suspended until a gesture
+  }
+  return audioCtx;
+}
+const titleVol = () => Math.min(0.7 * masterVol, 1);
+// Decode the theme up front so it's ready the instant a gesture unlocks audio.
 fetch('evassets/music/snd_30000.wav')
-  .then(r => r.ok ? r.blob() : Promise.reject(r.status))
-  .then(b => { titleMusicEl.src = URL.createObjectURL(b); })
-  .catch(() => { titleMusicEl.src = 'evassets/music/snd_30000.wav'; titleMusicEl.load(); });
-let titleMusic = null, musicWanted = false;
+  .then(r => r.arrayBuffer())
+  .then(buf => ensureAudioCtx() ? audioCtx.decodeAudioData(buf) : Promise.reject())
+  .then(b => { titleBuffer = b; if (musicWanted) startTitleMusic(); })
+  .catch(() => {});
 function startTitleMusic() {
   if (!soundOn || masterVol <= 0 || !introUp()) return;
-  musicWanted = true;                       // a gesture has asked for music
-  if (titleMusic) return;                   // already playing/attempted
-  const a = titleMusicEl;
-  a._baseVol = 0.7;
-  a.volume = Math.min(0.7 * masterVol, 1);
-  titleMusic = a;
-  a._playP = a.play();
-  // On mobile the first splash tap may hit a still-loading file: play()
-  // rejects, but the gesture has now unlocked audio. Retry the moment the
-  // (blob) source is buffered — so the theme starts on the loading screen
-  // rather than waiting for a second tap on the menu.
-  if (a._playP) a._playP.catch(() => {
-    if (titleMusic === a) titleMusic = null;
-    const retry = () => {
-      a.removeEventListener('canplay', retry);
-      if (musicWanted && introUp() && !titleMusic) startTitleMusic();
-    };
-    a.addEventListener('canplay', retry);
-  });
+  musicWanted = true;
+  const ctx = ensureAudioCtx();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') ctx.resume();  // unlock inside the gesture
+  if (titleSource || !titleBuffer) return;      // already playing, or decode pending
+  titleGain = ctx.createGain();
+  titleGain.gain.value = titleVol();
+  titleGain.connect(ctx.destination);
+  titleSource = ctx.createBufferSource();
+  titleSource.buffer = titleBuffer;
+  titleSource.loop = true;
+  titleSource.connect(titleGain);
+  titleSource.start();
 }
 function stopTitleMusic() {
   musicWanted = false;
-  const a = titleMusic; titleMusic = null;
-  if (!a) return;
-  const kill = () => { a.pause(); a.currentTime = 0; };
-  kill();
-  // play() is async; if it hadn't resolved yet, pausing now is a no-op and
-  // the track would start anyway — re-kill once the promise settles.
-  if (a._playP) a._playP.then(kill).catch(() => {});
+  if (titleSource) { try { titleSource.stop(); } catch {} try { titleSource.disconnect(); } catch {} titleSource = null; }
+  if (titleGain) { try { titleGain.disconnect(); } catch {} titleGain = null; }
 }
 const attenuate = (x, y) => Math.max(0, 1 - Math.hypot(x - player.x, y - player.y) / 1200);
 let ambientSnd = null, klaxxonArmed = true;
@@ -3005,6 +3003,27 @@ function renderTitleSummary() {
   if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
   const g = cv.getContext('2d');
   g.clearRect(0, 0, cv.width, cv.height);
+  if (!SAVED) { // nothing to summarize until a pilot is opened/created
+    const words = ['No', 'Pilot', 'file', 'loaded'];
+    const m = Math.round(cv.width * 0.08), aw = cv.width - m * 2;
+    let fs = Math.round(cv.height / 7);
+    g.textAlign = 'center'; g.textBaseline = 'top';
+    const longest = () => Math.max(...words.map(wd => g.measureText(wd).width));
+    g.font = `bold ${fs}px monospace`;
+    while (fs > 7 && longest() > aw) { fs -= 1; g.font = `bold ${fs}px monospace`; }
+    const lines = []; let line = '';
+    for (const wd of words) {
+      const t = line ? line + ' ' + wd : wd;
+      if (line && g.measureText(t).width > aw) { lines.push(line); line = wd; } else line = t;
+    }
+    if (line) lines.push(line);
+    const lh = fs * 1.35;
+    let y = (cv.height - lines.length * lh) / 2;
+    g.fillStyle = '#6f9f80';
+    for (const ln of lines) { g.fillText(ln, cv.width / 2, y); y += lh; }
+    g.textAlign = 'left';
+    return;
+  }
   const shipName = ships[playerShipId] ? ships[playerShipId].name : 'Shuttlecraft';
   const sysName = syst ? syst.name : '';
   const fields = [

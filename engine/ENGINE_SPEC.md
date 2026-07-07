@@ -463,15 +463,19 @@ original does), drawn on a canvas so it scales with the framed art: ship type,
 current system, legal status in that system, combat rating, credits, and the
 date. The date follows classic EV — real date + 250 years at pilot creation,
 +1 day per hyperjump (`gameDay`) — so a fresh pilot reads like the original's.
-Title music (snd 30000, in the music/ set) loops from the splash gesture
-through the menu and tracks `masterVol`/`soundOn` like every other loop.
-Because `play()` is async, stopping the music re-pauses once the play promise
-settles, so entering the game never leaves the theme bleeding into flight. On
-mobile the first splash tap may hit a still-loading file — the gesture unlocks
-audio and the theme retries on the element's `canplay`, so it starts on the
-loading screen rather than waiting for a second tap. Any test-param run (see
-Persistence) skips the intro so headless screenshots go straight to the
-game; `?title`/`?splash` force the splash, `?titlemenu` jumps to the menu.
+When no pilot is loaded (no save) the viewscreen reads **"No Pilot file
+loaded"** instead.
+
+Title music (snd 30000, in the music/ set) plays through the **Web Audio API**:
+the file is fetched and `decodeAudioData`'d up front, and the first splash
+gesture `resume()`s the AudioContext (which is what reliably unlocks audio on
+mobile) and starts the pre-decoded buffer — so the theme begins on the loading
+screen, not on a later menu tap (HTMLAudio's first-gesture `play()` raced the
+file load and stayed silent). It loops through the menu at `0.7·masterVol` via
+a GainNode and stops on entering the game. (Sound effects keep using HTMLAudio;
+they unlock once gameplay begins.) Any test-param run (see Persistence) skips
+the intro so headless screenshots go straight to the game; `?title`/`?splash`
+force the splash, `?titlemenu` jumps to the menu.
 
 ## Touch controls (shell responsibility; browser leg)
 
