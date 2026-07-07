@@ -430,8 +430,10 @@ params, the pilot restores docked at the saved spöb. Any test param
 (`?syst ?ship ?x ?y ?heading ?ff ?land ?exchange ?outfitter ?shipyard
 ?map ?dest ?jump ?tab ?nav ?fire ?new`) enters **test mode**: no restore
 and no saving, so headless runs never touch a real pilot. Death: R
-returns to the last landing (reload restores the save), N abandons the
-pilot and starts fresh; `?new=1` does the same from a URL.
+returns to the last landing (reload restores the save) — it sets a
+`ve_resume` sessionStorage flag first so the reload drops **straight back
+into the game, skipping the title intro**; N abandons the pilot and starts
+fresh; `?new=1` does the same from a URL.
 
 ## Title screen (shell responsibility; browser leg)
 

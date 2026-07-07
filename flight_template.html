@@ -977,7 +977,10 @@ addEventListener('keydown', e => {
   if (k === 'y' && !landedAt && !hailOpen) hail();
   if (k === 'b' && !landedAt) boardTarget();
   if (k === 'i' && !landedAt) showMissionBriefing();
-  if (k === 'r' && gameOver) location.reload();
+  if (k === 'r' && gameOver) { // restart: reload straight back into the game, not the title
+    try { sessionStorage.setItem('ve_resume', '1'); } catch {}
+    location.reload();
+  }
   if (k === 'v') {
     soundOn = !soundOn;
     if (!soundOn) stopAllLoops();
@@ -3151,10 +3154,13 @@ addEventListener('load', () => {
   if (params.has('nav')) cyclePlanetTarget();
   last = performance.now(); render(); requestAnimationFrame(frame);
   if (TEST_MODE) showMsg('Test mode (URL params) — pilot will not be saved or restored.');
+  // Restarting after death (R) reloads straight into the game — skip the intro.
+  let resuming = false;
+  try { resuming = sessionStorage.getItem('ve_resume') === '1'; if (resuming) sessionStorage.removeItem('ve_resume'); } catch {}
   // Classic boot on a normal load: loading splash → title menu. Test flags
   // skip it; ?title/?splash force the splash, ?titlemenu jumps to the menu.
   if (params.has('titlemenu')) showTitle();
-  else if (!TEST_MODE || params.has('title') || params.has('splash')) showSplash();
+  else if (!resuming && (!TEST_MODE || params.has('title') || params.has('splash'))) showSplash();
 });
 </script>
 </body>
