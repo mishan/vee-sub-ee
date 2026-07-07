@@ -73,6 +73,8 @@
   #hail .who { color: #6b7a96; font-size: 12px; margin-bottom: 10px; }
   #hail .say { color: #aab6cc; font-size: 13px; font-style: italic; min-height: 34px;
     border-left: 2px solid #2a3550; padding-left: 10px; margin: 8px 0 14px; }
+  #hail .commpic { float: right; width: 120px; image-rendering: pixelated;
+    border: 1px solid #2a3550; border-radius: 4px; background: #000; margin: 0 0 8px 12px; }
   #hail button { display: block; width: 100%; text-align: left; background: #1a2338;
     color: #cfd6e4; border: 1px solid #2a3550; border-radius: 4px; padding: 7px 10px;
     margin: 4px 0; cursor: pointer; font-size: 13px; }
@@ -200,6 +202,29 @@ function drawSpin(ctx, spinId, x, y, headingDeg) {
   ctx.drawImage(s.img, (fi % xTiles) * frameW, Math.floor(fi / xTiles) * frameH,
     frameW, frameH, x - frameW / 2, y - frameH / 2, frameW, frameH);
 }
+/* Plain single-image PICT cache (target pics 3000+, etc.), drawn fit to a
+ * box centred on (cx, cy). */
+const gfxCache = new Map();
+function gfxImg(pictId) {
+  let e = gfxCache.get(pictId);
+  if (!e) {
+    const img = new Image();
+    img.src = 'evassets/graphics/PICT_' + pictId + '.png';
+    e = { img, ready: img.complete };
+    img.onload = () => { e.ready = true; };
+    img.onerror = () => { e.bad = true; };
+    gfxCache.set(pictId, e);
+  }
+  return e;
+}
+function drawGfxFit(ctx, pictId, cx, cy, maxW, maxH) {
+  const e = gfxImg(pictId);
+  if (!e.ready || e.bad || !e.img.naturalWidth) return false;
+  const s = Math.min(maxW / e.img.naturalWidth, maxH / e.img.naturalHeight, 1);
+  const w = e.img.naturalWidth * s, h = e.img.naturalHeight * s;
+  ctx.drawImage(e.img, cx - w / 2, cy - h / 2, w, h);
+  return true;
+}
 
 /* ---------------- world (per-system state) ---------------- */
 
@@ -229,6 +254,7 @@ function loadSystem(systId) {
   aiShips = [];
   shots = []; beams = []; explosions = [];
   navTarget = null; shipTarget = null;
+  alertGrace = 45; prevHostiles = 0; // don't red-alert the ambient population
   preloadSprites(spinsNeededFor(SYSTEM_ID));
   // Landscapes for this system's spobs (default 10000+Type and custom),
   // so the planet screen never shows without its picture.
@@ -512,6 +538,14 @@ function spawnExplosion(x, y, type) {
   const meta = MANIFEST.spins[spin];
   if (meta) explosions.push({ x, y, spin, f: 0, frames: meta.frames, tick: 0 });
 }
+/* Begin a ship's destruction: the fireball plays immediately over the ship
+ * as it breaks up (was flash-then-boom, which looked backwards). The ship
+ * then fades out over deathDelay frames; big ships get a final blast. */
+function beginDestruction(v) {
+  v.deathT = Math.max(v.deathDelay, 1);
+  spawnExplosion(v.x, v.y, v.deathDelay >= 60 ? 1 : 0);
+  playSnd(302, attenuate(v.x, v.y)); // breaking up
+}
 
 function grudge(victim, attacker) {
   if (attacker !== player || !victim.aiType) return;
@@ -531,9 +565,8 @@ function hitShip(victim, rec, heading, attacker) {
   if (rec.ExplodType >= 0)
     playSnd(rec.ExplodType >= 1 ? 300 : 301, attenuate(victim.x, victim.y) * 0.8);
   if (result === 'destroyed' && victim.deathT < 0) {
-    victim.deathT = Math.max(victim.deathDelay, 1);
     if (attacker === player) victim.killedByPlayer = true; // for legal credit on death
-    playSnd(302, attenuate(victim.x, victim.y)); // breaking up
+    beginDestruction(victim);
   } else if (result === 'disabled' && !victim.disabled) {
     victim.disabled = true;
     if (attacker === player) commitCrime(victim.govt, penaltyOf(victim.govt, 'DisabPenalty'));
@@ -797,14 +830,20 @@ function pickFrom(listId, lo, hi) {
 let hailOpen = false, hailTarget = null;
 const subdued = new Set(); // spob ids whose defense fleet you've just cleared (session)
 /* Called when any ship is destroyed; tracks defense-fleet defeat. */
+/* Mark a spöb subdued once none of its defense-fleet ships remain. Called
+ * both when a defender is destroyed AND when one is boarded/plundered —
+ * either way that ship is out of the fight. */
+function checkDefenseCleared(defOf, excluding) {
+  if (defOf == null) return;
+  if (aiShips.some(x => x !== excluding && x.defOf === defOf)) return;
+  subdued.add(defOf);
+  const p = spobById(defOf);
+  if (p) showMsg(`${p.name}'s defenses are broken — hail it to demand tribute.`);
+}
 function onShipDestroyed(s) {
   if (s.misnId != null) onMissionShipDestroyed(s);
   if (s.killedByPlayer) creditKill(s); // combat rating + legal consequences
-  if (s.defOf != null && !aiShips.some(x => x !== s && x.defOf === s.defOf)) {
-    subdued.add(s.defOf);
-    const p = spobById(s.defOf);
-    if (p) showMsg(`${p.name}'s defenses are broken — hail it to demand tribute.`);
-  }
+  checkDefenseCleared(s.defOf, s);
 }
 function openHail(kind, obj) {
   clearTimeout(hailCloseTimer); // don't let a pending auto-close hit a new hail
@@ -882,8 +921,10 @@ function renderHail() {
     const s = t.obj;
     const govtName = s.govt >= 128 && govts[s.govt] ? govts[s.govt].name : 'Independent';
     const greet = t.said || pickLine(7000 + (s.govt - 128)) || pickLine(6999) || 'Channel open.';
-    html = `<h3>${ships[s.shipId].name}</h3>
-      <div class="who">${govtName}${s.disabled ? ' · disabled' : s.hostile ? ' · hostile' : ''}</div>
+    // classic ship comm portrait: PICT 5300 + ship index
+    html = `<img class="commpic" src="evassets/graphics/PICT_${5300 + (s.shipId - 128)}.png" onerror="this.remove()">
+      <h3>${s.misnName || ships[s.shipId].name}</h3>
+      <div class="who">${s.bounty ? 'Bounty Hunter' : govtName}${s.disabled ? ' · disabled' : s.hostile ? ' · hostile' : ''}</div>
       <div class="say">“${greet}”</div>
       <button onclick="requestAssistance(hailTarget.obj)">Request assistance</button>
       <button onclick="demandSurrender(hailTarget.obj)"${s.disabled ? '' : ' disabled'}>Demand surrender / plunder</button>
@@ -1373,6 +1414,7 @@ function boardTarget() {
     ? activeMissions.find(a => a.id === best.misnId) : null;
   aiShips.splice(aiShips.indexOf(best), 1);
   if (best === shipTarget) shipTarget = null;
+  checkDefenseCleared(best.defOf, best); // a boarded defender counts as defeated
   if (!A) { // plunder a non-mission ship — piracy
     const loot = 500 + Math.floor(Math.random() * 2000);
     credits += loot;
@@ -1799,9 +1841,21 @@ function maxWeaponRange(e) {
   return r;
 }
 
+/* Red-alert when the number of ships hostile to the player rises (a new
+ * grudge, a bounty hunter jumping in, a defense fleet scrambling) — but not
+ * for the ambient population when a system first loads (alertGrace). */
+let prevHostiles = 0, alertGrace = 0;
+function checkHostileAlert() {
+  const n = aiShips.filter(s => s.hostile && s.deathT < 0).length;
+  if (alertGrace > 0) alertGrace--;
+  else if (n > prevHostiles) playSnd(370, 0.7); // Red Alert
+  prevHostiles = n;
+}
+
 function step() {
   if (gameOver || hailOpen) return; // hail dialog pauses the sim
   maybeSpawnBountyHunter();
+  checkHostileAlert();
   if (!landedAt) {
     if (jump && player.deathT >= 0) abortJump(); // no jumping out of a fireball
     if (jump && jump.phase === 'engage') {
@@ -1848,10 +1902,13 @@ function step() {
   }
 
   for (const s of [...aiShips]) {
-    if (s.deathT >= 0) {                       // disintegrating
+    if (s.deathT >= 0) {                       // disintegrating (fireball already going)
       EV.integrate(s);
+      // secondary blasts flicker across a bigger hull as it comes apart
+      if (s.deathDelay >= 30 && s.deathT % 7 === 0)
+        spawnExplosion(s.x + (Math.random() - 0.5) * 24, s.y + (Math.random() - 0.5) * 24, 0);
       if (--s.deathT <= 0) {
-        spawnExplosion(s.x, s.y, s.deathDelay >= 60 ? 2 : 1);
+        spawnExplosion(s.x, s.y, s.deathDelay >= 60 ? 2 : 1); // final blast
         playSnd(303, attenuate(s.x, s.y)); // the final boom
         onShipDestroyed(s);
         aiShips.splice(aiShips.indexOf(s), 1);
@@ -2039,7 +2096,11 @@ const panelImg = (() => {
  * the shop dialogs render complete on first open */
 {
   const files = ['PICT_5100.png', 'PICT_6100.png'];
-  for (const id of Object.keys(ships)) files.push(`PICT_${5000 + (id - 128)}.png`);
+  for (const id of Object.keys(ships)) {
+    files.push(`PICT_${5000 + (id - 128)}.png`);  // shipyard detail
+    files.push(`PICT_${3000 + (id - 128)}.png`);  // target schematic
+    files.push(`PICT_${5300 + (id - 128)}.png`);  // hail comm portrait
+  }
   for (const id of Object.keys(DATA.types.outf)) files.push(`PICT_${6000 + (id - 128)}.png`);
   for (const f of files) {
     const img = document.createElement('img');
@@ -2048,6 +2109,8 @@ const panelImg = (() => {
     img.onerror = () => img.remove();
     document.body.appendChild(img);
   }
+  // warm the canvas PICT cache too (target pics are drawn on the canvas)
+  for (const id of Object.keys(ships)) gfxImg(3000 + (id - 128));
   // combat sprites: every weapon graphic + the three explosion sets
   const combatSpins = new Set([400, 401, 402]);
   for (const w of Object.values(DATA.types.weap))
@@ -2117,7 +2180,9 @@ function drawPanel(w, h) {
   /* target display */
   const tb = { x: px + 5, y: py + 262, w: 134, h: 117 };
   if (shipTarget) {
-    drawSpin(ctx, spinOfShip(shipTarget.shipId), tb.x + tb.w / 2, tb.y + 40, shipTarget.heading);
+    // classic schematic target pic (PICT 3000 + ship index); sprite fallback
+    if (!drawGfxFit(ctx, 3000 + (shipTarget.shipId - 128), tb.x + tb.w / 2, tb.y + 40, tb.w - 8, 74))
+      drawSpin(ctx, spinOfShip(shipTarget.shipId), tb.x + tb.w / 2, tb.y + 40, shipTarget.heading);
     const govtName = shipTarget.govt >= 128 && DATA.types.govt[shipTarget.govt]
       ? DATA.types.govt[shipTarget.govt].name : 'Independent';
     panelText(tb.x + tb.w / 2, tb.y + 86, shipTarget.misnName || ships[shipTarget.shipId].name, '#fff', 'center');
@@ -2245,7 +2310,8 @@ function render() {
   for (const s of aiShips) {
     const [x, y] = toScreen(s.x, s.y);
     if (x < -100 || x > w + 100 || y < -100 || y > h + 100) continue;
-    if (s.deathT >= 0 && s.deathT % 4 < 2) continue; // disintegration flicker
+    // disintegration: fade the hull out under the fireball (not a hard flicker)
+    if (s.deathT >= 0) ctx.globalAlpha = Math.max(0, s.deathT / Math.max(s.deathDelay, 1));
     if (s.warpIn > 0) {                               // hyperspace-in flash
       const t = s.warpIn / 18, half = spriteHalf(spinOfShip(s.shipId), 24);
       ctx.strokeStyle = `rgba(150,200,255,${t})`;
@@ -2263,9 +2329,11 @@ function render() {
       drawBrackets(x, y, spriteHalf(spinOfShip(s.shipId), 32),
         s.hostile ? 'rgba(224,108,117,.9)' : 'rgba(255,212,121,.9)');
   }
-  if (!landedAt && !gameOver && !(player.deathT >= 0 && player.deathT % 4 < 2)) {
+  if (!landedAt && !gameOver) {
+    if (player.deathT >= 0) ctx.globalAlpha = Math.max(0, player.deathT / Math.max(player.deathDelay, 1));
     drawSpin(ctx, spinOfShip(player.shipId), w / 2, h / 2, player.heading);
     drawFlame(player, w / 2, h / 2);
+    ctx.globalAlpha = 1;
   }
 
   /* shots, beams, explosions */

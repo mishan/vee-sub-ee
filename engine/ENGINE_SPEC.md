@@ -387,7 +387,10 @@ ship spïn = 128 + (shïp − 128); stellar spïn = 300 + spöb.Type;
 weapons 200–263, explosions 400–402. Landing landscape: PICT
 (10000 + spöb.Type) in EV Titles (34 landscapes, one per stellar type),
 overridden by `CustPicID` when ≥ 0; fall back to the standard if the
-custom PICT is missing from the data.
+custom PICT is missing from the data. Per-ship PICTs (index = shïp − 128):
+shipyard detail 5000+i, **target-display schematic 3000+i** ("Target
+Pics"), **hail comm portrait 5300+i** ("Ship Comm Dialog"); shop menu
+sheets 5100 (ships) / 6100 (outfits), outfit detail 6000+i.
 
 ## Golden trace
 
