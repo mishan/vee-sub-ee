@@ -108,7 +108,7 @@ browser) deliberately undecided until sprites are on screen.
   secondary weapon pane (name + ammo available/capacity — classic
   behavior, replacing an incorrect message mirror). Golden trace now
   covers shots, damage, kick, and regen: 959 values, worst Δ 6.75e-13.
-  Deferred: fighter bays (g99), BlastRadius area damage, boarding,
+  Deferred: fighter bays (g99), BlastRadius area damage,
   friendly-fire between AI ships, bööm/öops sounds.
 
 - **Milestone: audio, browser leg** (SDL deferred per Misha). Spec'd
@@ -198,6 +198,18 @@ browser) deliberately undecided until sprites are on screen.
   `?titlemenu` the menu. Spec: "Title screen". Verified via headless
   screenshots + a scripted flow harness (key-swallow, gesture-started music,
   splash→title advance, sim paused, enter stops music).
+
+- **Milestone: boarding** (browser). Boarding a disabled non-mission ship
+  now opens a dialog (Capture / Loot / Leave) instead of instant credits.
+  Loot follows the dude `Booty` flags (bible): commodities into free hold +
+  money from the hull `Cost`; `Booty==0` ⇒ repelled; looted ships stay
+  disabled but unboardable. Capture rolls a crew-ratio (`Crew` + Marines
+  ModType 25, an approximation) — success takes command of the stock hull
+  (old ship/outfits abandoned), failure self-destructs the prize; both apply
+  `BoardPenalty`. Added the missing oütf ModTypes 23–26 to semantics. Spec:
+  "Boarding". Verified via a scripted harness (loot credits/cargo + looted
+  flag + unboardable, capture success→ship switch, failure→self-destruct)
+  and a dialog screenshot. SDL leg deferred.
 
 ## Next
 
