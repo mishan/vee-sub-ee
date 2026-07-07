@@ -602,7 +602,11 @@ struct Game {
     e.shieldRe = (int)num(rec, "ShieldRe");
     e.mass = std::max(num(rec, "Mass"), 1.0);
     e.deathDelay = (int)num(rec, "DeathDelay");
-    e.disableFrac = ((int)rec.value("Flags", 0.0) & 0x0010) ? 0.10 : 1.0 / 3.0; // classic shïp has no Flags field
+    // Only AI ships can be disabled and boarded; the player is destroyed
+    // outright, so damage never yields DISABLED for it (classic shïp has no
+    // Flags field, so AI defaults to ⅓; 0x0010 lowers it to 10%).
+    e.disableFrac = (&e == &player) ? 0.0
+      : (((int)rec.value("Flags", 0.0) & 0x0010) ? 0.10 : 1.0 / 3.0);
     e.deathT = -1; e.disabled = e.hostile = e.fleeing = false;
     e.shieldT = 0;
     e.weapons.clear(); e.pools.clear(); e.poolCap.clear();
@@ -688,8 +692,10 @@ struct Game {
     v.vx += std::sin(d2r(s.heading)) * kick;
     v.vy -= std::cos(d2r(s.heading)) * kick;
     if (s.explodType >= 0) spawnExplosion(s.x, s.y, s.explodType);
-    if (r == Hit::DESTROYED && v.deathT < 0) v.deathT = std::max(v.deathDelay, 1);
-    else if (r == Hit::DISABLED) v.disabled = true;
+    if (r == Hit::DESTROYED && v.deathT < 0) {
+      v.deathT = std::max(v.deathDelay, 1);
+      v.thrusting = false; // no engine flame on a hull that's breaking up
+    } else if (r == Hit::DISABLED) v.disabled = true;
     grudge(v, s.owner);
   }
   double maxWeaponRange(const Entity& e) {
@@ -981,10 +987,8 @@ struct Game {
       } else if (jump.active) {
         evThrust(player); evIntegrate(player);
         if (++jump.t >= JUMP_STREAK_FRAMES) completeJump();
-      } else if (player.disabled) {
-        evIntegrate(player);
       } else if (player.deathT >= 0) {
-        evIntegrate(player);
+        evIntegrate(player); // breaking up: drift while the death timer runs
         if (--player.deathT <= 0) {
           spawnExplosion(player.x, player.y, player.deathDelay >= 60 ? 2 : 1);
           gameOver = true;
