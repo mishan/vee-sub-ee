@@ -1130,9 +1130,13 @@ addEventListener('keydown', e => {
   if (splashShown) { advanceSplash(); e.preventDefault(); return; }
   if (titleShown) { e.preventDefault(); return; }
   // The hail modal pauses the sim; swallow every hotkey but Escape so the
-  // game can't be driven into odd states behind the overlay.
+  // game can't be driven into odd states behind the overlay. The one
+  // exception is the post-capture choice (mode 'captured'): the prize is
+  // already yours, so the player must resolve it (take command / add to
+  // fleet) — Escape can't dismiss it and leave the ship in limbo.
   if (hailOpen) {
-    if (e.key === 'Escape') closeHail();
+    const mustChoose = hailTarget && hailTarget.kind === 'board' && hailTarget.mode === 'captured';
+    if (e.key === 'Escape' && !mustChoose) closeHail();
     e.preventDefault();
     return;
   }
@@ -2138,10 +2142,11 @@ function escortCapturedShip() {
   const s = hailTarget.obj;
   const i = aiShips.indexOf(s); if (i >= 0) aiShips.splice(i, 1);
   if (shipTarget === s) shipTarget = null;
-  addEscort(s.shipId, ships[s.shipId].name);
+  const name = s.misnName || ships[s.shipId].name;  // keep any custom display name
+  addEscort(s.shipId, name);
   checkDefenseCleared(s.defOf, s);
   hailTarget.mode = 'result';
-  hailTarget.said = `The ${ships[s.shipId].name} joins your fleet as an escort.`;
+  hailTarget.said = `The ${name} joins your fleet as an escort.`;
   renderHail();
 }
 
@@ -3361,8 +3366,8 @@ if (SAVED && SAVED.spob != null) {
     showMsg('Pilot restored.');
   }
 }
-// Escorts only materialise when in flight; if we restored docked, takeoff
-// (loadSystem → spawnEscorts) brings them out.
+// Escorts only materialise when in flight; if we restored docked, takeOff()
+// spawns them (after it places the player on the launch pad).
 if (!landedAt) spawnEscorts();
 if (params.has('fire')) keys[' '] = true; // test affordance: hold the trigger
 

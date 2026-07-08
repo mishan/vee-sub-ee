@@ -449,8 +449,12 @@ snd 390) with **Capture vessel**, **Loot the hold**, and **Leave**:
 
 Player-owned escorts are allied AI ships that fly with the player. They are
 persisted in the pilot file as `escorts: [{id, shipId, name}]` and
-re-materialised on every system entry / takeoff (`spawnEscorts` at the end of
-`loadSystem`), so a fleet follows the player through hyperspace and off
+re-materialised on every system entry / takeoff by `spawnEscorts`, which the
+jump/takeoff callers invoke **after** they place the player (`completeJump`
+after `placeAtArrival`, `takeOff` after `placeAtTakeoff`, initial boot when in
+flight) — not inside `loadSystem`, which runs before placement and would spawn
+the fleet around the player's stale pre-arrival coordinates. So a fleet
+follows the player through hyperspace and off
 planets. A live escort entity is a normal AI ship with `playerEscort = true`,
 `aiType = 3` (warship behaviour), and `govt = 0` (no affiliation, so it stays
 out of government reaction/vendetta logic).
