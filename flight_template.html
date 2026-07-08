@@ -1552,7 +1552,7 @@ function renderHail() {
     }
     // classic ship comm portrait: PICT 5300 + ship index
     html = `<img class="commpic" src="evassets/graphics/PICT_${5300 + (s.shipId - 128)}.png" onerror="this.remove()">
-      <h3>${s.misnName || ships[s.shipId].name}</h3>
+      <h3>${escapeHtml(s.misnName || ships[s.shipId].name)}</h3>
       <div class="who">${label}${tag}</div>
       <div class="say">“${t.said}”</div>
       ${buttons}
