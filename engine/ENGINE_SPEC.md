@@ -475,7 +475,7 @@ The **Spaceport Bar** carries two boards, toggled by tabs: the mission BBS
 (as before) and a **hire-escort** dialog. The dialog shows *Your fleet* (each
 escort with its type, per-jump salary or "captured", and a **Dismiss**
 button) alongside *Pilots for hire* — a small fixed roster with each hull's
-fee, upkeep, and its ship-class description (desc 2000+`shïp−128`, from the
+fee, upkeep, and its ship-class description (desc ID `2000 + (shipId - 128)`, from the
 data file). The roster is the four cheapest armed, purchasable (`Cost > 0`),
 non-mission-locked hulls, computed once from the ship table (so it's stable
 and data-driven rather than hard-coded).
@@ -485,7 +485,10 @@ per-jump **upkeep**; both are fractions of the hull's `Cost` (`HIRE_FEE_FRAC`
 0.5 with a 1 000 cr floor, `UPKEEP_FRAC` 0.01 with a 50 cr floor). Like the
 commodity multipliers and trade-in rate, **these figures are conventions, not
 from the bible — flagged as approximations.** The fleet is capped at
-`MAX_ESCORTS` (6, hired + captured). Upkeep is charged on each hyperspace jump
+`MAX_ESCORTS` (6, hired + captured) and the cap is enforced everywhere a ship
+would join: hiring is blocked when full, the capture dialog's **Add to your
+fleet** is disabled when full, and taking command of a prize while full leaves
+your old ship behind rather than exceeding the cap. Upkeep is charged on each hyperspace jump
 (`completeJump`); any escort you can't cover **quits on arrival** (deducted in
 fleet order, so you keep as many as you can afford). Captured ships draw no
 salary. A hired escort is otherwise identical to a captured one — same allied

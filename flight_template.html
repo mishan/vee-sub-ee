@@ -663,8 +663,9 @@ function dismissEscort(id) {
   if (s) { const j = aiShips.indexOf(s); if (j >= 0) aiShips.splice(j, 1); }
   rerenderService();
 }
-/* Pay the fleet's salaries at each hyperspace jump; anyone you can't cover
- * quits on arrival (cheapest kept — deducted in fleet order). */
+/* Pay the fleet's salaries at each hyperspace jump. Deducted in fleet order
+ * (earliest-enlisted first); any escort whose salary you can't cover when its
+ * turn comes quits on arrival. */
 function chargeEscortUpkeep() {
   let quit = 0;
   for (const e of [...escorts]) {
@@ -1569,9 +1570,10 @@ function renderHail() {
     if (t.mode === 'result') { // capture/loot resolved — the ship is spent
       buttons = `<button onclick="hailClick();closeHail()">Continue</button>`;
     } else if (t.mode === 'captured') { // seized — choose its fate
+      const full = escorts.length >= MAX_ESCORTS;
       buttons =
         `<button onclick="takeCapturedShip()">Take command</button>` +
-        `<button onclick="escortCapturedShip()">Add to your fleet</button>`;
+        `<button onclick="escortCapturedShip()"${full ? ' disabled title="Your fleet is full"' : ''}>Add to your fleet</button>`;
     } else {
       const canLoot = (s.booty || 0) !== 0;
       buttons =
@@ -2189,10 +2191,13 @@ function takeCapturedShip() {
   const defOf = s.defOf;                     // read before takeCommand removes s
   const oldShip = playerShipId, oldName = shipName;
   takeCommand(s);                            // switch to the captured hull
-  addEscort(oldShip, oldName);               // former command falls in as escort
+  const room = escorts.length < MAX_ESCORTS; // is there a slot for the old ship?
+  if (room) addEscort(oldShip, oldName);     // former command falls in as escort
   checkDefenseCleared(defOf, s);
   hailTarget.mode = 'result';
-  hailTarget.said = `You transfer to the ${ships[playerShipId].name}. Your old ship falls in as an escort.`;
+  hailTarget.said = room
+    ? `You transfer to the ${ships[playerShipId].name}. Your old ship falls in as an escort.`
+    : `You transfer to the ${ships[playerShipId].name}. Your fleet is full, so your old ship is left behind.`;
   renderHail();
 }
 
@@ -2200,6 +2205,10 @@ function takeCapturedShip() {
 function escortCapturedShip() {
   hailClick();
   const s = hailTarget.obj;
+  if (escorts.length >= MAX_ESCORTS) {       // hard cap — keep the choice open
+    showMsg('Your fleet is already full — take command instead, or leave it.');
+    return;
+  }
   const i = aiShips.indexOf(s); if (i >= 0) aiShips.splice(i, 1);
   if (shipTarget === s) shipTarget = null;
   const name = s.misnName || ships[s.shipId].name;  // keep any custom display name
