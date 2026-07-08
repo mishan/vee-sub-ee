@@ -333,7 +333,9 @@ let activeMissions = SAVED && SAVED.missions ? SAVED.missions.map(m => ({ ...m }
 /* player-owned escorts (spec: "Escorts") — allied ships that follow the
  * player, fight the player's enemies, and persist across jumps/landings.
  * Saved as {id, shipId, name}; the live AI entity is respawned each system. */
-let escorts = SAVED && SAVED.escorts ? SAVED.escorts.map(e => ({ ...e })) : [];
+let escorts = SAVED && SAVED.escorts
+  ? SAVED.escorts.map(e => ({ ...e })).filter(e => ships[e.shipId]) // drop hulls this data set doesn't define
+  : [];
 let escNextId = escorts.reduce((m, e) => Math.max(m, e.id || 0), 0) + 1;
 
 let storageWarned = false;
@@ -522,7 +524,9 @@ function loadSystem(systId) {
     }
   const n = Math.min(Math.max(syst.AvgShips, 2), 8);
   for (let i = 0; i < n; i++) spawnAI(false);
-  spawnEscorts(); // the player's own fleet jumps in with them
+  // NB: the player's escorts are spawned by the *caller*, after it has placed
+  // the player (arrival edge / launch pad) — see spawnEscorts(). Spawning here
+  // would use the player's stale pre-arrival coordinates.
   // missions: AvailRandom rerolls per arrival; place this system's ships;
   // mark observe goals satisfied when we arrive in the right system.
   availRandom = {};
@@ -608,7 +612,9 @@ function makeEscort(esc) {
 function spawnEscorts() { for (const esc of escorts) makeEscort(esc); }
 /* Enlist a ship as a persistent escort (and, if in flight, spawn it now). */
 function addEscort(shipId, name) {
-  const esc = { id: escNextId++, shipId, name: name || ships[shipId].name };
+  const rec = ships[shipId];
+  if (!rec) return null;                      // unknown hull (data/version mismatch) — skip
+  const esc = { id: escNextId++, shipId, name: name || rec.name };
   escorts.push(esc);
   if (!introUp() && !landedAt) makeEscort(esc);
   return esc;
@@ -1074,6 +1080,7 @@ function completeJump() {
   // placeAtArrival wants the inbound bearing (origin → dest); from the
   // destination, mapBearingTo(origin) is the reverse bearing, so flip it.
   EV.placeAtArrival(player, EV.norm(mapBearingTo(from) + 180));
+  spawnEscorts();               // fleet jumps in around the now-placed player
   fuel -= EV.JUMP_FUEL;
   jump = null; jumpDest = null;
   checkExpiredMissions();
@@ -2559,6 +2566,7 @@ function takeOff() {
   // gone; loadSystem respawns the ambient population and any mission ships.
   loadSystem(SYSTEM_ID);
   EV.placeAtTakeoff(player, spob); // then place on the pad (loadSystem doesn't move you)
+  spawnEscorts();                  // launch the fleet alongside the player
 }
 
 /* ---------------- logic step (30Hz) ---------------- */
@@ -2660,8 +2668,10 @@ function step() {
         if (shipTarget === s) shipTarget = null;
         if (s.playerEscort) {                    // a lost escort is gone for good
           const i = escorts.findIndex(e => e.id === s.escId);
+          const name = (i >= 0 && escorts[i].name) || s.misnName
+            || (ships[s.shipId] && ships[s.shipId].name) || 'escort';
           if (i >= 0) escorts.splice(i, 1);
-          showMsg(`Your escort, the ${ships[s.shipId].name}, was destroyed.`);
+          showMsg(`Your escort ${name} was destroyed.`);
           continue;                              // don't spawn an ambient replacement
         }
         const epoch = systEpoch;
@@ -3351,6 +3361,9 @@ if (SAVED && SAVED.spob != null) {
     showMsg('Pilot restored.');
   }
 }
+// Escorts only materialise when in flight; if we restored docked, takeoff
+// (loadSystem → spawnEscorts) brings them out.
+if (!landedAt) spawnEscorts();
 if (params.has('fire')) keys[' '] = true; // test affordance: hold the trigger
 
 // Test/dev affordances (mirror the SDL flags): ?map=1 opens the map,
