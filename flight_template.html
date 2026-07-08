@@ -620,6 +620,66 @@ function addEscort(shipId, name) {
   return esc;
 }
 
+/* ---- escort-for-hire economics (spec: "Escorts for hire") ----
+ * The bible describes the hire dialog but not the price, so the fee and the
+ * per-jump upkeep are conventions (like the commodity multipliers): fractions
+ * of the ship's Cost, flagged as approximations. */
+const MAX_ESCORTS = 6;                       // fleet cap (hired + captured)
+const HIRE_FEE_FRAC = 0.5, UPKEEP_FRAC = 0.01;
+const shipHasWeapon = r => [1, 2, 3, 4].some(i => r['WeapType' + i] >= 128);
+const hireFee = r => Math.max(1000, Math.round((r.Cost || 0) * HIRE_FEE_FRAC));
+const upkeepOf = r => Math.max(50, Math.round((r.Cost || 0) * UPKEEP_FRAC));
+const shipClassDesc = id => {
+  const d = DATA.types.desc[2000 + (id - 128)];   // 2000-2063: ship class descriptions
+  return d && d.Description ? d.Description : '';
+};
+/* A small, fixed roster available at every bar: the cheapest armed, non-
+ * mission-locked, purchasable hulls make sensible entry-level escorts.
+ * Cost > 0 filters out carried-fighter classes (bay ammo, priced at 0),
+ * which aren't standalone ships you'd hire. Computed once. */
+const HIRE_ROSTER = Object.entries(ships)
+  .filter(([, r]) => r.MissionBit < 0 && r.Cost > 0 && shipHasWeapon(r))
+  .sort((a, b) => a[1].Cost - b[1].Cost)
+  .slice(0, 4)
+  .map(([id]) => +id);
+
+/* Hire a pilot: pay the fee, add a persistent escort carrying its upkeep. */
+function hireEscort(shipId) {
+  const r = ships[shipId]; if (!r) return;
+  if (escorts.length >= MAX_ESCORTS) { showMsg('Your fleet is already full.'); return; }
+  const fee = hireFee(r);
+  if (credits < fee) { showMsg('You can’t afford the hiring fee.'); return; }
+  credits -= fee;
+  const esc = addEscort(shipId, r.name);     // landed ⇒ joins the fleet, spawns on takeoff
+  esc.upkeep = upkeepOf(r);
+  playSnd(150, 0.5);
+  rerenderService();
+}
+/* Let an escort go: drop it from the fleet (and remove any live entity). */
+function dismissEscort(id) {
+  const i = escorts.findIndex(e => e.id === id); if (i < 0) return;
+  escorts.splice(i, 1);
+  const s = aiShips.find(x => x.escId === id);
+  if (s) { const j = aiShips.indexOf(s); if (j >= 0) aiShips.splice(j, 1); }
+  rerenderService();
+}
+/* Pay the fleet's salaries at each hyperspace jump. Deducted in fleet order
+ * (earliest-enlisted first); any escort whose salary you can't cover when its
+ * turn comes quits on arrival. */
+function chargeEscortUpkeep() {
+  let quit = 0;
+  for (const e of [...escorts]) {
+    if (!e.upkeep) continue;                  // captured ships draw no salary
+    if (credits >= e.upkeep) { credits -= e.upkeep; continue; }
+    const i = escorts.indexOf(e); if (i >= 0) escorts.splice(i, 1);
+    const s = aiShips.find(x => x.escId === e.id);
+    if (s) { const j = aiShips.indexOf(s); if (j >= 0) aiShips.splice(j, 1); }
+    quit++;
+  }
+  if (quit) showMsg(quit === 1 ? 'An escort quit — you couldn’t make payroll.'
+                               : `${quit} escorts quit — you couldn’t make payroll.`);
+}
+
 /* Bounty hunters (spec: "Bounty hunters"): when the player is a criminal in
  * the current system, that government sends warships after them. They
  * hyperspace in at the edge, hostile, named from STR# 10008. */
@@ -1084,6 +1144,7 @@ function completeJump() {
   fuel -= EV.JUMP_FUEL;
   jump = null; jumpDest = null;
   checkExpiredMissions();
+  chargeEscortUpkeep();          // pay the fleet's salaries; the unpaid quit here
   warpSnd = null; // Warp Up ends naturally as the streak completes
   playSnd(130); // Warp Out
 }
@@ -1509,9 +1570,10 @@ function renderHail() {
     if (t.mode === 'result') { // capture/loot resolved — the ship is spent
       buttons = `<button onclick="hailClick();closeHail()">Continue</button>`;
     } else if (t.mode === 'captured') { // seized — choose its fate
+      const full = escorts.length >= MAX_ESCORTS;
       buttons =
         `<button onclick="takeCapturedShip()">Take command</button>` +
-        `<button onclick="escortCapturedShip()">Add to your fleet</button>`;
+        `<button onclick="escortCapturedShip()"${full ? ' disabled title="Your fleet is full"' : ''}>Add to your fleet</button>`;
     } else {
       const canLoot = (s.booty || 0) !== 0;
       buttons =
@@ -2129,10 +2191,13 @@ function takeCapturedShip() {
   const defOf = s.defOf;                     // read before takeCommand removes s
   const oldShip = playerShipId, oldName = shipName;
   takeCommand(s);                            // switch to the captured hull
-  addEscort(oldShip, oldName);               // former command falls in as escort
+  const room = escorts.length < MAX_ESCORTS; // is there a slot for the old ship?
+  if (room) addEscort(oldShip, oldName);     // former command falls in as escort
   checkDefenseCleared(defOf, s);
   hailTarget.mode = 'result';
-  hailTarget.said = `You transfer to the ${ships[playerShipId].name}. Your old ship falls in as an escort.`;
+  hailTarget.said = room
+    ? `You transfer to the ${ships[playerShipId].name}. Your old ship falls in as an escort.`
+    : `You transfer to the ${ships[playerShipId].name}. Your fleet is full, so your old ship is left behind.`;
   renderHail();
 }
 
@@ -2140,6 +2205,10 @@ function takeCapturedShip() {
 function escortCapturedShip() {
   hailClick();
   const s = hailTarget.obj;
+  if (escorts.length >= MAX_ESCORTS) {       // hard cap — keep the choice open
+    showMsg('Your fleet is already full — take command instead, or leave it.');
+    return;
+  }
   const i = aiShips.indexOf(s); if (i >= 0) aiShips.splice(i, 1);
   if (shipTarget === s) shipTarget = null;
   const name = s.misnName || ships[s.shipId].name;  // keep any custom display name
@@ -2408,7 +2477,7 @@ SERVICE_RENDER.shipyard = function () {
 let selMisnId = null;
 function stelName(id) { const p = spobById(id); return p && p.name ? p.name : (id != null ? 'stellar ' + id : '—'); }
 
-function renderMissionBoard(loc) { // loc 0 = computer, 1 = bar
+function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
   const p = landedAt;
   const offers = offeredMissions(p, loc);
   const active = activeMissions;
@@ -2465,13 +2534,62 @@ function renderMissionBoard(loc) { // loc 0 = computer, 1 = bar
 
   document.getElementById('serviceCard').innerHTML =
     `<h2>${loc === 0 ? 'Mission Computer' : 'Spaceport Bar'}</h2>
-     <div class="meta">${p.name}</div>
+     <div class="meta">${p.name}</div>${topHtml}
      <div class="shop">${list}${pane}</div>
      <div class="wallet">${credits.toLocaleString('en-US')} credits · cargo ${cargoUsed()}/${holds} tons · day ${gameDay}</div>
      <div style="margin-top:10px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
 }
-SERVICE_RENDER.bar = () => renderMissionBoard(1);
+
+/* The bar hosts two boards — the mission BBS and the hire-escort dialog —
+ * toggled by a pair of tabs (spec: "Escorts for hire"). */
+let barTab = 'missions';
+function barTabs() {
+  const t = k => `<button class="svc" onclick="barTab='${k}';rerenderService()"${barTab === k ? ' disabled' : ''}>`;
+  return `<div style="margin:6px 0 2px">${t('missions')}Missions</button> ${t('hire')}Hire Escorts</button></div>`;
+}
+SERVICE_RENDER.bar = () => barTab === 'hire' ? renderHireBoard() : renderMissionBoard(1, barTabs());
 SERVICE_RENDER.missioncomputer = () => renderMissionBoard(0);
+
+function renderHireBoard() {
+  const p = landedAt;
+  const totalUpkeep = escorts.reduce((n, e) => n + (e.upkeep || 0), 0);
+
+  let fleet = `<div style="flex:1;min-width:210px;max-height:340px;overflow-y:auto">
+    <div class="meta" style="margin:0 0 4px">Your fleet (${escorts.length}/${MAX_ESCORTS})</div>`;
+  if (!escorts.length) fleet += `<div class="sub">You have no escorts yet.</div>`;
+  for (const e of escorts) {
+    const r = ships[e.shipId], kind = e.upkeep ? `~${e.upkeep.toLocaleString('en-US')} cr/jump` : 'captured';
+    fleet += `<div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <span>${escapeHtml(e.name)} <span class="sub">${r ? r.name : ''} · ${kind}</span></span>
+      <button class="svc" style="padding:2px 8px" onclick="dismissEscort(${e.id})">Dismiss</button></div>`;
+  }
+  if (totalUpkeep) fleet += `<div class="row sub" style="margin-top:6px">Payroll: ~${totalUpkeep.toLocaleString('en-US')} cr / jump</div>`;
+  fleet += '</div>';
+
+  let hire = `<div style="flex:1.3;min-width:240px;max-height:340px;overflow-y:auto">
+    <div class="meta" style="margin:0 0 4px">Pilots for hire</div>`;
+  for (const id of HIRE_ROSTER) {
+    const r = ships[id]; if (!r) continue;
+    const fee = hireFee(r), up = upkeepOf(r);
+    const full = escorts.length >= MAX_ESCORTS, afford = credits >= fee;
+    const desc = shipClassDesc(id);
+    hire += `<div class="row" style="border-bottom:1px solid #26304a;padding:6px 0">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <b>${r.name}</b>
+        <button class="svc" style="padding:2px 10px" onclick="hireEscort(${id})"${full || !afford ? ' disabled' : ''}>Hire</button>
+      </div>
+      <div class="sub">Fee ~${fee.toLocaleString('en-US')} cr · ~${up.toLocaleString('en-US')} cr/jump${
+        full ? ' · fleet full' : !afford ? ' · can’t afford' : ''}</div>${
+        desc ? `<div class="sub" style="margin-top:3px;max-height:64px;overflow-y:auto">${desc}</div>` : ''}</div>`;
+  }
+  hire += '</div>';
+
+  document.getElementById('serviceCard').innerHTML =
+    `<h2>Spaceport Bar</h2><div class="meta">${p.name}</div>${barTabs()}
+     <div class="shop">${fleet}${hire}</div>
+     <div class="wallet">${credits.toLocaleString('en-US')} credits · payroll ${totalUpkeep.toLocaleString('en-US')} cr/jump</div>
+     <div style="margin-top:10px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
+}
 
 function doAcceptMission(id) {
   const m = misns[id];
