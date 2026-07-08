@@ -436,18 +436,49 @@ snd 390) with **Capture vessel**, **Loot the hold**, and **Leave**:
   shïp `Crew` field, plus any Marines outfit (ModType 25, `ModVal` per unit;
   none exist in the Override data but the hook is there). The crew-ratio
   formula is an **approximation** (the bible names the inputs, not the
-  odds). Success ⇒ you *take command*: switch to the captured hull (stock
-  loadout — your old ship and its outfits are abandoned), repaired, refuelled,
-  repositioned at the prize, cargo clamped to the new hold. Failure ⇒ the
-  crew **self-destruct** the ship (it begins its death sequence). Either way
-  the attempt applies `BoardPenalty`. SDL leg: deferred.
+  odds). On success the prize is yours and you choose its fate (see
+  **Escorts**): **Take command** — switch to the captured hull (stock
+  loadout — your old ship's outfits are abandoned), repaired, refuelled,
+  repositioned at the prize, cargo clamped to the new hold, and your former
+  ship falls in as an escort; or **Add to your fleet** — keep your ship and
+  the prize joins you as an escort. Failure ⇒ the crew **self-destruct** the
+  ship (it begins its death sequence). Either way the attempt applies
+  `BoardPenalty`. SDL leg: deferred.
+
+## Escorts (shell; browser leg)
+
+Player-owned escorts are allied AI ships that fly with the player. They are
+persisted in the pilot file as `escorts: [{id, shipId, name}]` and
+re-materialised on every system entry / takeoff by `spawnEscorts`, which the
+jump/takeoff callers invoke **after** they place the player (`completeJump`
+after `placeAtArrival`, `takeOff` after `placeAtTakeoff`, initial boot when in
+flight) — not inside `loadSystem`, which runs before placement and would spawn
+the fleet around the player's stale pre-arrival coordinates. So a fleet
+follows the player through hyperspace and off
+planets. A live escort entity is a normal AI ship with `playerEscort = true`,
+`aiType = 3` (warship behaviour), and `govt = 0` (no affiliation, so it stays
+out of government reaction/vendetta logic).
+
+Escort AI each frame: pick the **nearest ship hostile to the player** and
+engage it with `stepWarship` + `fire` (same warship steering/aim the enemy
+population uses); with no hostile in the system, shadow the player
+(`stepWarship` toward the player's position). Escorts never target the player
+or each other. **Friendly fire is off**: the player and their escorts are one
+side, and shots/beams whose owner and victim are both on that side pass
+through harmlessly. Enemy fire hits escorts normally, and an escort that is
+destroyed is removed from the saved fleet **permanently** (no ambient
+replacement is scheduled). Escorts show as green radar blips.
+
+Sources of escorts today are the two capture outcomes above (the immediate
+ask). The wider "escort for hire" system (recruiting escorts in the spaceport
+bar) is **not yet implemented**. SDL leg: deferred.
 
 ## Persistence (shell responsibility; browser leg)
 
 The pilot auto-saves **on landing and on takeoff** (classic saved when
 you landed; the takeoff save captures docked trades and refits) to
 localStorage key `ve_pilot`: version, current system, docked spöb, ship,
-credits, cargo, outfits, explored set. Fuel/shields/armor are not saved —
+credits, cargo, outfits, explored set, and the `escorts` fleet. Fuel/shields/armor are not saved —
 landing restores them anyway. On load with no gameplay-affecting URL
 params, the pilot restores docked at the saved spöb. Any test param
 (`?syst ?ship ?x ?y ?heading ?ff ?land ?exchange ?outfitter ?shipyard

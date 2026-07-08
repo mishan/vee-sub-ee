@@ -330,6 +330,13 @@ let kills = SAVED ? (SAVED.kills || 0) : 0; // total crew destroyed → combat r
 const dominated = new Set(SAVED ? SAVED.dominated : []); // spob ids subdued for tribute
 /* active missions: resolved, live copies (not the raw records) */
 let activeMissions = SAVED && SAVED.missions ? SAVED.missions.map(m => ({ ...m })) : [];
+/* player-owned escorts (spec: "Escorts") — allied ships that follow the
+ * player, fight the player's enemies, and persist across jumps/landings.
+ * Saved as {id, shipId, name}; the live AI entity is respawned each system. */
+let escorts = SAVED && SAVED.escorts
+  ? SAVED.escorts.map(e => ({ ...e })).filter(e => ships[e.shipId]) // drop hulls this data set doesn't define
+  : [];
+let escNextId = escorts.reduce((m, e) => Math.max(m, e.id || 0), 0) + 1;
 
 let storageWarned = false;
 function savePilot(spobId) {
@@ -340,6 +347,7 @@ function savePilot(spobId) {
     bits: [...missionBits.keys()].filter(b => missionBits[b]),
     day: gameDay, born: pilotBorn, rep: reputation, kills, missions: activeMissions,
     dominated: [...dominated], name: pilotName, shipName, strict: strictPlay,
+    escorts,
   });
   let ok = false;
   try {
@@ -381,7 +389,7 @@ function createPilot(name, ship, strict) {
     v: 1, syst: 128, spob: null, ship: 128, credits: 10000,
     cargo: Object.fromEntries(COMMODITIES.map(c => [c, 0])), outfits: {},
     explored: [128], bits: [], day: 0, born: Date.now(),
-    rep: {}, kills: 0, missions: [], dominated: [],
+    rep: {}, kills: 0, missions: [], dominated: [], escorts: [],
     name, shipName: ship, strict: !!strict,
   });
   let saved = false;
@@ -516,6 +524,9 @@ function loadSystem(systId) {
     }
   const n = Math.min(Math.max(syst.AvgShips, 2), 8);
   for (let i = 0; i < n; i++) spawnAI(false);
+  // NB: the player's escorts are spawned by the *caller*, after it has placed
+  // the player (arrival edge / launch pad) — see spawnEscorts(). Spawning here
+  // would use the player's stale pre-arrival coordinates.
   // missions: AvailRandom rerolls per arrival; place this system's ships;
   // mark observe goals satisfied when we arrive in the right system.
   availRandom = {};
@@ -577,6 +588,36 @@ function spawnAI(atEdge) {
   e.warpIn = 18;
   if (atEdge) playSnd(130, attenuate(e.x, e.y) * 0.7); // Warp Out (arrival boom)
   aiShips.push(e);
+}
+
+/* ---------------- player escorts (spec: "Escorts") ------------------- */
+
+/* Spawn one live escort entity for a saved escort record, near the player. */
+function makeEscort(esc) {
+  const rec = ships[esc.shipId];
+  if (!rec) return null;
+  const a = Math.random() * Math.PI * 2, r = 140 + Math.random() * 120;
+  const e = EV.makeShip(rec, player.x + Math.cos(a) * r, player.y + Math.sin(a) * r, player.heading);
+  e.shipId = esc.shipId;
+  e.govt = 0;                          // no affiliation: stays out of govt vendetta logic
+  e.aiType = 3;                        // fights like a warship, but on your side
+  e.playerEscort = true; e.escId = esc.id; e.misnName = esc.name;
+  e.target = null; e.warpIn = 12;
+  armShip(e, rec);
+  preloadSprites([spinOfShip(esc.shipId)]);
+  aiShips.push(e);
+  return e;
+}
+/* Re-materialise the player's whole fleet on system entry / takeoff. */
+function spawnEscorts() { for (const esc of escorts) makeEscort(esc); }
+/* Enlist a ship as a persistent escort (and, if in flight, spawn it now). */
+function addEscort(shipId, name) {
+  const rec = ships[shipId];
+  if (!rec) return null;                      // unknown hull (data/version mismatch) — skip
+  const esc = { id: escNextId++, shipId, name: name || rec.name };
+  escorts.push(esc);
+  if (!introUp() && !landedAt) makeEscort(esc);
+  return esc;
 }
 
 /* Bounty hunters (spec: "Bounty hunters"): when the player is a criminal in
@@ -1039,6 +1080,7 @@ function completeJump() {
   // placeAtArrival wants the inbound bearing (origin → dest); from the
   // destination, mapBearingTo(origin) is the reverse bearing, so flip it.
   EV.placeAtArrival(player, EV.norm(mapBearingTo(from) + 180));
+  spawnEscorts();               // fleet jumps in around the now-placed player
   fuel -= EV.JUMP_FUEL;
   jump = null; jumpDest = null;
   checkExpiredMissions();
@@ -1088,9 +1130,13 @@ addEventListener('keydown', e => {
   if (splashShown) { advanceSplash(); e.preventDefault(); return; }
   if (titleShown) { e.preventDefault(); return; }
   // The hail modal pauses the sim; swallow every hotkey but Escape so the
-  // game can't be driven into odd states behind the overlay.
+  // game can't be driven into odd states behind the overlay. The one
+  // exception is the post-capture choice (mode 'captured'): the prize is
+  // already yours, so the player must resolve it (take command / add to
+  // fleet) — Escape can't dismiss it and leave the ship in limbo.
   if (hailOpen) {
-    if (e.key === 'Escape') closeHail();
+    const mustChoose = hailTarget && hailTarget.kind === 'board' && hailTarget.mode === 'captured';
+    if (e.key === 'Escape' && !mustChoose) closeHail();
     e.preventDefault();
     return;
   }
@@ -1462,6 +1508,10 @@ function renderHail() {
     let buttons;
     if (t.mode === 'result') { // capture/loot resolved — the ship is spent
       buttons = `<button onclick="hailClick();closeHail()">Continue</button>`;
+    } else if (t.mode === 'captured') { // seized — choose its fate
+      buttons =
+        `<button onclick="takeCapturedShip()">Take command</button>` +
+        `<button onclick="escortCapturedShip()">Add to your fleet</button>`;
     } else {
       const canLoot = (s.booty || 0) !== 0;
       buttons =
@@ -1502,7 +1552,7 @@ function renderHail() {
     }
     // classic ship comm portrait: PICT 5300 + ship index
     html = `<img class="commpic" src="evassets/graphics/PICT_${5300 + (s.shipId - 128)}.png" onerror="this.remove()">
-      <h3>${s.misnName || ships[s.shipId].name}</h3>
+      <h3>${escapeHtml(s.misnName || ships[s.shipId].name)}</h3>
       <div class="who">${label}${tag}</div>
       <div class="say">“${t.said}”</div>
       ${buttons}
@@ -2055,18 +2105,48 @@ function captureVessel() {
   hailClick();
   const s = hailTarget.obj;
   commitCrime(s.govt, penaltyOf(s.govt, 'BoardPenalty'));
-  hailTarget.mode = 'result';
   if (Math.random() < captureOdds(s)) {
-    const defOf = s.defOf;                   // read before takeCommand removes s
-    hailTarget.said = `Your boarding party seizes the ${ships[s.shipId].name}! You transfer to your new command.`;
-    takeCommand(s);
-    checkDefenseCleared(defOf, s);           // a captured defender is out of the fight too
+    // Seized. Offer the classic choice — fly the prize yourself, or fold it
+    // into your fleet — resolved by the player's pick below. The ship stays
+    // put (the sim is paused while the boarding dialog is up).
+    hailTarget.mode = 'captured';
+    hailTarget.said = `Your boarding party seizes the ${ships[s.shipId].name}!`;
     playSnd(150, 0.5);
   } else {
+    hailTarget.mode = 'result';
     hailTarget.said = 'The crew repel your party and scuttle the ship!';
     beginDestruction(s);                    // failed capture → self-destruct
     checkDefenseCleared(s.defOf, s);
   }
+  renderHail();
+}
+
+/* Capture outcome 1: transfer to the prize; your old command stays with you
+ * as an escort (per the original — you don't abandon the ship, it joins you). */
+function takeCapturedShip() {
+  hailClick();
+  const s = hailTarget.obj;
+  const defOf = s.defOf;                     // read before takeCommand removes s
+  const oldShip = playerShipId, oldName = shipName;
+  takeCommand(s);                            // switch to the captured hull
+  addEscort(oldShip, oldName);               // former command falls in as escort
+  checkDefenseCleared(defOf, s);
+  hailTarget.mode = 'result';
+  hailTarget.said = `You transfer to the ${ships[playerShipId].name}. Your old ship falls in as an escort.`;
+  renderHail();
+}
+
+/* Capture outcome 2: keep your ship; the prize joins your fleet as an escort. */
+function escortCapturedShip() {
+  hailClick();
+  const s = hailTarget.obj;
+  const i = aiShips.indexOf(s); if (i >= 0) aiShips.splice(i, 1);
+  if (shipTarget === s) shipTarget = null;
+  const name = s.misnName || ships[s.shipId].name;  // keep any custom display name
+  addEscort(s.shipId, name);
+  checkDefenseCleared(s.defOf, s);
+  hailTarget.mode = 'result';
+  hailTarget.said = `The ${name} joins your fleet as an escort.`;
   renderHail();
 }
 
@@ -2491,6 +2571,7 @@ function takeOff() {
   // gone; loadSystem respawns the ambient population and any mission ships.
   loadSystem(SYSTEM_ID);
   EV.placeAtTakeoff(player, spob); // then place on the pad (loadSystem doesn't move you)
+  spawnEscorts();                  // launch the fleet alongside the player
 }
 
 /* ---------------- logic step (30Hz) ---------------- */
@@ -2590,6 +2671,14 @@ function step() {
         onShipDestroyed(s);
         aiShips.splice(aiShips.indexOf(s), 1);
         if (shipTarget === s) shipTarget = null;
+        if (s.playerEscort) {                    // a lost escort is gone for good
+          const i = escorts.findIndex(e => e.id === s.escId);
+          const name = (i >= 0 && escorts[i].name) || s.misnName
+            || (ships[s.shipId] && ships[s.shipId].name) || 'escort';
+          if (i >= 0) escorts.splice(i, 1);
+          showMsg(`Your escort ${name} was destroyed.`);
+          continue;                              // don't spawn an ambient replacement
+        }
         const epoch = systEpoch;
         setTimeout(() => { if (epoch === systEpoch) spawnAI(true); }, 4000 + Math.random() * 8000);
       }
@@ -2599,7 +2688,22 @@ function step() {
     if (s.disabled) { EV.integrate(s); continue; }
     EV.stepShields(s, s.shieldMax, s.shieldRe);
     for (const w of s.weapons) if (w.cool > 0) w.cool--;
-    if (s.hostile && player.deathT < 0 && !gameOver && !landedAt) {
+    if (s.playerEscort) {
+      // Guard the player: engage the nearest ship hostile to them, otherwise
+      // hold a loose formation nearby. Escorts never target the player's side.
+      let tgt = null, best = Infinity;
+      for (const h of aiShips) {
+        if (h === s || h.playerEscort || h.deathT >= 0 || h.disabled || !h.hostile) continue;
+        const d = Math.hypot(h.x - s.x, h.y - s.y);
+        if (d < best) { best = d; tgt = h; }
+      }
+      if (tgt && !gameOver && !landedAt) {
+        const r = EV.stepWarship(s, tgt.x, tgt.y);
+        if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, tgt, true);
+      } else {
+        EV.stepWarship(s, player.x, player.y); // shadow the player
+      }
+    } else if (s.hostile && player.deathT < 0 && !gameOver && !landedAt) {
       const r = EV.stepWarship(s, player.x, player.y);
       if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, player, true);
     } else if (s.fleeing) {
@@ -2631,11 +2735,14 @@ function step() {
 
   /* shots */
   const everyone = player.deathT < 0 && !landedAt && !gameOver ? [player, ...aiShips] : [...aiShips];
+  // The player and their escorts are one side: their fire never harms each other.
+  const alliedTo = o => o === player || o.playerEscort;
+  const friendly = (a, b) => alliedTo(a) && alliedTo(b);
   for (const shot of [...shots]) {
     const alive = EV.stepShot(shot, shot.homing);
     let hit = false;
     for (const v of everyone) {
-      if (v === shot.owner || v.deathT >= 0) continue;
+      if (v === shot.owner || v.deathT >= 0 || friendly(shot.owner, v)) continue;
       if (Math.hypot(v.x - shot.x, v.y - shot.y) <
           Math.max(shot.rec.ProxRadius, shipHalf(v))) {
         hitShip(v, shot.rec, shot.heading, shot.owner);
@@ -2655,7 +2762,7 @@ function step() {
     const dx = Math.sin(EV.rad(b.heading)), dy = -Math.cos(EV.rad(b.heading));
     let bestT = Infinity, bestV = null;
     for (const v of everyone) {
-      if (v === b.owner || v.deathT >= 0) continue;
+      if (v === b.owner || v.deathT >= 0 || friendly(b.owner, v)) continue;
       const t = (v.x - b.owner.x) * dx + (v.y - b.owner.y) * dy;
       if (t < 0 || t > b.rec.Speed) continue;
       const px = b.owner.x + dx * t, py = b.owner.y + dy * t;
@@ -2719,7 +2826,7 @@ function drawStars(camX, camY, w, h, streak) {
 }
 
 function radarColor(govtId) {
-  if (govtId == null || govtId < 0) return '#9aa5b8';
+  if (govtId == null || govtId < 128) return '#9aa5b8'; // no/independent govt → neutral
   const hues = ['#e5c07b', '#61afef', '#e06c75', '#98c379', '#c678dd', '#56b6c2'];
   return hues[(govtId - 128) % hues.length];
 }
@@ -2826,7 +2933,7 @@ function drawPanel(w, h) {
   };
   for (const p of spobs) blip(p, '#7fd0ff', 3);
   for (const s of aiShips) {
-    const at = blip(s, radarColor(s.govt), 2);
+    const at = blip(s, s.playerEscort ? '#67d967' : radarColor(s.govt), 2);
     if (at && s === shipTarget) {
       ctx.strokeStyle = '#ffd479'; ctx.strokeRect(at[0] - 3, at[1] - 3, 6, 6);
     }
@@ -3259,6 +3366,9 @@ if (SAVED && SAVED.spob != null) {
     showMsg('Pilot restored.');
   }
 }
+// Escorts only materialise when in flight; if we restored docked, takeOff()
+// spawns them (after it places the player on the launch pad).
+if (!landedAt) spawnEscorts();
 if (params.has('fire')) keys[' '] = true; // test affordance: hold the trigger
 
 // Test/dev affordances (mirror the SDL flags): ?map=1 opens the map,
