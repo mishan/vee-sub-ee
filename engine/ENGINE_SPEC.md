@@ -297,6 +297,24 @@ pull, applying damage each frame to the first ship within 8 px of the
 ray. `Graphic` is a color code (−2 red, −3 green, −4 blue, −5 cyan,
 −6 magenta, −7 yellow).
 
+**Fighter bays** (guidance 99; shell, browser leg): the weapon carries no
+shot — its `AmmoType` is the **ship class ID** of a fighter it launches.
+The bay's `WeapCount` (plus outfitter copies) is its size; the shell tracks
+`have` = fighters currently docked, refilled to full whenever the loadout is
+rebuilt (which happens on landing — same "rearm at port" simplification as
+ammo). Firing the bay as a secondary (**player only** for now) launches one
+fighter — a player-allied ship of class `AmmoType` that reuses the **escort
+AI** (follows/fights the player's enemies, friendly-fire immune, green radar
+blip) but is *transient*: it belongs to the bay's ammo, not the saved
+`escorts` fleet. Each launch spends one from `have` and starts the bay's
+`Reload` cooldown. **K** recalls every deployed fighter — each docks back
+into a bay of its type, restoring one `have` (and fighters auto-recall just
+before a hyperspace jump so they travel with you). A fighter **shot down is
+lost** — its slot is *not* returned to the bay (you rearm on landing). The
+sidebar shows `Fighters: have/size`. Deferred: AI carriers launching their
+own fighters, and persisting fighter losses across a landing. SDL leg:
+deferred.
+
 **Damage** (bible, exact): shields up → `MassDmg/4 + EnergyDmg` off
 shields; shields down (≤0) → `MassDmg + EnergyDmg/4` off armor; always
 at least 1. Shield overflow does not carry into armor. **Disabled** at
