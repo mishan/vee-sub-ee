@@ -270,7 +270,7 @@
 </div>
 <div id="about"><div class="card" id="aboutCard"></div></div>
 <div id="npilot"><div class="card"></div></div>
-<div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · L land · B board · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · CapsLock 2× · Esc</div>
+<div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · K recall fighters · L land · B board · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · CapsLock 2× · Esc</div>
 <script>/*__ENGINE__*/</script>
 <script>
 'use strict';
@@ -620,6 +620,43 @@ function addEscort(shipId, name) {
   return esc;
 }
 
+/* ---------------- fighter bays (spec: "Fighter bays") ----------------
+ * A Guidance-99 weapon launches a carried ship (AmmoType = its class ID) that
+ * fights as a player-allied escort. Reuses the escort AI + friendly-fire
+ * immunity; fighters are transient (tied to bay ammo, not the saved fleet). */
+function launchFighter(w) {
+  if (!(w.have > 0)) { showMsg('Fighter bay is empty.'); return false; }
+  const rec = ships[w.rec.AmmoType];
+  if (!rec) return false;
+  const ahead = EV.rad(player.heading);
+  const e = EV.makeShip(rec, player.x + Math.sin(ahead) * 60, player.y - Math.cos(ahead) * 60, player.heading);
+  e.shipId = w.rec.AmmoType;
+  e.govt = 0; e.aiType = 3;
+  e.playerEscort = true; e.fighter = true; e.bayWeapId = w.id;
+  e.misnName = rec.name; e.target = null; e.warpIn = 8;
+  armShip(e, rec);
+  preloadSprites([spinOfShip(e.shipId)]);
+  aiShips.push(e);
+  w.have--;
+  return true;
+}
+/* Recall living fighters: each returns to a bay of its type, restoring ammo. */
+function recallFighters() {
+  let back = 0;
+  for (const s of [...aiShips]) {
+    if (!s.fighter || s.deathT >= 0) continue;
+    const bay = player.weapons.find(w => w.id === s.bayWeapId && w.have < w.n)
+             || player.weapons.find(w => w.rec.Guidance === 99 && w.rec.AmmoType === s.shipId && w.have < w.n);
+    if (bay) bay.have++;                       // docks; if no bay has room the fighter just leaves
+    aiShips.splice(aiShips.indexOf(s), 1);
+    if (shipTarget === s) shipTarget = null;
+    back++;
+  }
+  if (back) showMsg(`Recalled ${back} fighter${back > 1 ? 's' : ''}.`);
+  else showMsg('No fighters deployed.');
+}
+const fightersOut = () => aiShips.some(s => s.fighter && s.deathT < 0);
+
 /* ---- escort-for-hire economics (spec: "Escorts for hire") ----
  * The bible describes the hire dialog but not the price, so the fee and the
  * per-jump upkeep are conventions (like the commodity multipliers): fractions
@@ -880,7 +917,9 @@ function armShip(e, rec) {
   for (let i = 1; i <= 4; i++) {
     const t = rec['WeapType' + i];
     if (t >= 128 && weaps[t]) {
-      e.weapons.push({ id: t, rec: weaps[t], n: Math.max(rec['WeapCount' + i], 1), cool: 0 });
+      const w = { id: t, rec: weaps[t], n: Math.max(rec['WeapCount' + i], 1), cool: 0 };
+      if (w.rec.Guidance === 99) w.have = w.n;   // fighter bay: fighters docked
+      e.weapons.push(w);
       const pk = poolKey(weaps[t]);
       if (pk) {
         e.pools[pk] = (e.pools[pk] || 0) + Math.max(rec['AmmoLoad' + i], 0);
@@ -907,6 +946,9 @@ function rebuildPlayerWeapons() {
       player.poolCap[pk] = (player.poolCap[pk] || 0) + (o.Max > 0 ? o.Max : n);
     }
   }
+  // Fighter bays rearm to full capacity here (rebuild runs on landing, same as
+  // the ammo-refill simplification) — every bay's docked count = its size.
+  for (const w of player.weapons) if (w.rec.Guidance === 99) w.have = w.n;
   if (!player.weapons.some(w => w === player.selSecondary))
     player.selSecondary = player.weapons.find(w => w.rec.MiscFlags & 2) || null;
 }
@@ -935,7 +977,13 @@ function fire(e, target, primary) {
     if (primary ? sec : w !== e.selSecondary) continue;
     if (w.cool > 0) continue;
     const g = w.rec.Guidance;
-    if (g === 99) continue; // fighter bays: a later milestone
+    if (g === 99) {                    // fighter bay: launch a carried ship (player only)
+      if (e === player && launchFighter(w)) {
+        w.cool = w.rec.Reload;
+        if (w.rec.Sound >= 0) playSnd(200 + w.rec.Sound, attenuate(e.x, e.y));
+      }
+      continue;
+    }
     const pk = poolKey(w.rec);
     if (g === 0 || g === 3) { // beam
       if (pk && !((e.pools[pk] || 0) > 0)) continue;
@@ -1136,6 +1184,7 @@ function abortJump() {
 function completeJump() {
   const from = SYSTEM_ID;
   gameDay++;                    // a day passes each hyperspace jump (spec)
+  if (fightersOut()) recallFighters(); // fighters dock before the carrier jumps out
   loadSystem(jump.destId);
   // placeAtArrival wants the inbound bearing (origin → dest); from the
   // destination, mapBearingTo(origin) is the reverse bearing, so flip it.
@@ -1221,6 +1270,7 @@ addEventListener('keydown', e => {
   }
   if (k === '[') setVolume(-0.1);
   if (k === ']') setVolume(+0.1);
+  if (k === 'k' && !landedAt) recallFighters(); // dock deployed fighters
   if (k === 'q' && !landedAt) { // cycle secondary weapon
     const secs = player.weapons.filter(w => w.rec.MiscFlags & 2);
     if (!secs.length) { showMsg('No secondary weapons fitted.'); }
@@ -2789,6 +2839,10 @@ function step() {
         onShipDestroyed(s);
         aiShips.splice(aiShips.indexOf(s), 1);
         if (shipTarget === s) shipTarget = null;
+        if (s.fighter) {                         // a downed fighter is lost (bay ammo not restored)
+          showMsg(`Your ${ships[s.shipId] ? ships[s.shipId].name : 'fighter'} was shot down.`);
+          continue;
+        }
         if (s.playerEscort) {                    // a lost escort is gone for good
           const i = escorts.findIndex(e => e.id === s.escId);
           const name = (i >= 0 && escorts[i].name) || s.misnName
@@ -3070,7 +3124,10 @@ function drawPanel(w, h) {
   if (sw) {
     const pk = poolKey(sw.rec);
     panelText(px + 9, py + 202, sw.rec.name ?? 'weapon ' + sw.id);
-    if (pk != null) {
+    if (sw.rec.Guidance === 99) {                 // fighter bay: docked / capacity
+      const have = sw.have || 0;
+      panelText(px + 9, py + 214, `Fighters: ${have}/${sw.n}`, have > 0 ? GREEN : '#e06c75');
+    } else if (pk != null) {
       const cur = player.pools[pk] || 0, cap = player.poolCap[pk] || 0;
       panelText(px + 9, py + 214, `Ammo: ${cur}${cap > 0 ? '/' + cap : ''}`,
         cur > 0 ? GREEN : '#e06c75');
