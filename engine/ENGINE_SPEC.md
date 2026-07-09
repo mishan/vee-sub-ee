@@ -164,7 +164,7 @@ accept; expiry fails the mission.
 
 **Availability** (evaluated per spöb on landing; `AvailRandom` rerolled
 per system arrival): `AvailLoc` 0 = mission computer, 1 = bar, 2 = from a
-ship (offered on hail — deferred). `AvailStel`: −1 any inhabited spöb, a
+ship (offered on hail — see "Ship-offered missions"). `AvailStel`: −1 any inhabited spöb, a
 specific ID, or govt-relative codes (9999+g govt's own, 15000+g ally's,
 20000+g anyone-but, 25000+g enemy's). `AvailRating` (−1 ignore, else the
 combat rating — total crew killed — must be ≥ it) and `AvailRecord` (0
@@ -185,9 +185,36 @@ escort (3, ships spawn friendly and run for their destination — the goal
 fails if any is killed, completes when they arrive safely);
 observe (4, be in the ShipSyst); rescue (5, ships spawn already disabled,
 board them); chase-off (6, destroy or the ship leaves); and plain go-to.
-Deferred: ship-offered missions (AvailLoc 2), aux ships. A catch-goal
+Deferred: aux ships. A catch-goal
 target (destroy/disable/board) that reaches a planet loiters rather than
 landing, so it can't slip away.
+
+**Ship-offered missions (AvailLoc 2; shell, browser leg).** These are
+carried by `përs` resources — named characters (e.g. "Piper Maru"), each
+linking a mission via `LinkMission`. A character spawns at most once per
+system visit, at a low rate (`maybeSpawnPers`), when it is eligible: its
+`LinkSyst` permits the current system (specific ID, or govt-relative
+9999/15000/20000/25000+g ranges, −1 = anywhere, unknown → allowed), its
+`MissionBit` gate (if any) is set, it hasn't been spent or grudged, and its
+`LinkMission` passes the normal availability checks for loc 2 (evaluated
+against a representative inhabited spöb of the current system). The
+character flies its own `ShipType` with its `Govt`/`AIType`, weapon
+overrides, and `ShieldMod`, and — while it still has an unaccepted job — it
+loiters instead of docking away.
+
+**Hailing** an eligible character shows its `CommQuote` (STR# 7100) and the
+mission briefing with an **Accept**/**Decline** choice alongside the usual
+comm options; the `<OSN>` token resolves to the character's name. Accepting
+runs the same `acceptMission` path as the bar/computer. Honored `përs`
+flags: `deactivateAfterLinkMission` (0x0100 — the character is spent, saved
+in `persDone`, never reappears), `leaveAfterLinkMission` (0x0800 — it flees
+after you accept), the don't-offer-to-my-ship-class flags (0x1000/0x2000/
+0x4000 vs the player's inherentAI), and grudge (attacking a character
+withdraws its offer and, if `holdsGrudge` 0x0001, is remembered in
+`persGrudge` so it won't deal with you again). `persDone`/`persGrudge` are
+persisted in the pilot file. Deferred: replace-ship-on-accept (0x0040),
+offer-on-board (0x0200), and the conditional HailQuote radio lines
+(STR# 7101).
 
 **Resolution & display.** Random mission fields are resolved **once when
 first offered** (cached per system visit), so the briefing shows the real
