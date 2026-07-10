@@ -14,21 +14,24 @@
   const BUILT_MARKER = '_built.json';
   const gameBase = () => new URL('game/', location.href).href;
 
-  // The files that define a build: the engine shell + core, plus the asset
-  // decoders. Fetched once so flight.html and its recorded hash come from the
-  // *same* strings — no window where the server changes between assembling the
-  // engine and writing the marker. tpl/core build flight.html; the decoders are
-  // hashed too, so a decoder fix also invalidates a returning visitor's cache.
+  // Every file the cached build derives from, so a change to any one invalidates
+  // a returning visitor's cache. tpl+core assemble flight.html; DATA is a
+  // function of evrsrc/semantics/nodeshim + the schemas; the assets are produced
+  // by the decoders (which import evsit for decompression). Fetched once so
+  // flight.html and its recorded hash come from the *same* strings (no mid-build
+  // server change slips through). The extra parallel fetches come from HTTP cache.
   const ENGINE_FILES = ['../flight_template.html', '../engine/core.js',
-    'evpict.js', 'evsnd.js', 'evsprite.js', 'evbuild.js'];
+    '../evrsrc.js', '../semantics.js', 'nodeshim.js',
+    'evsit.js', 'evpict.js', 'evsnd.js', 'evsprite.js', 'evbuild.js',
+    ...SCHEMA_NAMES.map(n => '../schemas/' + n + '.json')];
   async function fetchEngineSources() {
-    const [tpl, core, ...decoders] = await Promise.all(
+    const [tpl, core, ...rest] = await Promise.all(
       ENGINE_FILES.map(f => fetch(f).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + f); return r.text(); })));
-    return { tpl, core, decoders };
+    return { tpl, core, rest };
   }
   // SHA-256 of the concatenated sources — the build's identity in the marker.
   async function sourcesHash(src) {
-    const bytes = new TextEncoder().encode([src.tpl, src.core, ...src.decoders].join('\u0000'));
+    const bytes = new TextEncoder().encode([src.tpl, src.core, ...src.rest].join('\u0000'));
     const digest = await crypto.subtle.digest('SHA-256', bytes);
     return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
   }
