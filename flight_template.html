@@ -312,8 +312,10 @@ let credits = SAVED ? SAVED.credits : 10000;
 const cargo = Object.fromEntries(COMMODITIES.map(c => [c, (SAVED && SAVED.cargo[c]) || 0]));
 const explored = new Set(SAVED ? SAVED.explored : []);
 
-/* mission state (spec: "Missions") — also part of the pilot file */
-const missionBits = new Uint8Array(256);
+/* mission state (spec: "Missions") — also part of the pilot file. 512 flags:
+ * set/clear codes address bits 0–511 (0–511 set, 1000–1511 clear), and përs
+ * MissionBit likewise ranges 0–511, so the store must span the full range. */
+const missionBits = new Uint8Array(512);
 if (SAVED && SAVED.bits) for (const b of SAVED.bits) missionBits[b] = 1;
 let gameDay = SAVED ? (SAVED.day || 0) : 0;
 // Real-world epoch the pilot was created, so the displayed in-game date is
@@ -328,6 +330,11 @@ let strictPlay = SAVED ? !!SAVED.strict : false;
 const reputation = SAVED && SAVED.rep ? { ...SAVED.rep } : {}; // govtId -> record
 let kills = SAVED ? (SAVED.kills || 0) : 0; // total crew destroyed → combat rating
 const dominated = new Set(SAVED ? SAVED.dominated : []); // spob ids subdued for tribute
+// përs (named characters) that have been "spent" — a one-shot character whose
+// mission you accepted (deactivateAfterLinkMission) won't reappear.
+const persDone = new Set(SAVED && SAVED.persDone ? SAVED.persDone : []);
+// përs who hold a grudge (you attacked them): they won't offer you work again.
+const persGrudge = new Set(SAVED && SAVED.persGrudge ? SAVED.persGrudge : []);
 /* active missions: resolved, live copies (not the raw records) */
 let activeMissions = SAVED && SAVED.missions ? SAVED.missions.map(m => ({ ...m })) : [];
 /* player-owned escorts (spec: "Escorts") — allied ships that follow the
@@ -347,7 +354,7 @@ function savePilot(spobId) {
     bits: [...missionBits.keys()].filter(b => missionBits[b]),
     day: gameDay, born: pilotBorn, rep: reputation, kills, missions: activeMissions,
     dominated: [...dominated], name: pilotName, shipName, strict: strictPlay,
-    escorts,
+    escorts, persDone: [...persDone], persGrudge: [...persGrudge],
   });
   let ok = false;
   try {
@@ -542,6 +549,7 @@ function loadSystem(systId) {
       }
     }
   }
+  maybeSpawnPers(); // a named character may be here with a job (after AvailRandom reset)
 }
 
 /* ---------------- AI spawning (shell; see spec "Spawning") ------------- */
@@ -1039,6 +1047,10 @@ function grudge(victim, attacker) {
   };
   react(victim);
   for (const s of aiShips) if (s.govt === victim.govt && s.govt >= 128) react(s);
+  if (victim.isPers) {                        // a character you fired on won't deal with you
+    victim.offered = true;
+    if (victim.persFlags & PF.GRUDGE) persGrudge.add(victim.persId); // and remembers it
+  }
 }
 
 function hitShip(victim, rec, heading, attacker) {
@@ -1609,6 +1621,46 @@ function demandSurrender(s) {
   closeHail(); // a comm demand, not a physical boarding — no airlock sound
 }
 
+/* ---- ship-offered missions: a hailed përs proposes its LinkMission ---- */
+/* Is this ship offering a mission to the player right now? */
+function shipOffering(s) {
+  return !!(s && s.isPers && !s.offered && !s.hostile && s.misnLink >= 128
+    && !persDone.has(s.persId) && persOffersToPlayer(pers[s.persId])
+    && shipMissionAvailable(s.misnLink));
+}
+/* The offer panel HTML (comm quote + briefing + destination/pay). */
+function shipOfferPanel(s) {
+  const m = misns[s.misnLink], here = systemSpob();
+  const o = getOffer(s.misnLink, here);
+  const A = { ...o, osn: s.misnName };
+  const quote = s.commQuote >= 0 && DATA.strings[7100]
+    ? DATA.strings[7100].list[s.commQuote] : null;
+  const brief = descText(m.BriefText, A) || descText(m.QuickBrief, A) || subst(m.name, A);
+  const pay = m.PayVal > 0 ? `${m.PayVal.toLocaleString('en-US')} cr` : 'see briefing';
+  const dst = o.travelStel != null ? stelName(o.travelStel)
+            : o.returnStel != null ? stelName(o.returnStel) : '—';
+  return (quote ? `<div class="say">“${subst(quote, A)}”</div>` : '')
+    + `<div class="say" style="max-height:120px;overflow-y:auto">${brief}</div>`
+    + `<div class="who">Mission: <b>${escapeHtml(subst(m.name, A))}</b> · Destination: ${escapeHtml(dst)} · Pay: ${pay}</div>`;
+}
+function acceptShipMission(s) {
+  hailClick();
+  if (!shipOffering(s)) { closeHail(); return; }
+  acceptMission(s.misnLink, systemSpob());
+  const f = s.persFlags || 0;
+  s.offered = true;                              // don't re-offer this encounter
+  if (f & PF.DEACTIVATE) persDone.add(s.persId); // one-shot character: gone for good
+  if (f & PF.LEAVE) { s.hostile = false; s.fleeing = true; } // makes its exit
+  closeHail();
+}
+function declineShipMission(s) {
+  hailClick();
+  s.offered = true;
+  const m = misns[s.misnLink];
+  const txt = descText(m.RefuseText, { osn: s.misnName });
+  if (txt) hailSay(txt); else closeHail();
+}
+
 function renderHail() {
   const t = hailTarget; if (!t) return;
   let html;
@@ -1649,6 +1701,7 @@ function renderHail() {
     const label = s.bounty ? 'Bounty Hunter' : govtName;
     const tag = s.disabled ? ' · <span style="color:#e06c75">DISABLED</span>'
               : s.hostile ? ' · <span style="color:#e06c75">HOSTILE</span>' : '';
+    const offering = shipOffering(s);
     let buttons;
     if (t.mode === 'fuel') {
       buttons = `<button onclick="payFuel(true)">Pay ${FUEL_PRICE.toLocaleString('en-US')} cr for fuel</button>
@@ -1658,7 +1711,10 @@ function renderHail() {
       buttons = `<button onclick="payBribe(hailTarget.obj)">Pay ${t.bribe.toLocaleString('en-US')} cr to be spared</button>
         <button onclick="hailTarget.mode='main';renderHail()">Never mind</button>`;
     } else {
-      buttons = `<button onclick="requestAssistance(hailTarget.obj)">Request assistance</button>` +
+      buttons =
+        (offering ? `<button onclick="acceptShipMission(hailTarget.obj)">Accept mission</button>
+                     <button onclick="declineShipMission(hailTarget.obj)">Decline</button>` : '') +
+        `<button onclick="requestAssistance(hailTarget.obj)">Request assistance</button>` +
         (s.hostile ? `<button onclick="begForMercy(hailTarget.obj)">Beg for mercy</button>` : '') +
         `<button onclick="demandSurrender(hailTarget.obj)"${s.disabled ? '' : ' disabled'}>Demand surrender / plunder</button>`;
     }
@@ -1667,6 +1723,7 @@ function renderHail() {
       <h3>${escapeHtml(s.misnName || ships[s.shipId].name)}</h3>
       <div class="who">${label}${tag}</div>
       <div class="say">“${t.said}”</div>
+      ${offering && t.mode !== 'fuel' && t.mode !== 'mercy' ? shipOfferPanel(s) : ''}
       ${buttons}
       <button onclick="hailClick();closeHail()">Close channel</button>`;
   } else {
@@ -1807,6 +1864,7 @@ function buyOutfit(id, qty) {
 
 const misns = DATA.types.misn;
 const govts = DATA.types.govt;
+const pers = DATA.types.pers || {};       // named characters (ship-offered missions)
 const MISN_ALL = params.has('allmissions'); // test: ignore AvailRandom roll
 const allSpobs = () => Object.entries(DATA.types.spob).map(([id, p]) => ({ id: +id, ...p }));
 const spobById = id => DATA.types.spob[id];
@@ -1903,7 +1961,6 @@ function playerAI() { return ships[playerShipId].InherentAI; }
 /* Is mission m available at spob p (in this system), for the given loc? */
 function missionAvailable(m, p, loc) {
   if (m.AvailLoc !== loc) return false;
-  if (loc === 2) return false;               // ship-offered: deferred
   if (!goalSupported(m)) return false;
   if (!availStelMatch(m.AvailStel, p)) return false;
   if (!bitReq(m.AvailBitSet)) return false;
@@ -1969,8 +2026,9 @@ function subst(text, A) {
     DL:  A && A.deadline != null ? formatDate(A.deadline) : 'the deadline',
     PN:  'Captain',
     PSN: ships[playerShipId] ? ships[playerShipId].name : 'your ship',
+    OSN: (A && A.osn) || 'the ship',   // offering ship name (ship-offered missions)
   };
-  return text.replace(/<(DST|DSY|RST|RSY|CT|CQ|DL|PN|PSN)>/g, (_, k) => map[k]);
+  return text.replace(/<(DST|DSY|RST|RSY|CT|CQ|DL|PN|PSN|OSN)>/g, (_, k) => map[k]);
 }
 const descText = (id, A) => {
   const d = DATA.types.desc[id];
@@ -2011,6 +2069,106 @@ function getOffer(id, here) {
   };
   resolvedOffers[key] = o;
   return o;
+}
+
+/* ---------- përs (named characters) & ship-offered missions ----------
+ * A mïsn with AvailLoc 2 is carried by a përs ship (bible): you hail the
+ * character and it offers its LinkMission. See spec "Ship-offered missions". */
+const PF = { GRUDGE: 0x0001, REPLACE: 0x0040, DEACTIVATE: 0x0100, ONBOARD: 0x0200,
+             LEAVE: 0x0800, NOT_WIMPY: 0x1000, NOT_BEEFY: 0x2000, NOT_WARSHIP: 0x4000 };
+
+/* Does a përs's LinkSyst permit `systId`? Mirrors availStelMatch's govt ranges;
+ * an unrecognized encoding falls through to "allowed" so a character isn't
+ * silently lost. */
+function linkSystMatches(ls, systId) {
+  if (ls == null || ls === -1) return true;              // any system
+  if (ls >= 128 && ls <= 1127) return ls === systId;     // a specific system
+  const sy = systs[systId], pg = sy ? sy.Govt : -1;
+  if (ls >= 9999  && ls <= 10127) return pg === ls - 9999;
+  if (ls >= 15000 && ls <= 15127) return govtAllies(ls - 15000).includes(pg);
+  if (ls >= 20000 && ls <= 20127) return pg !== ls - 20000;
+  if (ls >= 25000 && ls <= 25127) return govtEnemies(ls - 25000).includes(pg);
+  return true;
+}
+
+/* A representative inhabited spöb of the current system, for evaluating a
+ * ship-offered mission's spöb-relative gates (AvailStel/AvailRecord). */
+function systemSpob() {
+  return spobs.find(s => s.$sem && !s.$sem.uninhabited && s.$sem.canLand) || spobs[0]
+    || { id: -1, Govt: systemGovt(), System: SYSTEM_ID, $sem: { canLand: true, uninhabited: false } };
+}
+
+/* Is a ship-offered mission currently available and not already taken? */
+function shipMissionAvailable(id) {
+  const m = misns[id];
+  if (!m || m.AvailLoc !== 2) return false;
+  if (activeMissions.some(a => a.id === id)) return false;
+  return missionAvailable({ ...m, id }, systemSpob(), 2);
+}
+
+/* Player's current ship class excluded by the përs's don't-offer flags? */
+function persOffersToPlayer(pr) {
+  const ai = playerAI();
+  if ((pr.Flags & PF.NOT_WIMPY) && ai === 1) return false;
+  if ((pr.Flags & PF.NOT_BEEFY) && ai === 2) return false;
+  if ((pr.Flags & PF.NOT_WARSHIP) && ai >= 3) return false;
+  return true;
+}
+
+/* Would this përs offer a mission here and now? (Spawn-time gate — the
+ * player-ship-class filter is applied later, at hail time.) */
+function persEligible(id) {
+  const pr = pers[id];
+  if (!pr || persDone.has(+id) || persGrudge.has(+id) || !ships[pr.ShipType]) return false;
+  if (pr.MissionBit >= 0 && pr.MissionBit <= 511 && !missionBits[pr.MissionBit]) return false;
+  if (!linkSystMatches(pr.LinkSyst, SYSTEM_ID)) return false;
+  return pr.LinkMission >= 128 && shipMissionAvailable(pr.LinkMission);
+}
+
+/* Arm a përs ship: stock loadout, then any përs weapon override + shield mod. */
+function armShipFromPers(e, pr) {
+  armShip(e, ships[pr.ShipType]);
+  if ([1, 2, 3, 4].some(i => pr['WeapType' + i] >= 128)) {   // the character's own guns
+    e.weapons = []; e.pools = {}; e.poolCap = {};
+    for (let i = 1; i <= 4; i++) {
+      const t = pr['WeapType' + i];
+      if (t >= 128 && weaps[t]) {
+        e.weapons.push({ id: t, rec: weaps[t], n: Math.max(pr['WeapCount' + i], 1), cool: 0 });
+        const pk = poolKey(weaps[t]);
+        if (pk) {
+          e.pools[pk] = (e.pools[pk] || 0) + Math.max(pr['AmmoLoad' + i], 0);
+          e.poolCap[pk] = (e.poolCap[pk] || 0) + Math.max(pr['AmmoLoad' + i], 0);
+        }
+      }
+    }
+  }
+  if (pr.ShieldMod) {                                        // % shield tweak (bible)
+    e.shieldMax = Math.max(1, Math.round(e.shieldMax * (1 + pr.ShieldMod / 100)));
+    e.shields = e.shieldMax;
+  }
+}
+
+/* Bring a named character into the system if one belongs here and has a job.
+ * Rare and at most one per visit — përs are special encounters. Positioned
+ * relative to the system centre (like spawnAI), independent of the player. */
+function maybeSpawnPers() {
+  if (Math.random() > 0.35) return;
+  const eligible = Object.keys(pers).map(Number).filter(persEligible);
+  if (!eligible.length) return;
+  const id = eligible[Math.floor(Math.random() * eligible.length)];
+  const pr = pers[id];
+  const a = Math.random() * Math.PI * 2, r = 600 + Math.random() * 1400;
+  const e = EV.makeShip(ships[pr.ShipType], Math.cos(a) * r, Math.sin(a) * r, Math.random() * 360);
+  e.shipId = pr.ShipType;
+  e.govt = pr.Govt >= 128 ? pr.Govt : 0;
+  e.aiType = pr.AIType >= 1 ? pr.AIType : 1;
+  e.booty = 0;
+  e.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
+  armShipFromPers(e, pr);
+  e.isPers = true; e.persId = id; e.misnName = pr.name;
+  e.misnLink = pr.LinkMission; e.persFlags = pr.Flags; e.commQuote = pr.CommQuote;
+  e.warpIn = 18;
+  aiShips.push(e);
 }
 
 /* Accept a mission at spob `here`: resolve destinations, load cargo,
@@ -2886,9 +3044,10 @@ function step() {
       // disappearance at the spob — no drawn-out ghost fade).
       const docked = alive && !s.misnId && s.state === 'landing';
       if (!alive || docked) {
-        if (s.misnId != null && !s.escort) {
-          // A catch-goal target (board/disable/destroy) mustn't slip away by
-          // landing — loiter near the spob instead of despawning.
+        if ((s.misnId != null && !s.escort) || (s.isPers && !s.offered)) {
+          // A catch-goal target (board/disable/destroy), or a named character
+          // still carrying an unaccepted job, mustn't slip away by landing —
+          // loiter near the spob instead of despawning.
           s.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
           s.state = 'cruise'; s.fade = 1;
         } else {
