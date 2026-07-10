@@ -17,7 +17,8 @@ const { loadFork, parseFork, decodeRecord } = require('../evrsrc.js');
 const { decodePict } = require('./evpict.js');
 const { decodeSnd } = require('./evsnd.js');
 const { compositeSprite } = require('./evsprite.js');
-const { parseSit, extractFork } = require('./evsit.js');
+const { parseSit, extractFork, unstuff13 } = require('./evsit.js');
+const { buildData } = require('./evbuild.js');
 
 const ROOT = path.join(__dirname, '..');
 const D = f => path.join(ROOT, 'EV_data', f);
@@ -133,7 +134,77 @@ function checkSit() {
   console.log(`.sit : ${exact}/${tested} forks decompress byte-exact (${pct(exact, tested)})`);
 }
 
+// buildData (browser build path) must match evexport (native build path)
+// byte-for-byte, so the loader ships the same game database. The only volatile
+// field is `generated`; source was aligned to path.basename ('EV Data.rsrc').
+function checkBuildData() {
+  if (!fs.existsSync(D('EV Data.rsrc'))) return;
+  const { exportAll } = require('../evexport.js');
+  const schemaDir = path.join(ROOT, 'schemas');
+  const { out: ref } = exportAll(D('EV Data.rsrc'), schemaDir);
+  require('../semantics.js').decorate(ref);
+  const schemasByType = {};
+  for (const f of fs.readdirSync(schemaDir)) {
+    if (!f.endsWith('.json')) continue;
+    const schema = JSON.parse(fs.readFileSync(path.join(schemaDir, f), 'utf8'));
+    schemasByType[schema.name] = { alias: path.basename(f, '.json'), schema };
+  }
+  const got = buildData(loadFork(D('EV Data.rsrc')).fork, schemasByType);
+  ref.generated = got.generated = '';                 // normalize the timestamp
+  const same = JSON.stringify(ref) === JSON.stringify(got);
+  console.log(`DATA : buildData ${same ? 'byte-identical to' : 'DIFFERS from'} evexport`);
+  if (!same) process.exitCode = 1;
+}
+
+// Hardening tests — no game data needed, so these always run. They lock in the
+// "fail fast, never spin/OOM" behavior the decoders were hardened for.
+function checkHardening() {
+  let pass = 0, fail = 0;
+  const must = (name, fn, wantThrow) => {
+    let threw = false, res;
+    try { res = fn(); } catch { threw = true; }
+    const ok = wantThrow ? threw : !threw && res === true;
+    ok ? pass++ : (fail++, console.log('  ✗ ' + name));
+  };
+  // v2 PICT scaffold: picSize(2)+frame(8), 00 11 marker at byte 10, opcode at 14.
+  const pictBase = () => { const b = new Uint8Array(4096), dv = new DataView(b.buffer);
+    dv.setInt16(6, 64); dv.setInt16(8, 64); b[10] = 0x00; b[11] = 0x11; return { b, dv }; };
+  const directBits = (bBot, bRight, pixelSize, cmpCount) => { const { b, dv } = pictBase(); let p = 14;
+    const w16 = v => { dv.setUint16(p, v); p += 2; }, w32 = v => { dv.setUint32(p, v); p += 4; }, s16 = v => { dv.setInt16(p, v); p += 2; };
+    w16(0x009a); w32(0xff); w16(0x8000 | 64); s16(0); s16(0); s16(bBot); s16(bRight);
+    w16(0); w16(1); w32(0); w32(0); w32(0); w16(16); w16(pixelSize); w16(cmpCount); w16(8); w32(0); w32(0); w32(0);
+    s16(0); s16(0); s16(bBot); s16(bRight); s16(0); s16(0); s16(bBot); s16(bRight); w16(0); return b; };
+  const snd16 = (frameCount) => { const u8 = new Uint8Array(200), dv = new DataView(u8.buffer); let p = 0;
+    const w16 = v => { dv.setUint16(p, v); p += 2; }, w32 = v => { dv.setUint32(p, v); p += 4; };
+    w16(1); w16(0); w16(1); w16(0x8051); w16(0); w32(20); p = 20;
+    w32(0);           // samplePtr
+    w32(2);           // offset 4: numChannels
+    w32(22050 << 16); // sampleRate
+    w32(0); w32(0);   // loopStart/End
+    u8[p++] = 0xff; u8[p++] = 60;   // encode (ext), baseFreq
+    w32(frameCount);  // offset 22: numFrames (huge)
+    p += 10;          // 80-bit AIFF rate
+    w32(0); w32(0); w32(0); w16(16); p += 14; return u8; };
+
+  // Truncated method-13 stream: must throw (exhausted / ended early), not spin.
+  must('unstuff13 throws on truncated stream', () => unstuff13(new Uint8Array([0x00, 0xff, 0xff, 0xff]), 100000), true);
+  // PICT: absurd frame, direct-bits absurd bounds / bad pixelSize / bad cmpCount.
+  must('decodePict throws on huge frame', () => { const { b, dv } = pictBase(); dv.setInt16(6, 30000); dv.setInt16(8, 30000); return decodePict(b); }, true);
+  must('decodePict throws on direct-bits huge bounds', () => decodePict(directBits(30000, 30000, 16, 3)), true);
+  must('decodePict throws on bad direct pixelSize', () => decodePict(directBits(8, 8, 8, 3)), true);
+  must('decodePict throws on direct cmpCount<3', () => decodePict(directBits(8, 8, 32, 2)), true);
+  // snd: a header claiming ~2.1B frames must clamp, not OOM.
+  must('decodeSnd clamps a giant ext length', () => { const d = decodeSnd(snd16(0x7fffffff)); return !!d.pcm16 && d.pcm16.length <= 100; });
+  // .sit: out-of-range and huge-namelength entries must throw.
+  must('extractFork throws on oob range', () => extractFork(new Uint8Array(1000), { offset: 900, compLength: 500, length: 10, method: 13 }), true);
+  must('extractFork throws on implausible length', () => extractFork(new Uint8Array(1000), { offset: 0, compLength: 10, length: 4e9, method: 13 }), true);
+
+  console.log(`guard: ${pass}/${pass + fail} hardening assertions pass`);
+}
+
 checkPict();
 checkSnd();
 checkSprites();
 checkSit();
+checkBuildData();
+checkHardening();

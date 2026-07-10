@@ -53,13 +53,14 @@ function decodeSnd(bytes) {
     return { sampleRate, channels: 1, bits: 8, pcm8: u8.slice(p, p + n) };
   }
   if (encode === 0xff) {                 // extendedSoundHeader
-    const channels = rd32();
-    rd32();                              // AIFF sample rate hi (Fixed) — reuse rateFixed
-    p += 10 - 4;                         // rest of 80-bit extended rate (we already used the header rate)
+    // In an ExtSoundHeader the offset-4 field (read as `length` above) is
+    // numChannels, and numFrames lives at offset 22 — not the other way round.
+    const channels = length;
+    const frames = rd32();               // offset 22: numFrames
+    p += 10;                             // offset 26: 80-bit AIFF sample rate (skip; header rate already used)
     rd32(); rd32(); rd32();              // markerChunk, instrumentChunks, AESRecording
     const sampleSize = rd16();
-    p += 14;                             // futureUse (2) + 3 reserved longs... align to sample data
-    const frames = length;
+    p += 14;                             // futureUse (2) + 3 reserved longs → sample data at header+64
     if (sampleSize === 16) {
       // frames/channels come from the untrusted header; clamp the allocation to
       // the int16 samples that actually fit in the resource, so a crafted length

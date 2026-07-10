@@ -13,7 +13,7 @@
    * schemasByType: { <MacRoman type name>: { alias, schema } }. */
   function buildData(dataFork, schemasByType) {
     const types = EV.parseFork(B.from(dataFork));
-    const out = { source: 'EV Data', generated: new Date().toISOString(), types: {}, strings: {} };
+    const out = { source: 'EV Data.rsrc', generated: new Date().toISOString(), types: {}, strings: {} };
     for (const t of types) {
       if (t.typeHex === '53545223') { // STR#
         for (const r of t.resources) out.strings[r.id] = { name: r.name, list: EV.decodeStrList(r.data()) };

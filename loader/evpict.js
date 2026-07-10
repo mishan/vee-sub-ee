@@ -114,6 +114,10 @@ function decodePict(bytes) {
     // (rowBytes is already masked to ≤0x7fff, so rowBuf is bounded.)
     if (!(bw >= 0 && bh >= 0 && bw <= MAX_DIM && bh <= MAX_DIM))
       throw new Error('PICT bitmap bounds out of range (' + bw + '×' + bh + ')');
+    // Indexed PixMaps are 1/2/4/8-bit; anything else here (e.g. a PixMap claiming
+    // 16) would silently fall through pixelAt to the 1-bit path and render junk.
+    if (isPixmap && pixelSize !== 1 && pixelSize !== 2 && pixelSize !== 4 && pixelSize !== 8)
+      throw new Error('PICT indexed PixMap unsupported pixelSize ' + pixelSize);
     const offX = (dst.left - frame.left) - (src.left - bounds.left);
     const offY = (dst.top - frame.top) - (src.top - bounds.top);
     const rowBuf = new Uint8Array(rowBytes);
@@ -179,10 +183,18 @@ function decodePict(bytes) {
     const offX = (dst.left - frame.left) - (src.left - bounds.left);
     const offY = (dst.top - frame.top) - (src.top - bounds.top);
     // Unpacked row: 16-bit = bw*2 bytes of RGB555; 32-bit packType 4 = planar,
-    // cmpCount components (R,G,B) of bw bytes each.
+    // cmpCount components of bw bytes each.
     const rowLen = pixelSize === 16 ? bw * 2 : bw * cmpCount;
     const rowBuf = new Uint8Array(rowLen);
     const unpacked = packType === 1 || rowBytes < 8;
+    // Packed 16-bit is packType 3 — PackBits over 16-bit *words*, not bytes.
+    // unpackBits is byte-oriented, so it would misdecode; refuse rather than
+    // render garbage. (EV's own direct-color PICTs are all 32-bit packType 4.)
+    if (pixelSize === 16 && !unpacked)
+      throw new Error('PICT packed 16-bit direct color (word-RLE) not supported');
+    // For 4-component data the first plane is alpha (ARGB), so RGB starts one
+    // plane in; 3-component data starts at plane 0.
+    const planeBase = (cmpCount - 3) * bw;
 
     for (let y = 0; y < bh; y++) {
       if (unpacked) { for (let i = 0; i < rowLen; i++) rowBuf[i] = u8[p++]; }
@@ -200,8 +212,8 @@ function decodePict(bytes) {
         if (pixelSize === 16) {
           const v = (rowBuf[x * 2] << 8) | rowBuf[x * 2 + 1];
           r = ((v >> 10) & 31) * 255 / 31; g = ((v >> 5) & 31) * 255 / 31; b = (v & 31) * 255 / 31;
-        } else {                 // 32-bit planar
-          r = rowBuf[x]; g = rowBuf[bw + x]; b = rowBuf[bw * 2 + x];
+        } else {                 // 32-bit planar (skip the alpha plane if present)
+          r = rowBuf[planeBase + x]; g = rowBuf[planeBase + bw + x]; b = rowBuf[planeBase + bw * 2 + x];
         }
         const o = (oy * fw + ox) * 4;
         out.rgba[o] = r; out.rgba[o + 1] = g; out.rgba[o + 2] = b; out.rgba[o + 3] = 255;

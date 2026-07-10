@@ -141,6 +141,8 @@ async function load(file) {
     log('Decompressing forks (LZ+Huffman)…');
     const forks = {};
     for (const n of ['EV Data', 'EV Graphics', 'EV Sounds', 'EV Titles']) { forks[n] = extractFork(sit, res[n]); await wait(); }
+    // EV Music is optional (holds the title theme, snd 30000); extract if present.
+    if (res['EV Music']) { forks['EV Music'] = extractFork(sit, res['EV Music']); await wait(); }
     log('✓ forks decompressed', 'ok');
 
     // ---- game data ----
@@ -251,7 +253,7 @@ async function load(file) {
 async function launchGame() {
   const btn = $('#launch'); btn.disabled = true; $('#launchNote').textContent = '';
   try {
-    const url = await VELAUNCH.buildAndCache(window.__forks, window.__spinSchema, m => log(m));
+    const url = await VELAUNCH.buildAndCache(window.__forks, window.__spinSchema, (m, cls) => log(m, cls));
     log('Launching — enjoy!', 'ok');
     setTimeout(() => { location.href = url; }, 200);
   } catch (e) { log('Launch failed: ' + e.message, 'err'); console.error(e); btn.disabled = false; }

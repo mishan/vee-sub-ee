@@ -159,7 +159,22 @@ function unstuff13(comp, expectedLen) {
     const byte = win[matchoff++ & mask];
     win[pos & mask] = byte; out[pos++] = byte;
   }
+  // A clean decode fills exactly expectedLen; reaching XADLZSSEnd early means the
+  // stream is truncated/corrupt. Fail fast rather than return a zero-padded tail
+  // (same rationale as the bit-reader's throw-on-exhaustion).
+  if (pos < expectedLen)
+    throw new Error('StuffIt method 13: stream ended early (' + pos + '/' + expectedLen + ' bytes)');
   return out;
+}
+
+/* Decode a StuffIt entry name. Names are MacRoman; use EVRSRC's decoder when it's
+ * on the global (the loader exposes it) so non-ASCII names (e.g. the "ƒ" folder)
+ * read correctly, else fall back to Latin-1. Only the ASCII fork names matter for
+ * extraction, so the fallback is cosmetic. */
+function sitName(sub) {
+  const G = typeof self !== 'undefined' ? self : (typeof globalThis !== 'undefined' ? globalThis : {});
+  if (G.EVRSRC && G.EVRSRC.macRomanToString) return G.EVRSRC.macRomanToString(sub);
+  let s = ''; for (let k = 0; k < sub.length; k++) s += String.fromCharCode(sub[k]); return s;
 }
 
 /* ---------------- StuffIt 5 archive parser ----------------
@@ -228,8 +243,7 @@ function parseSit(bytes) {
     // or spike memory on a crafted huge length.
     if (p + namelength > u8.length || (headersize && p + namelength > headerend))
       throw new Error('StuffIt entry name length out of bounds');
-    let name = '';
-    for (let k = 0; k < namelength; k++) name += String.fromCharCode(u8[p + k]);
+    const name = sitName(u8.subarray(p, p + namelength));
     p += namelength;
     if (p < headerend) { const cs = u16(); p += 2; p += cs; } // comment
 

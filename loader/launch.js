@@ -10,14 +10,24 @@
     'syst', 'spob', 'dude', 'nebu', 'junk', 'flet', 'spin', 'spit', 'dsig'];
 
   // First-run caching: a completed build stays in Cache Storage, so a return
-  // visit can play instantly without re-importing the .sit. BUILD_VERSION is
-  // written into the completion marker and checked on return — bump it whenever
-  // the engine (core.js / flight_template.html) or the decoders change in a way
-  // that alters the built output, so returning visitors rebuild instead of
-  // playing a stale cache.
-  const BUILD_VERSION = 1;
+  // visit can play instantly without re-importing the .sit.
   const BUILT_MARKER = '_built.json';
   const gameBase = () => new URL('game/', location.href).href;
+
+  // Identity of the built engine: SHA-256 of flight_template.html + core.js.
+  // Stored in the completion marker and re-checked on return, so any change to
+  // the engine automatically invalidates a stale cache — no manual version bump
+  // to forget. (SubtleCrypto needs a secure context, which the SW already
+  // requires; asset decoders aren't hashed, but a re-import always overwrites.)
+  async function buildHash() {
+    const [tpl, core] = await Promise.all([
+      fetch('../flight_template.html').then(r => r.text()),
+      fetch('../engine/core.js').then(r => r.text()),
+    ]);
+    const bytes = new TextEncoder().encode(tpl + '\u0000' + core);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
 
   // Register the game SW and resolve once it's activated. We can't await
   // navigator.serviceWorker.ready: that waits for a worker controlling THIS
@@ -84,6 +94,10 @@
 
   async function produceAssets(cache, base, forks, spinSchema, log, opts = {}) {
     const jobs = [];
+    // Count skips per category. Individual bad resources are tolerated, but a
+    // whole category failing (e.g. a decoder regression breaking every PICT)
+    // should be visible rather than silently "building fine".
+    const skip = { pict: 0, sprite: 0, snd: 0 }, tried = { pict: 0, sprite: 0, snd: 0 };
     for (const [fork, dir] of [['EV Graphics', 'graphics'], ['EV Titles', 'titles']]) {
       const types = EVRSRC.parseFork(Buffer.from(forks[fork]));
       // findType returns undefined for an absent type; degrade to no jobs rather
@@ -94,8 +108,9 @@
       // `fast` skips the individual graphics PICTs (shipyard/comm/outfit detail,
       // shown only when landed/hailing) — sprites and titles still render.
       if (!(opts.fast && dir === 'graphics')) for (const r of picts) {
-        let img; try { img = decodePict(r.data()); } catch { continue; }
-        if (!img.rgba) continue;
+        tried.pict++;
+        let img; try { img = decodePict(r.data()); } catch { skip.pict++; continue; }
+        if (!img.rgba) { skip.pict++; continue; }
         const urls = [base + 'evassets/' + dir + '/PICT_' + r.id + '.png'];
         // Named alias (e.g. "PICT_128_Game Panel.png"): encode the name so the
         // URL is valid, and matches how the browser normalizes the engine's raw
@@ -107,9 +122,10 @@
         const pmap = {}; for (const r of picts) pmap[r.id] = r;
         const spinType = EVRSRC.findType(types, 'spin');
         for (const sr of (spinType ? spinType.resources : [])) {
-          let rec; try { rec = EVRSRC.decodeRecord(sr.data(), spinSchema); } catch { continue; }
-          const sp = pmap[rec.SpritesID], mk = pmap[rec.MasksID]; if (!sp) continue;
-          let comp; try { comp = compositeSprite(decodePict(sp.data()), mk ? decodePict(mk.data()) : null); } catch { continue; }
+          tried.sprite++;
+          let rec; try { rec = EVRSRC.decodeRecord(sr.data(), spinSchema); } catch { skip.sprite++; continue; }
+          const sp = pmap[rec.SpritesID], mk = pmap[rec.MasksID]; if (!sp) { skip.sprite++; continue; }
+          let comp; try { comp = compositeSprite(decodePict(sp.data()), mk ? decodePict(mk.data()) : null); } catch { skip.sprite++; continue; }
           jobs.push({ urls: [base + 'evassets/sprites/spin_' + sr.id + '.png'], img: comp });
         }
       }
@@ -123,12 +139,21 @@
     if (forks['EV Sounds']) {
       const sfx = EVRSRC.parseFork(Buffer.from(forks['EV Sounds']));
       const sndType = EVRSRC.findType(sfx, 'snd ');
-      for (const r of (sndType ? sndType.resources : [])) { const d = decodePcm(r.data()); if (d) await cache.put(base + 'evassets/sounds/snd_' + r.id + '.wav', wavResp(d)); }
+      for (const r of (sndType ? sndType.resources : [])) { tried.snd++; const d = decodePcm(r.data()); if (d) await cache.put(base + 'evassets/sounds/snd_' + r.id + '.wav', wavResp(d)); else skip.snd++; }
     }
     if (forks['EV Music']) {
       const mus = EVRSRC.parseFork(Buffer.from(forks['EV Music'])), sm = EVRSRC.findType(mus, 'snd ');
       const m = sm && sm.resources.find(r => r.id === 30000);
       if (m) { const d = decodePcm(m.data()); if (d) await cache.put(base + 'evassets/music/snd_30000.wav', wavResp(d)); }
+    }
+    // One summary line, and a loud warning if a whole category was attempted but
+    // entirely failed — the signature of a decoder regression, not stray data.
+    if (log) {
+      log('  assets: ' + (tried.pict - skip.pict) + '/' + tried.pict + ' pictures, ' +
+        (tried.sprite - skip.sprite) + '/' + tried.sprite + ' sprites, ' +
+        (tried.snd - skip.snd) + '/' + tried.snd + ' sounds');
+      for (const k of ['pict', 'sprite', 'snd'])
+        if (tried[k] > 0 && skip[k] === tried[k]) log('  ⚠ every ' + k + ' failed to decode — likely a regression', 'err');
     }
   }
 
@@ -153,6 +178,9 @@
   /* Build everything and stage it in Cache Storage + register the SW.
    * Returns the URL to navigate to. */
   async function buildAndCache(forks, spinSchema, log = () => {}, opts = {}) {
+    // Ask the browser to keep this origin's storage under pressure — the whole
+    // first-run cache lives here, so persistence cuts "it forgot my game".
+    if (navigator.storage && navigator.storage.persist) { try { await navigator.storage.persist(); } catch {} }
     const schemasByType = {};
     // Every schema is required for correct DATA generation — fail fast (naming
     // the culprits) instead of silently building a partial game database.
@@ -189,7 +217,7 @@
     // `fast` (skips graphics PICTs) and `skipAssets` builds don't get a marker.
     if (!opts.skipAssets && !opts.fast) {
       await cache.put(base + BUILT_MARKER, new Response(
-        JSON.stringify({ v: BUILD_VERSION, built: Date.now() }),
+        JSON.stringify({ h: await buildHash(), built: Date.now() }),
         { headers: { 'content-type': 'application/json' } }));
     }
     log('Ready.');
@@ -197,7 +225,7 @@
   }
 
   /* Is a complete, current build already cached from a previous visit?
-   * Returns the marker ({v, built}) if so, else null — never throws. */
+   * Returns the marker ({h, built}) if so, else null — never throws. */
   async function checkBuilt() {
     if (typeof caches === 'undefined') return null;   // needs a secure context
     try {
@@ -206,7 +234,7 @@
       const mr = await cache.match(base + BUILT_MARKER);
       if (!mr) return null;
       const m = await mr.json();
-      if (!m || m.v !== BUILD_VERSION) return null;    // built by older loader code
+      if (!m || !m.h || m.h !== await buildHash()) return null;  // built by a different engine
       // Belt and suspenders: the engine itself must still be present.
       return (await cache.match(base + 'flight.html')) ? m : null;
     } catch { return null; }

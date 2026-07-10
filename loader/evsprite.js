@@ -26,21 +26,8 @@ function compositeSprite(sprite, mask) {
   return { width, height, rgba: out };
 }
 
-/* Build the engine's spïn manifest entry from a decoded spïn record. Mirrors
- * evatlas.js: frame size is the record's xSize/ySize (not derived by dividing
- * the sheet, which drifts with padding / non-divisible dimensions). The sprite
- * sheet dimensions are accepted only as a fallback for odd records. */
-function spinManifestEntry(spin, name, spriteW, spriteH) {
-  const xTiles = Math.max(1, spin.xTiles || spin.XTiles || 6);
-  const yTiles = Math.max(1, spin.yTiles || spin.YTiles || 6);
-  return {
-    name,
-    frameW: spin.xSize || spin.XSize || Math.round((spriteW || 0) / xTiles),
-    frameH: spin.ySize || spin.YSize || Math.round((spriteH || 0) / yTiles),
-    xTiles, yTiles,
-    frames: xTiles * yTiles,
-  };
-}
+// (Manifest entries are built inline by evbuild.buildManifest, from the record's
+// xSize/ySize — kept in one place there to avoid two copies drifting.)
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { compositeSprite, spinManifestEntry };
-if (typeof self !== 'undefined') { self.compositeSprite = compositeSprite; self.spinManifestEntry = spinManifestEntry; }
+if (typeof module !== 'undefined' && module.exports) module.exports = { compositeSprite };
+if (typeof self !== 'undefined') { self.compositeSprite = compositeSprite; }
