@@ -80,8 +80,10 @@
     text-shadow: 0 1px 3px #000; user-select: none; cursor: pointer; opacity: .32;
     padding: 2px 9px; border: 1px solid transparent; border-radius: 6px; }
   #ff:hover { opacity: .6; }
+  #ff:focus-visible { outline: 2px solid rgba(255,212,121,.7); outline-offset: 2px; }
   #ff.on { opacity: 1; border-color: rgba(255,212,121,.45); background: rgba(255,212,121,.12); }
   body.touch #ff { display: none; }   /* mobile uses the action-bar 2× button */
+  body.no-fly #ff { display: none; }  /* only while flying (matches the touch controls) */
   #dead { position: fixed; inset: 0; display: none; align-items: center;
     justify-content: center; text-align: center; background: rgba(0,0,0,.6); }
   #dead h1 { color: #e06c75; font-size: 24px; margin-bottom: 8px; }
@@ -270,7 +272,8 @@
 </div>
 <div id="about"><div class="card" id="aboutCard"></div></div>
 <div id="npilot"><div class="card"></div></div>
-<div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · K recall fighters · L land · B board · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · CapsLock 2× · Esc</div>
+<div id="ff" role="button" tabindex="0" title="Toggle double speed (or Caps Lock)" onclick="toggleFastForward()">» 2×</div>
+<div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · K recall fighters · L land · B board · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · 2× speed · Esc</div>
 <script>/*__ENGINE__*/</script>
 <script>
 'use strict';
@@ -1224,7 +1227,8 @@ function applyFF() {
   const on = capsFF || manualFF;
   if (on === fastForward) return;
   fastForward = on;
-  document.getElementById('ff').classList.toggle('on', on);
+  const ffEl = document.getElementById('ff');       // desktop indicator (may be off-screen)
+  if (ffEl) ffEl.classList.toggle('on', on);
   const bar = document.querySelector('#touchBar [data-act="ff"]');
   if (bar) bar.classList.toggle('on', on);
   showMsg(on ? 'Fast forward (2×) on' : 'Fast forward off');
@@ -1239,6 +1243,11 @@ function capsToggle() {
   capsLatch = t; capsFF = !capsFF; applyFF();
 }
 function toggleFastForward() { manualFF = !manualFF; applyFF(); }
+/* Keyboard-activate the desktop 2× pill (Enter/Space) without the keypress
+ * also leaking through to the flight controls. */
+document.getElementById('ff').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleFastForward(); }
+});
 /* Touch control state (mobile). The joystick doesn't drive the engine
  * directly — it synthesizes the same left/right/thrust the keyboard produces
  * (see step's player branch), so the flight core and golden trace are
@@ -1361,10 +1370,12 @@ function updateOrientation() {
 /* Called from render(): only show flight controls while actually flying; on
  * the galaxy map, hide joystick+fire so canvas taps can pick a destination. */
 function updateTouchUI() {
-  if (!TOUCH) return;
+  // `no-fly` gates flight-only chrome on both desktop (the 2× pill) and touch
+  // (the joystick/action bar), so it is toggled before the touch-only guard.
   const flying = !splashShown && !titleShown && !landedAt && !gameOver &&
                  !hailOpen && !serviceOpen;
   document.body.classList.toggle('no-fly', !flying);
+  if (!TOUCH) return;
   touchEl.classList.toggle('map', flying && mapOpen);
   if (!flying || mapOpen) { // joystick/thrust/fire unusable → release everything
     if (joyId !== null) releaseJoy();
