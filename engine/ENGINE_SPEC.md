@@ -152,7 +152,7 @@ The mïsn resource ("the crown jewel", per the bible). We implement a
 faithful, completable subset; missions whose goals we can't yet resolve
 are simply not offered, so no mission ever dead-ends.
 
-**Mission bits.** 256 boolean flags (persisted). Set/cleared by
+**Mission bits.** 512 boolean flags (persisted). Set/cleared by
 `CompBitSet/2/4` (on completion) and `FailBitSet/2` (on failure); codes
 0–511 set bit n, 1000–1511 clear bit n−1000. Availability reads them via
 `AvailBitSet` (−1 ignore; 0–511 require set; 1000–1511 require clear) and

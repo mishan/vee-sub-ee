@@ -312,8 +312,10 @@ let credits = SAVED ? SAVED.credits : 10000;
 const cargo = Object.fromEntries(COMMODITIES.map(c => [c, (SAVED && SAVED.cargo[c]) || 0]));
 const explored = new Set(SAVED ? SAVED.explored : []);
 
-/* mission state (spec: "Missions") — also part of the pilot file */
-const missionBits = new Uint8Array(256);
+/* mission state (spec: "Missions") — also part of the pilot file. 512 flags:
+ * set/clear codes address bits 0–511 (0–511 set, 1000–1511 clear), and përs
+ * MissionBit likewise ranges 0–511, so the store must span the full range. */
+const missionBits = new Uint8Array(512);
 if (SAVED && SAVED.bits) for (const b of SAVED.bits) missionBits[b] = 1;
 let gameDay = SAVED ? (SAVED.day || 0) : 0;
 // Real-world epoch the pilot was created, so the displayed in-game date is
