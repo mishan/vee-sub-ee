@@ -14,17 +14,21 @@
   const BUILT_MARKER = '_built.json';
   const gameBase = () => new URL('game/', location.href).href;
 
-  // Identity of the built engine: SHA-256 of flight_template.html + core.js.
-  // Stored in the completion marker and re-checked on return, so any change to
-  // the engine automatically invalidates a stale cache — no manual version bump
-  // to forget. (SubtleCrypto needs a secure context, which the SW already
-  // requires; asset decoders aren't hashed, but a re-import always overwrites.)
-  async function buildHash() {
-    const [tpl, core] = await Promise.all([
-      fetch('../flight_template.html').then(r => r.text()),
-      fetch('../engine/core.js').then(r => r.text()),
-    ]);
-    const bytes = new TextEncoder().encode(tpl + '\u0000' + core);
+  // The files that define a build: the engine shell + core, plus the asset
+  // decoders. Fetched once so flight.html and its recorded hash come from the
+  // *same* strings — no window where the server changes between assembling the
+  // engine and writing the marker. tpl/core build flight.html; the decoders are
+  // hashed too, so a decoder fix also invalidates a returning visitor's cache.
+  const ENGINE_FILES = ['../flight_template.html', '../engine/core.js',
+    'evpict.js', 'evsnd.js', 'evsprite.js', 'evbuild.js'];
+  async function fetchEngineSources() {
+    const [tpl, core, ...decoders] = await Promise.all(
+      ENGINE_FILES.map(f => fetch(f).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + f); return r.text(); })));
+    return { tpl, core, decoders };
+  }
+  // SHA-256 of the concatenated sources — the build's identity in the marker.
+  async function sourcesHash(src) {
+    const bytes = new TextEncoder().encode([src.tpl, src.core, ...src.decoders].join('\u0000'));
     const digest = await crypto.subtle.digest('SHA-256', bytes);
     return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
   }
@@ -157,19 +161,17 @@
     }
   }
 
-  async function assembleFlight(DATA, MANIFEST) {
-    const [tpl, core] = await Promise.all([
-      fetch('../flight_template.html').then(r => r.text()),
-      fetch('../engine/core.js').then(r => r.text()),
-    ]);
+  // Assemble flight.html from already-fetched sources (see fetchEngineSources),
+  // so the engine we cache is exactly the one we hash for the marker.
+  function assembleFlight(src, DATA, MANIFEST) {
     // DATA/MANIFEST hold strings from the untrusted archive and are injected
     // into a <script> as JS literals. Escape the sequences that would break out
     // of the script element or of a JS string: '<' (so "</script>" can't close
     // the tag) and the U+2028/U+2029 line terminators.
     const inject = obj => JSON.stringify(obj)
       .replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
-    return tpl
-      .replace('/*__ENGINE__*/', () => core)
+    return src.tpl
+      .replace('/*__ENGINE__*/', () => src.core)
       .replace('/*__EVDATA__*/null', () => inject(DATA))
       .replace('/*__MANIFEST__*/null', () => inject(MANIFEST))
       .replace('/*__NAMES__*/null', () => 'null');
@@ -197,6 +199,9 @@
     log('Building game database…');
     const DATA = EVBUILD.buildData(forks['EV Data'], schemasByType);
     const MANIFEST = EVBUILD.buildManifest(forks['EV Graphics'], spinSchema);
+    // Fetch the engine sources once; flight.html and the marker hash both derive
+    // from these exact strings (no mid-build server-change window).
+    const src = await fetchEngineSources();
     const cache = await caches.open('ve-game');
     const base = gameBase();
     // Invalidate any previous completion marker up front: if this (re)build is
@@ -205,7 +210,7 @@
     // Stage the engine + service worker first (fast) so the game is launchable
     // promptly; the assets stream into the cache right after.
     log('Assembling the engine…');
-    await cache.put(base + 'flight.html', new Response(await assembleFlight(DATA, MANIFEST), { headers: { 'content-type': 'text/html; charset=utf-8' } }));
+    await cache.put(base + 'flight.html', new Response(assembleFlight(src, DATA, MANIFEST), { headers: { 'content-type': 'text/html; charset=utf-8' } }));
     log('Starting the service worker…');
     await registerSW();
     if (!opts.skipAssets) {
@@ -217,7 +222,7 @@
     // `fast` (skips graphics PICTs) and `skipAssets` builds don't get a marker.
     if (!opts.skipAssets && !opts.fast) {
       await cache.put(base + BUILT_MARKER, new Response(
-        JSON.stringify({ h: await buildHash(), built: Date.now() }),
+        JSON.stringify({ h: await sourcesHash(src), built: Date.now() }),
         { headers: { 'content-type': 'application/json' } }));
     }
     log('Ready.');
@@ -234,9 +239,14 @@
       const mr = await cache.match(base + BUILT_MARKER);
       if (!mr) return null;
       const m = await mr.json();
-      if (!m || !m.h || m.h !== await buildHash()) return null;  // built by a different engine
-      // Belt and suspenders: the engine itself must still be present.
-      return (await cache.match(base + 'flight.html')) ? m : null;
+      if (!m || !m.h) return null;
+      // The engine itself must still be cached.
+      if (!(await cache.match(base + 'flight.html'))) return null;
+      // Compare against the current sources. If they can't be fetched (offline —
+      // the whole point of the cache), trust the marker; only a successful but
+      // *different* hash invalidates.
+      let h; try { h = await sourcesHash(await fetchEngineSources()); } catch { return m; }
+      return m.h === h ? m : null;
     } catch { return null; }
   }
 

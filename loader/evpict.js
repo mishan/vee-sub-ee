@@ -195,6 +195,11 @@ function decodePict(bytes) {
     // For 4-component data the first plane is alpha (ARGB), so RGB starts one
     // plane in; 3-component data starts at plane 0.
     const planeBase = (cmpCount - 3) * bw;
+    // Dormant gaps (unreachable with classic EV data, which is all 32-bit
+    // packType 4): the 32-bit read below assumes *planar* rows, so chunky
+    // (packType 1/2, interleaved) 32-bit would misdecode; and the 16-bit read
+    // is only reached for unpacked rows (packed 16-bit throws above). Left as-is
+    // rather than adding untested code paths.
 
     for (let y = 0; y < bh; y++) {
       if (unpacked) { for (let i = 0; i < rowLen; i++) rowBuf[i] = u8[p++]; }
