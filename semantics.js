@@ -196,8 +196,10 @@ function decorate(db) {
   return db;
 }
 
-module.exports = {
+const SEMANTICS_API = {
   SPOB_FLAGS, GOVT_FLAGS, MISN_FLAGS, PERS_FLAGS,
   GUIDANCE, MOD_TYPES, AI_TYPES, SPIN_BASES, STRING_ROLES, PRICE_LEVEL,
   decodeSpobFlags, flagNames, decorate,
 };
+if (typeof module !== 'undefined' && module.exports) module.exports = SEMANTICS_API;
+if (typeof self !== 'undefined') self.SEMANTICS = SEMANTICS_API;   // browser loader

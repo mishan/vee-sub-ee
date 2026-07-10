@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vₑ — load your Escape Velocity</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #05070c; color: #cfe3ff; font: 15px/1.5 system-ui, sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px 60px; }
+  h1 { color: #7fff9a; font-size: 26px; margin: 0 0 2px; letter-spacing: .02em; }
+  .sub { color: #8aa0bf; margin: 0 0 24px; }
+  a { color: #7fd0ff; }
+  #drop { border: 2px dashed #2c3f5e; border-radius: 14px; padding: 44px 20px; text-align: center;
+    background: #0a1120; cursor: pointer; transition: border-color .15s, background .15s; }
+  #drop.hover { border-color: #7fff9a; background: #0e1830; }
+  #drop:focus-visible { outline: 2px solid #7fff9a; outline-offset: 3px; }
+  #drop b { color: #fff; font-size: 17px; }
+  #drop .hint { color: #8aa0bf; font-size: 13px; margin-top: 8px; }
+  #log { margin: 18px 0 0; font: 13px/1.6 ui-monospace, monospace; color: #9fb4d4;
+    background: #0a1120; border: 1px solid #1c2740; border-radius: 10px; padding: 12px 14px;
+    white-space: pre-wrap; max-height: 190px; overflow-y: auto; display: none; }
+  #log .ok { color: #7fff9a; } #log .err { color: #ff6b6b; }
+  .stats { display: none; gap: 10px; flex-wrap: wrap; margin: 18px 0 4px; }
+  .stat { background: #0e1830; border: 1px solid #22345a; border-radius: 10px; padding: 10px 14px; min-width: 92px; }
+  .stat b { display: block; color: #fff; font-size: 20px; } .stat span { color: #8aa0bf; font-size: 12px; }
+  h2 { color: #cfe3ff; font-size: 15px; letter-spacing: .08em; text-transform: uppercase; margin: 26px 0 10px; color: #8aa0bf; }
+  #ships { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
+  .ship { background: #0a1120; border: 1px solid #1c2740; border-radius: 10px; padding: 10px; text-align: center; }
+  .ship canvas { width: 96px; height: 96px; image-rendering: pixelated; background:
+    radial-gradient(circle at 50% 45%, #0d1730, #05070c 70%); border-radius: 6px; }
+  .ship div { margin-top: 6px; color: #cfe3ff; font-size: 12px; }
+  #titlewrap { text-align: center; }
+  #title { max-width: 100%; image-rendering: pixelated; border: 1px solid #1c2740; border-radius: 8px; }
+  .row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  button.play { background: #14406e; color: #cfe3ff; border: 1px solid #2c5990; border-radius: 8px;
+    padding: 9px 16px; font-size: 14px; cursor: pointer; }
+  button.play:hover { background: #1a4f88; }
+  .gallery { display: none; }
+  .note { color: #6f86a6; font-size: 12px; margin-top: 26px; }
+  #resume { display: none; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: #0c1c12; border: 1px solid #2f9c57; border-radius: 12px; padding: 16px 18px; margin: 0 0 18px; }
+  #resume .reimport { color: #8aa0bf; font-size: 13px; margin-left: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Vₑ — Escape Velocity, recreated</h1>
+  <p class="sub">Drop your own copy of the classic Mac game and it's decoded right here in your browser — nothing is uploaded.</p>
+
+  <div id="resume">
+    <button class="play" id="resumeBtn" style="background:#1c6e3a;border-color:#2f9c57;font-size:16px;padding:12px 22px">▶ Play — already loaded on this device</button>
+    <span id="resumeNote" style="color:#8aa0bf"></span>
+    <a href="#" class="reimport" id="reimport">Load a different copy</a>
+  </div>
+
+  <div id="drop" role="button" tabindex="0" aria-label="Choose or drop your Escape Velocity .sit file">
+    <b>Drop your <code>Escape&nbsp;Velocity&nbsp;…&nbsp;.sit</code> here</b>
+    <div class="hint">…or click to choose the file. Everything stays on your device.</div>
+    <input id="file" type="file" accept=".sit,.sit.bin,application/octet-stream" hidden>
+  </div>
+
+  <pre id="log"></pre>
+
+  <div class="gallery" id="gallery">
+    <div class="row" style="margin-bottom:18px">
+      <button class="play" id="launch" style="background:#1c6e3a;border-color:#2f9c57;font-size:16px;padding:12px 22px">▶ Launch the game</button>
+      <span id="launchNote" style="color:#8aa0bf">builds the engine from your data and plays it here — one-time, ~10 s</span>
+    </div>
+    <div class="stats" id="stats"></div>
+
+    <h2>Ships</h2>
+    <div id="ships"></div>
+
+    <h2>Title art</h2>
+    <div id="titlewrap"><canvas id="title"></canvas></div>
+
+    <h2>Sound</h2>
+    <div class="row"><button class="play" id="playSnd" disabled>▶ Play a decoded sound</button>
+      <span id="sndName" style="color:#8aa0bf"></span></div>
+
+    <p class="note">Decoded entirely in-browser: StuffIt&nbsp;5 unpacking, QuickDraw PICT → pixels,
+      sprite+mask compositing, and <code>snd</code> → audio — no server, no external tools.</p>
+  </div>
+</div>
+
+<script src="nodeshim.js"></script>
+<script src="../evrsrc.js"></script>
+<script src="../semantics.js"></script>
+<script src="evsit.js"></script>
+<script src="evpict.js"></script>
+<script src="evsnd.js"></script>
+<script src="evsprite.js"></script>
+<script src="evbuild.js"></script>
+<script src="launch.js"></script>
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const logEl = $('#log');
+function log(msg, cls) {
+  logEl.style.display = 'block';
+  const span = document.createElement('span');
+  if (cls) span.className = cls;
+  span.textContent = msg;                       // textContent: msg holds user data (file name, archive-derived errors)
+  logEl.append(span, document.createTextNode('\n'));
+  logEl.scrollTop = logEl.scrollHeight;
+}
+const wait = () => new Promise(r => setTimeout(r, 0));   // let the UI paint between steps
+
+const drop = $('#drop'), fileInput = $('#file');
+drop.onclick = () => fileInput.click();
+// Keyboard activation: as a role="button", Enter/Space should open the picker.
+drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+fileInput.onchange = e => { if (e.target.files[0]) load(e.target.files[0]); };
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('hover'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('hover'); }));
+drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) load(f); });
+
+const T = (types, name) => EVRSRC.findType(types, name);
+// Essential type or a clear, actionable error (vs a generic "Cannot read
+// properties of undefined" if a corrupt/non-standard archive lacks it).
+const req = (types, name, where) => {
+  const t = EVRSRC.findType(types, name);
+  if (!t) throw new Error(`${where}: no "${name}" resources found — is this a standard Escape Velocity archive?`);
+  return t;
+};
+const buf = u8 => Buffer.from(u8);
+
+async function load(file) {
+  logEl.textContent = ''; $('#gallery').style.display = 'none';
+  try {
+    log(`Reading ${file.name} (${(file.size / 1e6).toFixed(1)} MB)…`);
+    const sit = new Uint8Array(await file.arrayBuffer());
+    await wait();
+
+    log('Parsing StuffIt 5 archive…');
+    const entries = parseSit(sit);
+    const res = {}; for (const e of entries) if (e.isResource) res[e.name] = e;
+    for (const n of ['EV Data', 'EV Graphics', 'EV Sounds', 'EV Titles']) if (!res[n]) throw new Error(`"${n}" not found — is this the Escape Velocity archive?`);
+
+    log('Decompressing forks (LZ+Huffman)…');
+    const forks = {};
+    for (const n of ['EV Data', 'EV Graphics', 'EV Sounds', 'EV Titles']) { forks[n] = extractFork(sit, res[n]); await wait(); }
+    log('✓ forks decompressed', 'ok');
+
+    // ---- game data ----
+    const data = EVRSRC.parseFork(buf(forks['EV Data']));
+    const ships = req(data, 'ship', 'EV Data').resources;
+    const systs = (T(data, 'syst') || { resources: [] }).resources;
+    const spobs = (T(data, 'spob') || { resources: [] }).resources;
+    const pers = (T(data, 'pers') || { resources: [] }).resources;
+    const misn = (T(data, 'misn') || { resources: [] }).resources;
+    log(`✓ parsed game data: ${ships.length} ships, ${systs.length} systems, ${spobs.length} stellars, ${pers.length} characters, ${misn.length} missions`, 'ok');
+
+    // ---- graphics: PICTs + spïn ----
+    const gfx = EVRSRC.parseFork(buf(forks['EV Graphics']));
+    const picts = {}; for (const r of req(gfx, 'PICT', 'EV Graphics').resources) picts[r.id] = r;
+    const spins = req(gfx, 'spin', 'EV Graphics').resources;
+    const spinSchema = await fetch('../schemas/spin.json').then(r => r.json());
+    const shipName = {}; for (const r of ships) shipName[r.id] = r.name;
+
+    // ---- render UI ----
+    $('#stats').innerHTML = [
+      [ships.length, 'ship classes'], [systs.length, 'systems'], [spobs.length, 'stellar objects'],
+      [pers.length, 'characters'], [misn.length, 'missions'], [Object.keys(picts).length, 'pictures'],
+    ].map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join('');
+
+    log('Compositing ship sprites…');
+    const shipsEl = $('#ships'); shipsEl.innerHTML = '';
+    let shown = 0;
+    for (const sr of spins) {
+      if (shown >= 18) break;
+      let rec; try { rec = EVRSRC.decodeRecord(sr.data(), spinSchema); } catch { continue; }
+      const sp = picts[rec.SpritesID], mk = picts[rec.MasksID];
+      if (!sp || !mk || rec.xTiles < 1 || rec.yTiles < 1) continue;   // both tile counts divide the sheet
+      let sprite, mask; try { sprite = decodePict(sp.data()); mask = decodePict(mk.data()); } catch { continue; }
+      if (!sprite.rgba) continue;
+      const comp = compositeSprite(sprite, mask);
+      const fw = Math.round(sprite.width / rec.xTiles), fh = Math.round(sprite.height / rec.yTiles);
+      // full sheet onto an offscreen canvas, then draw frame 0
+      const sheet = document.createElement('canvas'); sheet.width = comp.width; sheet.height = comp.height;
+      const sctx = sheet.getContext('2d'); if (!sctx) break;          // 2D canvas disabled → no previews at all
+      sctx.putImageData(new ImageData(comp.rgba, comp.width, comp.height), 0, 0);
+      const cell = document.createElement('div'); cell.className = 'ship';
+      const cv = document.createElement('canvas'); cv.width = fw; cv.height = fh;
+      const cctx = cv.getContext('2d'); if (!cctx) break;
+      cctx.drawImage(sheet, 0, 0, fw, fh, 0, 0, fw, fh);
+      const label = document.createElement('div'); label.textContent = shipName[sr.id] || ('ship ' + sr.id);
+      cell.append(cv, label); shipsEl.append(cell); shown++;
+      if (shown % 6 === 0) await wait();
+    }
+    log(`✓ composited ${shown} ship sprites`, 'ok');
+
+    // ---- title art ----
+    const titles = EVRSRC.parseFork(buf(forks['EV Titles']));
+    const titlePicts = (T(titles, 'PICT') || { resources: [] }).resources;  // cosmetic — skip if absent
+    const tp = titlePicts.find(r => r.id === 10000) || titlePicts[0];
+    if (tp) { const img = decodePict(tp.data()); const c = $('#title'); c.width = img.width; c.height = img.height;
+      const tctx = c.getContext('2d'); if (tctx) tctx.putImageData(new ImageData(img.rgba, img.width, img.height), 0, 0); }  // cosmetic — skip if 2D unavailable
+
+    // ---- a sound ----
+    const snds = EVRSRC.parseFork(buf(forks['EV Sounds']));
+    const sndRes = (T(snds, 'snd ') || { resources: [] }).resources;         // cosmetic — skip if absent
+    const sr = sndRes.find(r => r.id >= 200 && r.id < 400) || sndRes[0];
+    if (sr) {
+      const dec = decodeSnd(sr.data());
+      if (dec && dec.sampleRate) {
+        $('#sndName').textContent = `${sr.name || 'snd ' + sr.id} · ${dec.sampleRate} Hz`;
+        const btn = $('#playSnd'); btn.disabled = false;
+        btn.onclick = () => {
+          const ac = new (window.AudioContext || window.webkitAudioContext)();
+          const f32 = toFloat32(dec), b = ac.createBuffer(1, f32.length, dec.sampleRate);
+          b.getChannelData(0).set(f32);
+          const s = ac.createBufferSource(); s.buffer = b; s.connect(ac.destination); s.start();
+        };
+      }
+    }
+
+    window.__forks = forks; window.__spinSchema = spinSchema;   // for launch
+    $('#launch').onclick = launchGame;
+    $('#gallery').style.display = 'block';
+    log('Done — your game data is ready, all decoded locally. Press ▶ to play.', 'ok');
+  } catch (e) {
+    log('Error: ' + e.message, 'err');
+    console.error(e);
+  }
+}
+
+/* ---- first-run caching: if a complete build is already cached from a
+   previous visit, offer to play it instantly without re-importing the .sit ---- */
+(async function resumeIfBuilt() {
+  const m = await VELAUNCH.checkBuilt();
+  if (!m) return;
+  const banner = $('#resume');
+  const built = new Date(m.built);
+  $('#resumeNote').textContent = 'built ' + built.toLocaleDateString() + ' — no re-import needed';
+  $('#resumeBtn').onclick = async () => {
+    $('#resumeBtn').disabled = true;
+    try {
+      const url = await VELAUNCH.launchExisting(msg => log(msg));
+      log('Launching — enjoy!', 'ok');
+      setTimeout(() => { location.href = url; }, 150);
+    } catch (e) { log('Could not start: ' + e.message, 'err'); console.error(e); $('#resumeBtn').disabled = false; }
+  };
+  // "Load a different copy" just focuses the drop zone; importing overwrites the cache.
+  $('#reimport').onclick = e => { e.preventDefault(); drop.scrollIntoView({ behavior: 'smooth', block: 'center' }); drop.classList.add('hover'); setTimeout(() => drop.classList.remove('hover'), 600); };
+  banner.style.display = 'flex';
+})();
+
+/* ---- build the engine from the decoded data and launch it (see launch.js) ---- */
+async function launchGame() {
+  const btn = $('#launch'); btn.disabled = true; $('#launchNote').textContent = '';
+  try {
+    const url = await VELAUNCH.buildAndCache(window.__forks, window.__spinSchema, m => log(m));
+    log('Launching — enjoy!', 'ok');
+    setTimeout(() => { location.href = url; }, 200);
+  } catch (e) { log('Launch failed: ' + e.message, 'err'); console.error(e); btn.disabled = false; }
+}
+</script>
+</body>
+</html>

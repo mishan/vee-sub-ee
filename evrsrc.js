@@ -27,8 +27,22 @@
 
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+// Node-only; the browser loader uses the read path (parseFork/decodeRecord/…)
+// with a Buffer shim and never touches fs/path. Gate on the actual Node
+// runtime, not merely `require` — bundlers can inject a `require` shim in the
+// browser that lacks the core modules, and requiring 'fs' there would throw.
+const IS_NODE = typeof process !== 'undefined' && !!(process.versions && process.versions.node);
+// In the browser these stay unused (the loader calls only the read path). If a
+// Node-only entry point like loadFork() is reached there anyway, throw a clear
+// message on first access instead of a cryptic "Cannot read properties of null".
+const nodeOnly = (name) => new Proxy({}, {
+  get(_t, prop) {
+    throw new Error(`evrsrc.js: '${name}.${String(prop)}' is Node-only and unavailable in the browser — ` +
+      `use the read path (parseFork/decodeRecord/decodeStrList/findType) instead`);
+  },
+});
+const fs = IS_NODE ? require('fs') : nodeOnly('fs');
+const path = IS_NODE ? require('path') : nodeOnly('path');
 
 /* ------------------------------------------------------------------ */
 /* MacRoman                                                            */
@@ -458,11 +472,15 @@ function main() {
   }
 }
 
-module.exports = {
+const EVRSRC_API = {
   loadFork, parseFork, findType, resolveType, decodeRecord, decodeStrList,
   buildFork, macRomanToString, stringToMacRoman,
 };
+if (typeof module !== 'undefined' && module.exports) module.exports = EVRSRC_API;
+if (typeof self !== 'undefined') self.EVRSRC = EVRSRC_API;   // browser loader
 
-if (require.main === module) {
+// Guard `module` too: a bundler can define `require` in the browser without a
+// `module` global, and `require.main === module` would then ReferenceError.
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
   try { main(); } catch (e) { console.error('error:', e.message); process.exit(1); }
 }
