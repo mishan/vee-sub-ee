@@ -2,7 +2,8 @@ import { S, dudes, escorts, preloadSprites, ships, showMsg, spinOfShip } from '.
 import { attenuate, playSnd } from './03-sound.js';
 import { armShip, player } from './04-combat.js';
 import { refreshView } from './07-trade.js';
-import { dudeShipPairs, govts, isCriminalWith, legalOf } from './08-missions.js';
+import { dudeShipPairs, govts } from './08-missions.js';
+import { isCriminalWith, legalOf } from './13-legal.js';
 import { introUp } from './11-title.js';
 
 /*
