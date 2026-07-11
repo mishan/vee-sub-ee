@@ -1,4 +1,4 @@
-import { wallet, S, html, escorts, ships, savePilot, showMsg } from './01-state.js';
+import { missionLog, wallet, S, html, escorts, ships, savePilot, showMsg } from './01-state.js';
 import { HIRE_ROSTER, MAX_ESCORTS, hireFee, shipClassDesc, upkeepOf } from './02-spawning.js';
 import { holds } from './04-combat.js';
 import { cargoUsed, refreshView } from './07-trade.js';
@@ -29,7 +29,7 @@ export function renderMissionBoard(loc, topHtml = '') {
   // loc 0 = computer, 1 = bar
   const p = S.landedAt;
   const offers = offeredMissions(p, loc);
-  const active = S.activeMissions;
+  const active = missionLog.list;
   if (S.selMisnId == null || !offers.some((o) => o.id === S.selMisnId))
     S.selMisnId = offers.length ? offers[0].id : null;
   const sel = S.selMisnId != null ? misns[S.selMisnId] : null;

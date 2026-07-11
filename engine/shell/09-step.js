@@ -1,4 +1,5 @@
 import {
+  missionLog,
   S,
   TEST_MODE,
   escorts,
@@ -434,9 +435,8 @@ export function loadSystem(systId) {
   // would use the player's stale pre-arrival coordinates.
   // missions: AvailRandom rerolls per arrival; place this system's ships;
   // mark observe goals satisfied when we arrive in the right system.
-  S.availRandom = {};
-  S.resolvedOffers = {}; // fresh mission destinations/cargo/deadlines per system
-  for (const A of S.activeMissions) {
+  missionLog.resetForSystem(); // fresh mission offer caches per system
+  for (const A of missionLog.list) {
     maybeSpawnMissionShips(A);
     if (A.shipGoal === 4 && !A.observed) {
       const sys = A.shipSyst;

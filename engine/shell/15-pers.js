@@ -7,7 +7,7 @@
  * modules (entry: main.js). Normative behavior: engine/ENGINE_SPEC.md.
  */
 
-import { S, missionBits, persDone, persGrudge, ships, systs } from './01-state.js';
+import { S, missionLog, persDone, persGrudge, ships, systs } from './01-state.js';
 import { systemGovt } from './02-spawning.js';
 import { armShip, poolKey, weaps } from './04-combat.js';
 import { govtAllies, govtEnemies, misns, missionAvailable, pers, playerAI } from './08-missions.js';
@@ -59,7 +59,7 @@ export function systemSpob() {
 export function shipMissionAvailable(id) {
   const m = misns[id];
   if (!m || m.AvailLoc !== 2) return false;
-  if (S.activeMissions.some((a) => a.id === id)) return false;
+  if (missionLog.has(id)) return false;
   return missionAvailable({ ...m, id }, systemSpob(), 2);
 }
 
@@ -77,7 +77,7 @@ export function persOffersToPlayer(pr) {
 export function persEligible(id) {
   const pr = pers[id];
   if (!pr || persDone.has(+id) || persGrudge.has(+id) || !ships[pr.ShipType]) return false;
-  if (pr.MissionBit >= 0 && pr.MissionBit <= 511 && !missionBits[pr.MissionBit]) return false;
+  if (pr.MissionBit >= 0 && pr.MissionBit <= 511 && !missionLog.bit(pr.MissionBit)) return false;
   if (!linkSystMatches(pr.LinkSyst, S.SYSTEM_ID)) return false;
   return pr.LinkMission >= 128 && shipMissionAvailable(pr.LinkMission);
 }

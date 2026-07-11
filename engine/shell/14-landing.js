@@ -6,7 +6,7 @@
  * esbuild bundles the shell modules (entry: main.js). Normative: ENGINE_SPEC.md.
  */
 
-import { wallet, S, html, savePilot, showMsg } from './01-state.js';
+import { missionLog, wallet, S, html, savePilot, showMsg } from './01-state.js';
 import { spawnEscorts } from './02-spawning.js';
 import { loopSnd, playSnd, stopAllLoops } from './03-sound.js';
 import { fuelMax, holds, player, rebuildPlayerWeapons } from './04-combat.js';
@@ -73,7 +73,7 @@ export function renderPlanetScreen() {
       : ''
   }</div>`;
   out += html`<div class="wallet"><b>${wallet.credits.toLocaleString('en-US')}</b> credits ·
-    cargo ${cargoUsed()}/${holds} tons${S.activeMissions.length ? ` · ${S.activeMissions.length} active mission${S.activeMissions.length > 1 ? 's' : ''}` : ''}</div>
+    cargo ${cargoUsed()}/${holds} tons${missionLog.count ? ` · ${missionLog.count} active mission${missionLog.count > 1 ? 's' : ''}` : ''}</div>
     <div class="hint">Take Off ▲ (top-right) — or press Esc</div>`;
   document.getElementById('landedCard').innerHTML = out;
 }
