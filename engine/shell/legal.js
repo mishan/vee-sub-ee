@@ -11,13 +11,21 @@
  * focused state classes the S bag is being broken into (docs/OOP_DESIGN.md,
  * phase 5).
  */
+// Coerce a possibly-corrupt saved/passed value to a finite number, else fall
+// back. Keeps arithmetic numeric so a bad pilot file can't turn `+=` into string
+// concatenation or NaN.
+function num(x, fallback = 0) {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export class LegalRecord {
   constructor(records = {}, kills = 0) {
     // Copy into a null-prototype map so keys from a save file (e.g. __proto__,
     // constructor) can't reach the prototype chain, and lookups never observe
     // inherited properties.
     this.records = Object.assign(Object.create(null), records); // govtId -> stored record
-    this.kills = kills; // total crew destroyed → combat rating
+    this.kills = Math.max(0, num(kills)); // total crew destroyed → combat rating
   }
 
   // Whether a record has been stored for a govt (vs. still at its default).
@@ -36,19 +44,22 @@ export class LegalRecord {
   }
 
   // Bump the record with a govt from a 0 baseline (mission rewards/penalties).
+  // The delta and the stored value are coerced numeric; a zero/invalid delta
+  // is a no-op.
   adjust(govt, amt) {
-    if (govt < 0 || !amt) return;
-    this.records[govt] = (this.records[govt] || 0) + amt;
+    const delta = num(amt);
+    if (govt < 0 || delta === 0) return;
+    this.records[govt] = num(this.records[govt]) + delta;
   }
 
   // Clear a criminal (negative) record with a govt back to clean; leave a good
   // record alone.
   pardon(govt) {
-    this.records[govt] = Math.max(0, this.records[govt] || 0);
+    this.records[govt] = Math.max(0, num(this.records[govt]));
   }
 
   // Record a kill of `crew` (counted as at least 1) toward the combat rating.
   recordKill(crew) {
-    this.kills += Math.max(1, crew || 1);
+    this.kills += Math.max(1, num(crew, 0));
   }
 }

@@ -46,6 +46,36 @@ test('has/raw reflect stored records; the constructor seeds from a pilot file', 
   assert.equal(l.raw(999), undefined);
 });
 
+test('numeric state is coerced against a corrupt pilot file', () => {
+  // kills from a save is sanitized to a finite, non-negative number
+  assert.equal(new LegalRecord({}, '7').kills, 7);
+  assert.equal(new LegalRecord({}, 'oops').kills, 0);
+  assert.equal(new LegalRecord({}, -3).kills, 0);
+
+  // adjust coerces both the delta and a stringly-typed saved record (no concat)
+  const l = new LegalRecord({ 128: '10' });
+  l.adjust(128, '5');
+  assert.equal(l.raw(128), 15); // '10' + '5' would be "105"
+  l.adjust(128, 'x'); // invalid delta → no-op
+  assert.equal(l.raw(128), 15);
+  l.adjust(128, 0); // zero delta → no-op
+  assert.equal(l.raw(128), 15);
+
+  // pardon coerces a stringly saved value instead of producing NaN
+  const p = new LegalRecord({ 200: '-40' });
+  p.pardon(200);
+  assert.equal(p.raw(200), 0);
+
+  // recordKill never lets a non-number corrupt the tally
+  const k = new LegalRecord({}, 0);
+  k.recordKill('3');
+  assert.equal(k.kills, 3);
+  k.recordKill('nope');
+  assert.equal(k.kills, 4); // falls back to +1
+  k.recordKill(undefined);
+  assert.equal(k.kills, 5);
+});
+
 test('records are a null-prototype map: inherited keys are never observed', () => {
   const l = new LegalRecord();
   // a govt id that collides with an Object.prototype member must not read through
