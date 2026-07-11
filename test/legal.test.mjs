@@ -15,7 +15,7 @@ test('adjust bumps from a 0 baseline and guards no-ops', () => {
   assert.ok(!l.has(200));
 });
 
-test('set stores an absolute value; pardon clears only negative records', () => {
+test('set coerces and guards; pardon only clears an existing negative record', () => {
   const l = new LegalRecord({ 128: -50 });
   assert.equal(l.raw(128), -50);
   l.set(128, l.raw(128) - 10); // absolute set from the current value
@@ -25,6 +25,19 @@ test('set stores an absolute value; pardon clears only negative records', () => 
   l.set(140, 20);
   l.pardon(140);
   assert.equal(l.raw(140), 20); // a good record is left alone
+
+  // set coerces a stringly value and ignores an invalid (negative) govt id
+  l.set(150, '15');
+  assert.strictEqual(l.raw(150), 15);
+  l.set(-1, 99);
+  assert.ok(!l.has(-1));
+
+  // pardon on a govt with no stored record is a no-op — no spurious 0 entry, so
+  // legalOf() can still fall back to that govt's InitialRec
+  const fresh = new LegalRecord();
+  fresh.pardon(300);
+  assert.ok(!fresh.has(300));
+  assert.equal(fresh.raw(300), undefined);
 });
 
 test('recordKill accrues at least 1 per kill', () => {

@@ -41,9 +41,11 @@ export class LegalRecord {
 
   // Store an absolute record. Callers that adjust the *effective* record (which
   // may still be at the govt default) compute the new value via legalOf and set
-  // the result — see commitCrime/creditKill.
+  // the result — see commitCrime/creditKill. The value is coerced numeric so the
+  // class keeps its arithmetic invariants; govts are always >= 128.
   set(govt, value) {
-    this.records[govt] = value;
+    if (govt < 0) return;
+    this.records[govt] = num(value);
   }
 
   // Bump the record with a govt from a 0 baseline (mission rewards/penalties).
@@ -55,10 +57,11 @@ export class LegalRecord {
     this.records[govt] = num(this.records[govt]) + delta;
   }
 
-  // Clear a criminal (negative) record with a govt back to clean; leave a good
-  // record alone.
+  // Clear a criminal (negative) record with a govt back to clean. Only touches an
+  // existing negative record: a govt still at its default is left alone, so we
+  // don't create a spurious 0 that overrides its InitialRec and bloats the save.
   pardon(govt) {
-    this.records[govt] = Math.max(0, num(this.records[govt]));
+    if (this.has(govt) && this.raw(govt) < 0) this.records[govt] = 0;
   }
 
   // Record a kill of `crew` (counted as at least 1) toward the combat rating.
