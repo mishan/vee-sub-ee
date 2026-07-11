@@ -30,7 +30,7 @@ function capsToggle() {
   // Only in flight — behind the splash/title/hail/service/landing/dead overlays
   // gameplay keys are swallowed (the splash even advances on any key), so a
   // Caps Lock press there must not silently arm 2× for when you enter the game.
-  if (gameOver || hailOpen || introUp() || landedAt || serviceOpen) return;
+  if (gameOver || hailOpen || introUp() || landedAt || activeView) return;
   const t = performance.now();
   if (t - capsLatch < 200) return; // absorb the keydown/keyup pair into one flip
   capsLatch = t; capsFF = !capsFF; applyFF();
@@ -97,7 +97,7 @@ addEventListener('keydown', e => {
   if (e.key === 'Tab') { e.preventDefault(); if (!landedAt) cycleShipTarget(); }
   if (e.key === 'Escape') {
     if (hailOpen) closeHail();
-    else if (serviceOpen) closeService();
+    else if (activeView) closeService();
     else if (mapOpen) mapOpen = false;
     else if (jump && jump.phase === 'engage') abortJump();
     else if (landedAt) takeOff();
@@ -166,7 +166,7 @@ function updateTouchUI() {
   // `no-fly` gates flight-only chrome on both desktop (the 2× pill) and touch
   // (the joystick/action bar), so it is toggled before the touch-only guard.
   const flying = !splashShown && !titleShown && !landedAt && !gameOver &&
-                 !hailOpen && !serviceOpen;
+                 !hailOpen && !activeView;
   document.body.classList.toggle('no-fly', !flying);
   if (!TOUCH) return;
   touchEl.classList.toggle('map', flying && mapOpen);
