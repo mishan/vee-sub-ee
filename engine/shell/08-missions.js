@@ -13,7 +13,7 @@ import {
 } from './01-state.js';
 import { weighted } from './02-spawning.js';
 import { applyShipStats, armShip, player } from './04-combat.js';
-import { legalOf } from './13-legal.js';
+import { legalOf, applyGovtDelta, pardonGovt } from './13-legal.js';
 
 /*
  * engine/shell/08-missions.js — part of the browser flight shell.
@@ -108,15 +108,15 @@ export function missionAvailable(m, p, loc) {
   if (m.AvailBitClr >= 0 && missionLog.bit(m.AvailBitClr)) return false;
   // combat rating gate: -1 ignore, else kills must be at least AvailRating
   if (m.AvailRating >= 0 && legal.kills < m.AvailRating) return false;
-  // legal-record gate (record with this spöb's govt): 0 ignore, positive =
-  // at least this good, negative = at least this criminal, -32000 = must
-  // have dominated this spöb.
+  // legal-record gate (AvailRecord is "record in THIS system"): 0 ignore,
+  // positive = at least this good, negative = at least this criminal, -32000 =
+  // must have dominated this spöb.
   if (m.AvailRecord === -32000) {
     if (!dominated.has(p.id)) return false;
   } else if (m.AvailRecord > 0) {
-    if (legalOf(p.Govt) < m.AvailRecord) return false;
+    if (legalOf(S.SYSTEM_ID) < m.AvailRecord) return false; // record in THIS system
   } else if (m.AvailRecord < 0) {
-    if (legalOf(p.Govt) > m.AvailRecord) return false;
+    if (legalOf(S.SYSTEM_ID) > m.AvailRecord) return false;
   }
   const ai = playerAI();
   if (m.Flags & 0x2000 && ai <= 2) return false;
@@ -270,7 +270,7 @@ export function abortMission(id) {
   const A = missionLog.find(id);
   if (!A) return;
   const m = misns[id];
-  if (m.Flags & 0x0040) legal.adjust(m.CompGovt, -5 * m.CompReward); // abort reversal
+  if (m.Flags & 0x0040) applyGovtDelta(m.CompGovt, -5 * m.CompReward); // abort reversal
   missionLog.remove(id);
   // clear its mission ships from the system
   S.aiShips = S.aiShips.filter((s) => s.misnId !== id);
@@ -439,13 +439,13 @@ export function missionLandingEvents(p) {
         setBitCode(m.CompBitSet);
         setBitCode(m.CompBitSet2);
         setBitCode(m.CompBitSet4);
-        legal.adjust(m.CompGovt, m.CompReward);
+        applyGovtDelta(m.CompGovt, m.CompReward);
         removeMission(A.id);
       } else if (expired || goalFailed(A) || m.CanAbort) {
         notes.push(descText(m.FailText, A) || `Mission failed: ${misnName(m, A)}.`);
         setBitCode(m.FailBitSet);
         setBitCode(m.FailBitSet2);
-        legal.adjust(m.CompGovt, -Math.round(m.CompReward / 2));
+        applyGovtDelta(m.CompGovt, -Math.round(m.CompReward / 2));
         removeMission(A.id);
       }
     }
@@ -462,7 +462,7 @@ export function checkExpiredMissions() {
       const m = misns[A.id];
       setBitCode(m.FailBitSet);
       setBitCode(m.FailBitSet2);
-      legal.adjust(m.CompGovt, -Math.round(m.CompReward / 2));
+      applyGovtDelta(m.CompGovt, -Math.round(m.CompReward / 2));
       removeMission(A.id);
       showMsg(`Mission failed (out of time): ${misnName(misns[A.id], A)}`);
     }
@@ -508,7 +508,7 @@ export function payMission(m) {
     wallet.spend(wallet.credits - kept);
   }
   // -10128..-10255 clean legal record: clear a criminal record with that govt
-  else if (v >= -10255 && v <= -10128) legal.pardon(-v - 10000);
+  else if (v >= -10255 && v <= -10128) pardonGovt(-v - 10000);
 }
 
 /* stelName: id → display name, shared by the briefing and the board UI. */

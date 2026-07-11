@@ -403,31 +403,45 @@ until there's a title screen.
 
 ## Legal record & encounters (shell; browser leg)
 
-A per-government **legal record** (persisted; defaults to each gövt's
-`InitialRec`) tracks standing, negative = criminal. The status label
-(STR# 134) is the record scaled by that gövt's `CrimeTol`, on the bible's
-Appendix II ladder: evil at |record| ≥ 1·/4·/16·/64·/256·/1024·/4096·
-CrimeTol → Offender…Galactic Scourge; good at ≥ 4·/16·/…·4096·CrimeTol →
-Decent Individual…Honored Leader; else Clean. Independent systems use
-gövt 128. **Combat rating** (STR# 138 / Appendix I) comes from total crew
-of destroyed ships: 0/1/100/200/400/800/1600/3200/6400/12800/25600 →
+The **legal record is per system** (persisted; a system with no stored value
+defaults to its controlling gövt's `InitialRec`), negative = criminal — like
+classic EV, two systems of one government can differ. The status label
+(STR# 134) scores a system's record ÷ *that system's* gövt `CrimeTol`; the
+bible's Appendix II ladder numbers are the **upper bound** of each tier, so any
+positive score is already off Clean — (0,4) Decent Individual, [4,16) Good Egg,
+[16,64) Upstanding Citizen, [64,256) Role Model, [256,1024) Pillar of Society,
+≥1024 Honored Leader, and the mirror for negatives ((0,1) Offender, [1,4)
+Criminal, … ≥4096 Galactic Scourge). Only a record of exactly 0 is Clean. (The
+bible prints the numbers as if floors, but real pilots show a record of 9 at
+CrimeTol 50 reads "Decent Individual".) Independent systems use gövt 128. **Combat rating** (STR# 138 / Appendix I) is separate — it comes from
+total crew of destroyed ships: 0/1/100/200/400/800/1600/3200/6400/12800/25600 →
 Harmless…Ultimate.
 
-**Consequences of combat** (player actions only): disabling costs
-`DisabPenalty`, boarding/plundering `BoardPenalty`, killing `KillPenalty`
-off the victim gövt's record (and half that off its allies). Killing
-rewards every gövt that lists the victim's gövt as `Enemy` (+KillPenalty);
-killing a **xenophobic** gövt's ship (pirates) also credits the current
-system's gövt, so hunting pirates raises local standing. A kill adds the
-victim's crew to the combat rating. (`ShootPenalty` is "currently ignored"
-per the bible; we follow suit.)
+**Applying a change.** A govt-keyed effect (a killed ship's gövt, a mission's
+`CompGovt`) is spread across systems by `applyGovtDelta`: the **current system**
+takes the full signed change, and every **other** system whose gövt relates to
+the affected one has a `SPREAD_PROB` (≈¼) chance of taking a `SPREAD_FRAC`
+fraction of it. Sign follows the relationship to the affected gövt — the gövt
+itself and its allies same sign (a crime hurts), its enemies the opposite (a
+crime against a gövt pleases its foes), a xenophobic gövt counts everyone
+unallied as an enemy (so hunting pirates is lawful). This random scatter is
+reverse-engineered from real pilot save diffs (one Confed crime spree reddened
+26% of Confed systems and lifted 31% of the enemy Rebellion's); the spread
+constants are tuned approximations (see CLAUDE.md "Known approximations").
 
-**Encounters.** Pirate/xenophobic warships are hostile on sight (govt
-flags). A gövt whose record you've driven below −CrimeTol treats you as a
-**criminal**: its warships spawn hostile. When you're criminal in the
-current system, **bounty hunters** hyperspace in at the edge (hostile,
-named from STR# 10008, capped by how notorious you are). The galaxy map
-shows the legal status for the selected system's government and your
+**Consequences of combat** (player actions only): disabling costs
+`DisabPenalty`, boarding/plundering `BoardPenalty`, killing `KillPenalty`, each
+fed through `applyGovtDelta` against the victim gövt. A kill adds the victim's
+crew to the combat rating. (`ShootPenalty` is "currently ignored" per the bible;
+we follow suit.)
+
+**Encounters.** Pirate/xenophobic warships are hostile on sight (govt flags). A
+warship also spawns hostile if you are **criminal in the current system**
+(record below −CrimeTol) and its gövt enforces there — the system's own gövt, an
+ally, or a gövt flagged to enforce its laws everywhere (0x0002). When you're
+criminal in the current system, **bounty hunters** hyperspace in at the edge
+(hostile, named from STR# 10008, capped by how notorious you are in that
+system). The galaxy map shows the legal status for the selected system and your
 combat rating.
 
 ## Hailing (shell; browser leg)

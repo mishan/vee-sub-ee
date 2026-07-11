@@ -114,7 +114,7 @@ export const Save = {
   KEY: 've_pilot',
   capture(spobId) {
     return {
-      v: 1,
+      v: 2,
       syst: S.SYSTEM_ID,
       spob: spobId,
       ship: S.playerShipId,
@@ -139,7 +139,7 @@ export const Save = {
   },
   fresh(name, ship, strict) {
     return {
-      v: 1,
+      v: 2,
       syst: 128,
       spob: null,
       ship: 128,
@@ -172,10 +172,25 @@ export const Save = {
   load() {
     try {
       const p = JSON.parse(localStorage.getItem(this.KEY));
-      return p && p.v === 1 ? p : null;
+      if (!p) return null;
+      if (p.v === 2) return p;
+      if (p.v === 1) return this.migrateV1(p); // legal record went govt→system
+      return null;
     } catch {
       return null;
     }
+  },
+  // v1 stored the legal record per government; v2 stores it per system. Expand
+  // each govt's value onto the systems it controls so an old pilot keeps its
+  // standing under the per-system model.
+  migrateV1(p) {
+    const rep = {};
+    const syst = (DATA.types && DATA.types.syst) || {};
+    for (const [id, s] of Object.entries(syst)) {
+      const g = s && s.Govt >= 128 ? s.Govt : 128;
+      if (p.rep && p.rep[g] != null) rep[id] = p.rep[g];
+    }
+    return { ...p, v: 2, rep };
   },
   clear() {
     try {
@@ -212,8 +227,9 @@ export const pilotBorn = SAVED && SAVED.born ? SAVED.born : Date.now();
 export const pilotName = (SAVED && SAVED.name) || '';
 export const shipName = (SAVED && SAVED.shipName) || '';
 export const strictPlay = SAVED ? !!SAVED.strict : false;
-/* legal record per govt (spec: "Legal record") — negative = evil, positive
- * = good; defaults to each govt's InitialRec. Missions and combat move it. */
+/* legal record per system (spec: "Legal record") — negative = evil, positive
+ * = good; a system with no stored record defaults to its govt's InitialRec.
+ * Missions and combat move it (see 13-legal.js applyGovtDelta). */
 export const legal = new LegalRecord(
   SAVED && SAVED.rep ? { ...SAVED.rep } : {},
   SAVED ? SAVED.kills || 0 : 0,

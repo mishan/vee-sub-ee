@@ -15,12 +15,11 @@ import {
   launchFighter,
   recallFighters,
   spawnEscorts,
-  systemGovt,
 } from './02-spawning.js';
 import { attenuate, masterVol, playSnd, sndEl, stopSnd } from './03-sound.js';
-import { checkExpiredMissions, govtAllies, govts, onMissionShipDisabled } from './08-missions.js';
+import { checkExpiredMissions, govts, onMissionShipDisabled } from './08-missions.js';
 import { PF } from './15-pers.js';
-import { legalOf } from './13-legal.js';
+import { applyGovtDelta } from './13-legal.js';
 import { loadSystem } from './09-step.js';
 
 /*
@@ -238,31 +237,21 @@ export function hitShip(victim, rec, heading, attacker) {
 
 /* ---- legal consequences of combat (spec: "Legal record") ---- */
 export const penaltyOf = (g, field) => (g >= 128 && govts[g] ? govts[g][field] : 0);
-// A crime against govt g costs record with g and (halved) its allies.
+// A crime against govt g. applyGovtDelta lands it on the current system, signed
+// by that system's relationship to g (crime on their/allied turf, a favour on
+// an enemy's turf).
 export function commitCrime(victimGovt, penalty) {
-  if (victimGovt < 128 || !penalty) return;
-  legal.set(victimGovt, legalOf(victimGovt) - penalty);
-  for (const ally of govtAllies(victimGovt))
-    legal.set(ally, legalOf(ally) - Math.round(penalty / 2));
+  applyGovtDelta(victimGovt, -penalty);
 }
-// A kill: adds to combat rating, penalizes the victim's govt, and rewards
-// every govt that considers the victim's govt an enemy (bounty for the deed).
+// A kill: adds to combat rating, then applies KillPenalty to the current
+// system. The sign handles the rest — a crime against the victim govt on its
+// own/allied turf, a credited bounty on an enemy's turf or against xenophobic
+// pirates (relation() in 13-legal).
 export function creditKill(victim) {
   legal.recordKill(ships[victim.shipId] && ships[victim.shipId].Crew);
   const g = victim.govt;
   if (g < 128) return;
-  const kp = penaltyOf(g, 'KillPenalty');
-  commitCrime(g, kp);
-  // every govt that considers the victim's govt an enemy rewards the deed
-  for (const [hid, h] of Object.entries(govts))
-    if (h.Enemy === g && +hid !== g) legal.set(+hid, legalOf(+hid) + kp);
-  // killing a xenophobic aggressor (pirates) is lawful everywhere — the
-  // current system's government credits you too, matching classic feel
-  const vf = govts[g].$sem ? govts[g].$sem.flags : [];
-  if (vf.includes('xenophobic')) {
-    const sg = systemGovt();
-    if (sg !== g) legal.set(sg, legalOf(sg) + kp);
-  }
+  applyGovtDelta(g, -penaltyOf(g, 'KillPenalty'));
 }
 
 export function shipHalf(e) {
