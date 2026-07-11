@@ -2,8 +2,8 @@
 
 **Vₑ** ("vee-sub-e" — the physics symbol for escape velocity, and *EV*
 backwards) is a from-scratch reimplementation of Ambrosia Software's classic
-*Escape Velocity* (Mac, 1996). It runs in the browser. The engine is ours and
-ships **no game content** — you play it with your own copy of the original.
+*Escape Velocity* (Mac, 1996). It runs in the browser, and ships **no game content**
+— you play it with your own copy of the original.
 
 ## Play it
 
