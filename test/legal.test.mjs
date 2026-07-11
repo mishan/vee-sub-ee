@@ -52,6 +52,13 @@ test('numeric state is coerced against a corrupt pilot file', () => {
   assert.equal(new LegalRecord({}, 'oops').kills, 0);
   assert.equal(new LegalRecord({}, -3).kills, 0);
 
+  // seeded record values are coerced too, so legalOf(g) + kp stays numeric in
+  // callers like creditKill (a string would concat: '10' + 5 -> '105')
+  const seeded = new LegalRecord({ 128: '10', 200: 'bad' });
+  assert.strictEqual(seeded.raw(128), 10);
+  assert.strictEqual(seeded.raw(200), 0);
+  assert.strictEqual(seeded.raw(128) + 5, 15);
+
   // adjust coerces both the delta and a stringly-typed saved record (no concat)
   const l = new LegalRecord({ 128: '10' });
   l.adjust(128, '5');

@@ -22,9 +22,12 @@ function num(x, fallback = 0) {
 export class LegalRecord {
   constructor(records = {}, kills = 0) {
     // Copy into a null-prototype map so keys from a save file (e.g. __proto__,
-    // constructor) can't reach the prototype chain, and lookups never observe
-    // inherited properties.
-    this.records = Object.assign(Object.create(null), records); // govtId -> stored record
+    // constructor) can't reach the prototype chain and lookups never observe
+    // inherited properties — and coerce every value to a finite number, so
+    // downstream arithmetic (e.g. legalOf(g) + kp in creditKill) can never
+    // string-concatenate on a corrupt/hand-edited pilot file.
+    this.records = Object.create(null); // govtId -> stored record
+    for (const [g, v] of Object.entries(records)) this.records[g] = num(v);
     this.kills = Math.max(0, num(kills)); // total crew destroyed → combat rating
   }
 
