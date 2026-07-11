@@ -84,9 +84,6 @@ function titlePrefs() {
   if (!soundOn) stopTitleMusic(); else startTitleMusic();
   showMsg('Sound ' + (soundOn ? 'on' : 'off'));
 }
-function escapeHtml(s) {
-  return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-}
 
 /* The title viewscreen shows a summary of the current pilot's game (as the
  * original does), drawn on the canvas so it scales with the framed art. */

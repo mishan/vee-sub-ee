@@ -6,7 +6,12 @@
  * scope — treat them as one file split for readability, not as ES modules.
  * Normative behavior: engine/ENGINE_SPEC.md.
  */
-/* ---------------- player ---------------- */
+/* ---------------- player ----------------
+ * This player-state init leads the combat module (rather than living with the
+ * rest of the game state in 01-state) purely to preserve top-level execution
+ * order: it originally sat right before the audio section, and splitting sound
+ * into its own module moved it here. It's referenced lazily everywhere else, so
+ * the position is safe; it's grouped with combat only by adjacency. */
 
 const player = EV.makeShip(ships[playerShipId],
   +(params.get('x') || 0), +(params.get('y') || 300), +(params.get('heading') || 0));

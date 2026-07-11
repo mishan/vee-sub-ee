@@ -130,6 +130,18 @@ function main() {
     // concatenate them (in order.json order) into the one template <script>.
     const shellDir = path.join(__dirname, 'engine', 'shell');
     const shellOrder = JSON.parse(fs.readFileSync(path.join(shellDir, 'order.json'), 'utf8'));
+    // order.json must list exactly the shell modules on disk — a new file that
+    // isn't added would be silently dropped from the build, mysteriously
+    // removing whatever it did.
+    const onDisk = fs.readdirSync(shellDir).filter(f => f.endsWith('.js')).sort();
+    const listed = [...shellOrder].sort();
+    if (onDisk.join() !== listed.join()) {
+      const missing = onDisk.filter(f => !listed.includes(f));
+      const extra = listed.filter(f => !onDisk.includes(f));
+      throw new Error('engine/shell/order.json out of sync with the directory' +
+        (missing.length ? ` — not listed: ${missing.join(', ')}` : '') +
+        (extra.length ? ` — listed but missing: ${extra.join(', ')}` : ''));
+    }
     const shell = shellOrder.map(f => fs.readFileSync(path.join(shellDir, f), 'utf8')).join('\n');
     // Name suggestions (STR# 128 "Default Names") live in the EV application's
     // resource fork, not the game data. If the app rsrc is supplied, split the

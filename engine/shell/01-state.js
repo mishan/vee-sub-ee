@@ -10,6 +10,14 @@
 
 const params = new URLSearchParams(location.search);
 
+// Escape untrusted game-data strings before putting them in element text via
+// innerHTML. Lives here (an early module) because later modules call it — the
+// dependency direction the shell's concatenation order guarantees. Text-context
+// only (&<>); values placed in HTML attributes would also need quote-escaping.
+function escapeHtml(s) {
+  return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+
 /* ---- persistence (spec: "Persistence") ----
  * The pilot auto-saves on landing and takeoff (classic saved when you
  * landed) and restores on load. Any gameplay-affecting test param puts

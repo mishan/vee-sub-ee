@@ -72,7 +72,7 @@ SERVICE_RENDER.exchange = function () {
     const held = cargo[COMMODITIES[i]];
     if (price == null && !held) continue;
     const lvl = m.prices[COMMODITIES[i]];
-    html += `<tr><td>${cargoNames[i]}${lvl ? ` <span class="meta" style="margin:0">(${lvl})</span>` : ''}</td>
+    html += `<tr><td>${escapeHtml(cargoNames[i])}${lvl ? ` <span class="meta" style="margin:0">(${lvl})</span>` : ''}</td>
       <td class="num">${price != null ? price + ' cr' : '—'}</td>
       <td class="num">${held}</td><td style="text-align:right">` +
       (price != null ? `

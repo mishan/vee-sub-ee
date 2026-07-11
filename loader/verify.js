@@ -293,9 +293,28 @@ function checkPluginAssets() {
 
 checkPict();
 checkSnd();
+// The assembled flight shell must parse. Concatenate the modules (order.json
+// order) as the build does and compile them as one script — new Function
+// compiles without running, so it catches a syntax error or a cross-module
+// top-level redeclaration before a browser would. No game data needed.
+function checkShellAssembles() {
+  const shellDir = path.join(ROOT, 'engine', 'shell');
+  const order = JSON.parse(fs.readFileSync(path.join(shellDir, 'order.json'), 'utf8'));
+  const shell = order.map(f => fs.readFileSync(path.join(shellDir, f), 'utf8')).join('\n');
+  const preamble = "'use strict';\nconst DATA = null, MANIFEST = null, NAMES = null;\n";
+  try {
+    new Function(preamble + shell);   // eslint-disable-line no-new-func
+    console.log('shell: assembled script parses (' + order.length + ' modules)');
+  } catch (e) {
+    console.log('  ✗ assembled shell failed to parse: ' + e.message);
+    process.exitCode = 1;
+  }
+}
+
 checkSprites();
 checkSit();
 checkBuildData();
 checkHardening();
 checkPluginMerge();
 checkPluginAssets();
+checkShellAssembles();
