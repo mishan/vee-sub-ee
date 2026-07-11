@@ -40,7 +40,10 @@ function indexPngs(dir) {
 
 function main() {
   const [file, assetDir = 'evassets'] = process.argv.slice(2);
-  if (!file) { console.error('usage: evatlas.js <graphics file> [evassets dir]'); process.exit(1); }
+  if (!file) {
+    console.error('usage: evatlas.js <graphics file> [evassets dir]');
+    process.exit(1);
+  }
 
   const schema = JSON.parse(fs.readFileSync(path.join(__dirname, 'schemas', 'spin.json'), 'utf8'));
   const types = parseFork(loadFork(file).fork);
@@ -49,7 +52,12 @@ function main() {
 
   const gdir = path.join(assetDir, 'graphics');
   const pngs = indexPngs(gdir);
-  const manifest = { source: path.basename(file), generated: new Date().toISOString(), spins: {}, problems: [] };
+  const manifest = {
+    source: path.basename(file),
+    generated: new Date().toISOString(),
+    spins: {},
+    problems: [],
+  };
 
   for (const r of spins.resources) {
     const s = decodeRecord(r.data(), schema);
@@ -57,17 +65,24 @@ function main() {
       name: r.name,
       sprites: pngs.get(s.SpritesID) ? path.posix.join('graphics', pngs.get(s.SpritesID)) : null,
       masks: pngs.get(s.MasksID) ? path.posix.join('graphics', pngs.get(s.MasksID)) : null,
-      frameW: s.xSize, frameH: s.ySize,
-      xTiles: s.xTiles, yTiles: s.yTiles,
+      frameW: s.xSize,
+      frameH: s.ySize,
+      xTiles: s.xTiles,
+      yTiles: s.yTiles,
       frames: s.xTiles * s.yTiles,
     };
     for (const key of ['sprites', 'masks']) {
       const id = key === 'sprites' ? s.SpritesID : s.MasksID;
-      if (!entry[key]) { manifest.problems.push(`spïn ${r.id} (${r.name}): missing PICT ${id}`); continue; }
+      if (!entry[key]) {
+        manifest.problems.push(`spïn ${r.id} (${r.name}): missing PICT ${id}`);
+        continue;
+      }
       const { w, h } = pngSize(path.join(assetDir, entry[key]));
       if (w !== s.xSize * s.xTiles || h !== s.ySize * s.yTiles)
-        manifest.problems.push(`spïn ${r.id} (${r.name}) ${key}: PICT ${id} is ${w}x${h}, ` +
-          `expected ${s.xSize * s.xTiles}x${s.ySize * s.yTiles}`);
+        manifest.problems.push(
+          `spïn ${r.id} (${r.name}) ${key}: PICT ${id} is ${w}x${h}, ` +
+            `expected ${s.xSize * s.xTiles}x${s.ySize * s.yTiles}`,
+        );
     }
     manifest.spins[r.id] = entry;
   }
@@ -75,7 +90,11 @@ function main() {
   // Non-sprite assets, for completeness.
   for (const sub of ['titles', 'sounds', 'music']) {
     const d = path.join(assetDir, sub);
-    if (fs.existsSync(d)) manifest[sub] = fs.readdirSync(d).sort().map(f => path.posix.join(sub, f));
+    if (fs.existsSync(d))
+      manifest[sub] = fs
+        .readdirSync(d)
+        .sort()
+        .map((f) => path.posix.join(sub, f));
   }
 
   const dest = path.join(assetDir, 'manifest.json');
@@ -86,5 +105,10 @@ function main() {
 }
 
 if (require.main === module) {
-  try { main(); } catch (e) { console.error('error:', e.message); process.exit(1); }
+  try {
+    main();
+  } catch (e) {
+    console.error('error:', e.message);
+    process.exit(1);
+  }
 }

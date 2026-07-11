@@ -16,5 +16,10 @@ self.addEventListener('fetch', (e) => {
   if (u.origin !== SCOPE.origin || !u.pathname.startsWith(SCOPE.pathname)) return;
   // Match against our cache explicitly (not caches.match, which searches all
   // Cache Storage and could serve a foreign entry with the same URL).
-  e.respondWith(caches.open('ve-game').then((c) => c.match(e.request)).then((r) => r || fetch(e.request)));
+  e.respondWith(
+    caches
+      .open('ve-game')
+      .then((c) => c.match(e.request))
+      .then((r) => r || fetch(e.request)),
+  );
 });

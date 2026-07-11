@@ -5,9 +5,9 @@
  */
 'use strict';
 (function () {
-  const EV = (typeof EVRSRC !== 'undefined') ? EVRSRC : require('../evrsrc.js');
-  const SEM = (typeof SEMANTICS !== 'undefined') ? SEMANTICS : require('../semantics.js');
-  const B = (typeof Buffer !== 'undefined') ? Buffer : require('buffer').Buffer;
+  const EV = typeof EVRSRC !== 'undefined' ? EVRSRC : require('../evrsrc.js');
+  const SEM = typeof SEMANTICS !== 'undefined' ? SEMANTICS : require('../semantics.js');
+  const B = typeof Buffer !== 'undefined' ? Buffer : require('buffer').Buffer;
 
   /* Build the full game database from the EV Data resource fork.
    * schemasByType: { <MacRoman type name>: { alias, schema } }.
@@ -16,12 +16,19 @@
   function buildData(dataFork, schemasByType, pluginForks = []) {
     const base = EV.parseFork(B.from(dataFork));
     const types = pluginForks.length
-      ? EV.mergeTypes(base, ...pluginForks.map(f => EV.parseFork(B.from(f))))
+      ? EV.mergeTypes(base, ...pluginForks.map((f) => EV.parseFork(B.from(f))))
       : base;
-    const out = { source: 'EV Data.rsrc', generated: new Date().toISOString(), types: {}, strings: {} };
+    const out = {
+      source: 'EV Data.rsrc',
+      generated: new Date().toISOString(),
+      types: {},
+      strings: {},
+    };
     for (const t of types) {
-      if (t.typeHex === '53545223') { // STR#
-        for (const r of t.resources) out.strings[r.id] = { name: r.name, list: EV.decodeStrList(r.data()) };
+      if (t.typeHex === '53545223') {
+        // STR#
+        for (const r of t.resources)
+          out.strings[r.id] = { name: r.name, list: EV.decodeStrList(r.data()) };
         continue;
       }
       const s = schemasByType[t.typeName];
@@ -29,7 +36,8 @@
       const records = {};
       for (const r of t.resources) {
         const rec = EV.decodeRecord(r.data(), s.schema);
-        delete rec.__schemaBytes; delete rec.__recordBytes;
+        delete rec.__schemaBytes;
+        delete rec.__recordBytes;
         records[r.id] = { name: r.name, ...rec };
       }
       out.types[s.alias] = records;
@@ -43,17 +51,22 @@
   function buildManifest(gfxFork, spinSchema, pluginForks = []) {
     const base = EV.parseFork(B.from(gfxFork));
     const types = pluginForks.length
-      ? EV.mergeTypes(base, ...pluginForks.map(f => EV.parseFork(B.from(f))))
+      ? EV.mergeTypes(base, ...pluginForks.map((f) => EV.parseFork(B.from(f))))
       : base;
     const spins = EV.findType(types, 'spin');
     const manifest = { spins: {} };
-    if (spins) for (const r of spins.resources) {
-      const s = EV.decodeRecord(r.data(), spinSchema);
-      manifest.spins[r.id] = {
-        name: r.name || '', frameW: s.xSize, frameH: s.ySize,
-        xTiles: s.xTiles, yTiles: s.yTiles, frames: s.xTiles * s.yTiles,
-      };
-    }
+    if (spins)
+      for (const r of spins.resources) {
+        const s = EV.decodeRecord(r.data(), spinSchema);
+        manifest.spins[r.id] = {
+          name: r.name || '',
+          frameW: s.xSize,
+          frameH: s.ySize,
+          xTiles: s.xTiles,
+          yTiles: s.yTiles,
+          frames: s.xTiles * s.yTiles,
+        };
+      }
     return manifest;
   }
 
@@ -69,19 +82,27 @@
     const g = EV.parseFork(B.from(graphicsFork));
     const t = EV.parseFork(B.from(titlesFork));
     const s = soundsFork ? EV.parseFork(B.from(soundsFork)) : [];
-    const plugins = pluginForks.map(f => EV.parseFork(B.from(f)));
+    const plugins = pluginForks.map((f) => EV.parseFork(B.from(f)));
     const titlePict = EV.findType(t, 'PICT');
-    const titleIds = new Set(titlePict ? titlePict.resources.map(r => r.id) : []);
+    const titleIds = new Set(titlePict ? titlePict.resources.map((r) => r.id) : []);
     // keep only the resources of a parsed plugin that match a predicate, preserving type shape
     const pick = (types, fn) => {
       const out = [];
       for (const ty of types) {
-        const kept = ty.resources.filter(r => fn(ty.typeName, r));
-        if (kept.length) out.push({ typeBytes: ty.typeBytes, typeName: ty.typeName, typeHex: ty.typeHex, resources: kept });
+        const kept = ty.resources.filter((r) => fn(ty.typeName, r));
+        if (kept.length)
+          out.push({
+            typeBytes: ty.typeBytes,
+            typeName: ty.typeName,
+            typeHex: ty.typeHex,
+            resources: kept,
+          });
       }
       return out;
     };
-    const gExtra = [], tExtra = [], sExtra = [];
+    const gExtra = [],
+      tExtra = [],
+      sExtra = [];
     for (const p of plugins) {
       gExtra.push(pick(p, (tn, r) => tn === 'spïn' || (tn === 'PICT' && !titleIds.has(r.id))));
       tExtra.push(pick(p, (tn, r) => tn === 'PICT' && titleIds.has(r.id)));

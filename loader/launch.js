@@ -6,8 +6,25 @@
  */
 'use strict';
 (function () {
-  const SCHEMA_NAMES = ['desc', 'weap', 'ship', 'govt', 'outf', 'pers', 'oops', 'misn',
-    'syst', 'spob', 'dude', 'nebu', 'junk', 'flet', 'spin', 'spit', 'dsig'];
+  const SCHEMA_NAMES = [
+    'desc',
+    'weap',
+    'ship',
+    'govt',
+    'outf',
+    'pers',
+    'oops',
+    'misn',
+    'syst',
+    'spob',
+    'dude',
+    'nebu',
+    'junk',
+    'flet',
+    'spin',
+    'spit',
+    'dsig',
+  ];
 
   // First-run caching: a completed build stays in Cache Storage, so a return
   // visit can play instantly without re-importing the .sit.
@@ -20,33 +37,62 @@
   // by the decoders (which import evsit for decompression). Fetched once so
   // flight.html and its recorded hash come from the *same* strings (no mid-build
   // server change slips through). The extra parallel fetches come from HTTP cache.
-  const ENGINE_FILES = ['../flight_template.html', '../engine/core.bundle.js',
+  const ENGINE_FILES = [
+    '../flight_template.html',
+    '../engine/core.bundle.js',
     '../engine/shell.bundle.js',
-    '../evrsrc.js', '../semantics.js', 'nodeshim.js',
-    'evsit.js', 'evpict.js', 'evsnd.js', 'evsprite.js', 'evbuild.js',
-    ...SCHEMA_NAMES.map(n => '../schemas/' + n + '.json')];
+    '../evrsrc.js',
+    '../semantics.js',
+    'nodeshim.js',
+    'evsit.js',
+    'evpict.js',
+    'evsnd.js',
+    'evsprite.js',
+    'evbuild.js',
+    ...SCHEMA_NAMES.map((n) => '../schemas/' + n + '.json'),
+  ];
   async function fetchEngineSources() {
     // The flight shell is authored as ES modules and bundled by esbuild into
     // engine/shell.bundle.js — one artifact, fetched like the other engine files.
-    const texts = await Promise.all(ENGINE_FILES.map(f => fetch(f).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + f); return r.text(); })));
+    const texts = await Promise.all(
+      ENGINE_FILES.map((f) =>
+        fetch(f).then((r) => {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + f);
+          return r.text();
+        }),
+      ),
+    );
     return {
-      tpl: texts[0], core: texts[1], shell: texts[2],
-      rest: texts.slice(3),   // evrsrc/semantics/nodeshim/decoders/schemas (hashed)
+      tpl: texts[0],
+      core: texts[1],
+      shell: texts[2],
+      rest: texts.slice(3), // evrsrc/semantics/nodeshim/decoders/schemas (hashed)
     };
   }
-  const toHex = digest => [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+  const toHex = (digest) =>
+    [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
   // SHA-256 of the concatenated sources — the build's identity in the marker.
   async function sourcesHash(src) {
-    const bytes = new TextEncoder().encode([src.tpl, src.core, src.shell, ...src.rest].join('\u0000'));
+    const bytes = new TextEncoder().encode(
+      [src.tpl, src.core, src.shell, ...src.rest].join('\u0000'),
+    );
     return toHex(await crypto.subtle.digest('SHA-256', bytes));
   }
   // SHA-256 of the plugin forks, length-prefixed so order and boundaries matter
   // (plugin order is override precedence). '' when there are no plugins.
   async function pluginsHash(forks) {
     if (!forks.length) return '';
-    let n = 0; for (const f of forks) n += 4 + f.length;
-    const buf = new Uint8Array(n), dv = new DataView(buf.buffer); let o = 0;
-    for (const f of forks) { dv.setUint32(o, f.length); o += 4; buf.set(f, o); o += f.length; }
+    let n = 0;
+    for (const f of forks) n += 4 + f.length;
+    const buf = new Uint8Array(n),
+      dv = new DataView(buf.buffer);
+    let o = 0;
+    for (const f of forks) {
+      dv.setUint32(o, f.length);
+      o += 4;
+      buf.set(f, o);
+      o += f.length;
+    }
     return toHex(await crypto.subtle.digest('SHA-256', buf));
   }
 
@@ -59,41 +105,86 @@
     const w = reg.installing || reg.waiting || reg.active;
     if (!w || w.state === 'activated') return reg;
     await new Promise((resolve) => {
-      const onchange = () => { if (w.state === 'activated') { w.removeEventListener('statechange', onchange); resolve(); } };
+      const onchange = () => {
+        if (w.state === 'activated') {
+          w.removeEventListener('statechange', onchange);
+          resolve();
+        }
+      };
       w.addEventListener('statechange', onchange);
-      onchange();                       // in case it activated before the listener attached
+      onchange(); // in case it activated before the listener attached
     });
     return reg;
   }
 
   function rgbaToPng(img) {
     return new Promise((res, rej) => {
-      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+      const c = document.createElement('canvas');
+      c.width = img.width;
+      c.height = img.height;
       const ctx = c.getContext('2d');
-      if (!ctx) { rej(new Error('2D canvas context unavailable')); return; }
+      if (!ctx) {
+        rej(new Error('2D canvas context unavailable'));
+        return;
+      }
       ctx.putImageData(new ImageData(img.rgba, img.width, img.height), 0, 0);
       // toBlob yields null if encoding fails; reject so the failure surfaces
       // instead of caching a Response(null) that looks like a valid PNG.
-      c.toBlob(b => b ? res(b) : rej(new Error('PNG encoding failed (' + img.width + '×' + img.height + ')')), 'image/png');
+      c.toBlob(
+        (b) =>
+          b ? res(b) : rej(new Error('PNG encoding failed (' + img.width + '×' + img.height + ')')),
+        'image/png',
+      );
     });
   }
-  const pngResp = blob => new Response(blob, { headers: { 'content-type': 'image/png' } });
+  const pngResp = (blob) => new Response(blob, { headers: { 'content-type': 'image/png' } });
   // decodeSnd yields 8-bit unsigned (pcm8) or 16-bit signed (pcm16) PCM, mono or
   // multi-channel — emit a matching WAV header + body for whichever it is.
   function wavResp(dec) {
     const ch = dec.channels || 1;
     let bits, data;
-    if (dec.pcm16) {                              // 16-bit signed, written little-endian
-      bits = 16; const src = dec.pcm16; data = new Uint8Array(src.length * 2);
-      const dvd = new DataView(data.buffer); for (let i = 0; i < src.length; i++) dvd.setInt16(i * 2, src[i], true);
-    } else {                                      // 8-bit unsigned
-      bits = 8; data = dec.pcm8 || new Uint8Array(0);
+    if (dec.pcm16) {
+      // 16-bit signed, written little-endian
+      bits = 16;
+      const src = dec.pcm16;
+      data = new Uint8Array(src.length * 2);
+      const dvd = new DataView(data.buffer);
+      for (let i = 0; i < src.length; i++) dvd.setInt16(i * 2, src[i], true);
+    } else {
+      // 8-bit unsigned
+      bits = 8;
+      data = dec.pcm8 || new Uint8Array(0);
     }
-    const n = data.length, blockAlign = ch * (bits >> 3), byteRate = dec.sampleRate * blockAlign;
-    const buf = new ArrayBuffer(44 + n), v = new DataView(buf);
-    let p = 0; const s = t => { for (const c of t) v.setUint8(p++, c.charCodeAt(0)); };
-    const u32 = x => { v.setUint32(p, x, true); p += 4; }, u16 = x => { v.setUint16(p, x, true); p += 2; };
-    s('RIFF'); u32(36 + n); s('WAVE'); s('fmt '); u32(16); u16(1); u16(ch); u32(dec.sampleRate); u32(byteRate); u16(blockAlign); u16(bits); s('data'); u32(n);
+    const n = data.length,
+      blockAlign = ch * (bits >> 3),
+      byteRate = dec.sampleRate * blockAlign;
+    const buf = new ArrayBuffer(44 + n),
+      v = new DataView(buf);
+    let p = 0;
+    const s = (t) => {
+      for (const c of t) v.setUint8(p++, c.charCodeAt(0));
+    };
+    const u32 = (x) => {
+        v.setUint32(p, x, true);
+        p += 4;
+      },
+      u16 = (x) => {
+        v.setUint16(p, x, true);
+        p += 2;
+      };
+    s('RIFF');
+    u32(36 + n);
+    s('WAVE');
+    s('fmt ');
+    u32(16);
+    u16(1);
+    u16(ch);
+    u32(dec.sampleRate);
+    u32(byteRate);
+    u16(blockAlign);
+    u16(bits);
+    s('data');
+    u32(n);
     new Uint8Array(buf, 44).set(data);
     return new Response(buf, { headers: { 'content-type': 'audio/wav' } });
   }
@@ -104,10 +195,12 @@
     let done = 0;
     const CONC = 24;
     for (let i = 0; i < jobs.length; i += CONC) {
-      await Promise.all(jobs.slice(i, i + CONC).map(async j => {
-        const resp = pngResp(await rgbaToPng(j.img));
-        for (const u of j.urls) await cache.put(u, resp.clone());
-      }));
+      await Promise.all(
+        jobs.slice(i, i + CONC).map(async (j) => {
+          const resp = pngResp(await rgbaToPng(j.img));
+          for (const u of j.urls) await cache.put(u, resp.clone());
+        }),
+      );
       done += Math.min(CONC, jobs.length - i);
       if (log) log('  …' + done + '/' + jobs.length + ' images');
     }
@@ -118,11 +211,20 @@
     // Count skips per category. Individual bad resources are tolerated, but a
     // whole category failing (e.g. a decoder regression breaking every PICT)
     // should be visible rather than silently "building fine".
-    const skip = { pict: 0, sprite: 0, snd: 0 }, tried = { pict: 0, sprite: 0, snd: 0 };
+    const skip = { pict: 0, sprite: 0, snd: 0 },
+      tried = { pict: 0, sprite: 0, snd: 0 };
     // Merge base + plugin graphics/titles/sounds by (type, ID); plugin sprites,
     // shop art, and sounds fold in here (see EVBUILD.routeAssets).
-    const routed = EVBUILD.routeAssets(forks['EV Graphics'], forks['EV Titles'], forks['EV Sounds'], pluginForks);
-    for (const [types, dir] of [[routed.graphics, 'graphics'], [routed.titles, 'titles']]) {
+    const routed = EVBUILD.routeAssets(
+      forks['EV Graphics'],
+      forks['EV Titles'],
+      forks['EV Sounds'],
+      pluginForks,
+    );
+    for (const [types, dir] of [
+      [routed.graphics, 'graphics'],
+      [routed.titles, 'titles'],
+    ]) {
       // findType returns undefined for an absent type; degrade to no jobs rather
       // than a TypeError. (The drop-time preview already rejects an archive
       // missing EV Graphics' PICT/spin with a clear message before we get here.)
@@ -130,25 +232,63 @@
       const picts = pictType ? pictType.resources : [];
       // `fast` skips the individual graphics PICTs (shipyard/comm/outfit detail,
       // shown only when landed/hailing) — sprites and titles still render.
-      if (!(opts.fast && dir === 'graphics')) for (const r of picts) {
-        tried.pict++;
-        let img; try { img = decodePict(r.data()); } catch { skip.pict++; continue; }
-        if (!img.rgba) { skip.pict++; continue; }
-        const urls = [base + 'evassets/' + dir + '/PICT_' + r.id + '.png'];
-        // Named alias (e.g. "PICT_128_Game Panel.png"): encode the name so the
-        // URL is valid, and matches how the browser normalizes the engine's raw
-        // request URL (spaces → %20). encodeURIComponent covers spaces/#/%//.
-        if (r.name) urls.push(base + 'evassets/' + dir + '/PICT_' + r.id + '_' + encodeURIComponent(r.name) + '.png');
-        jobs.push({ urls, img });
-      }
+      if (!(opts.fast && dir === 'graphics'))
+        for (const r of picts) {
+          tried.pict++;
+          let img;
+          try {
+            img = decodePict(r.data());
+          } catch {
+            skip.pict++;
+            continue;
+          }
+          if (!img.rgba) {
+            skip.pict++;
+            continue;
+          }
+          const urls = [base + 'evassets/' + dir + '/PICT_' + r.id + '.png'];
+          // Named alias (e.g. "PICT_128_Game Panel.png"): encode the name so the
+          // URL is valid, and matches how the browser normalizes the engine's raw
+          // request URL (spaces → %20). encodeURIComponent covers spaces/#/%//.
+          if (r.name)
+            urls.push(
+              base +
+                'evassets/' +
+                dir +
+                '/PICT_' +
+                r.id +
+                '_' +
+                encodeURIComponent(r.name) +
+                '.png',
+            );
+          jobs.push({ urls, img });
+        }
       if (dir === 'graphics') {
-        const pmap = {}; for (const r of picts) pmap[r.id] = r;
+        const pmap = {};
+        for (const r of picts) pmap[r.id] = r;
         const spinType = EVRSRC.findType(types, 'spin');
-        for (const sr of (spinType ? spinType.resources : [])) {
+        for (const sr of spinType ? spinType.resources : []) {
           tried.sprite++;
-          let rec; try { rec = EVRSRC.decodeRecord(sr.data(), spinSchema); } catch { skip.sprite++; continue; }
-          const sp = pmap[rec.SpritesID], mk = pmap[rec.MasksID]; if (!sp) { skip.sprite++; continue; }
-          let comp; try { comp = compositeSprite(decodePict(sp.data()), mk ? decodePict(mk.data()) : null); } catch { skip.sprite++; continue; }
+          let rec;
+          try {
+            rec = EVRSRC.decodeRecord(sr.data(), spinSchema);
+          } catch {
+            skip.sprite++;
+            continue;
+          }
+          const sp = pmap[rec.SpritesID],
+            mk = pmap[rec.MasksID];
+          if (!sp) {
+            skip.sprite++;
+            continue;
+          }
+          let comp;
+          try {
+            comp = compositeSprite(decodePict(sp.data()), mk ? decodePict(mk.data()) : null);
+          } catch {
+            skip.sprite++;
+            continue;
+          }
           jobs.push({ urls: [base + 'evassets/sprites/spin_' + sr.id + '.png'], img: comp });
         }
       }
@@ -157,29 +297,59 @@
     // Decode one snd, returning valid PCM or null — like the PICT path, a bad
     // resource (decodeSnd {error}, e.g. compressed, or a throw on corrupt data)
     // is skipped rather than caching a bogus WAV or aborting the whole build.
-    const decodePcm = data => { try { const d = decodeSnd(data); return (d && d.sampleRate && (d.pcm8 || d.pcm16)) ? d : null; } catch { return null; } };
+    const decodePcm = (data) => {
+      try {
+        const d = decodeSnd(data);
+        return d && d.sampleRate && (d.pcm8 || d.pcm16) ? d : null;
+      } catch {
+        return null;
+      }
+    };
     // sounds are cheap (no canvas); routed.sounds already folds in plugin snd.
     // snd 30000 is the title music (a different asset path, below), not an
     // effect — skip it here so it isn't also written under sounds/.
     const sndType = EVRSRC.findType(routed.sounds, 'snd ');
-    for (const r of (sndType ? sndType.resources : [])) { if (r.id === 30000) continue; tried.snd++; const d = decodePcm(r.data()); if (d) await cache.put(base + 'evassets/sounds/snd_' + r.id + '.wav', wavResp(d)); else skip.snd++; }
+    for (const r of sndType ? sndType.resources : []) {
+      if (r.id === 30000) continue;
+      tried.snd++;
+      const d = decodePcm(r.data());
+      if (d) await cache.put(base + 'evassets/sounds/snd_' + r.id + '.wav', wavResp(d));
+      else skip.snd++;
+    }
     // Music (snd 30000 → evassets/music/snd_30000.wav, per flight_template.html):
     // prefer a plugin-provided/merged snd 30000, falling back to the base EV
     // Music fork when no plugin overrides it.
-    let music = sndType && sndType.resources.find(r => r.id === 30000);
+    let music = sndType && sndType.resources.find((r) => r.id === 30000);
     if (!music && forks['EV Music']) {
-      const mus = EVRSRC.parseFork(Buffer.from(forks['EV Music'])), sm = EVRSRC.findType(mus, 'snd ');
-      music = sm && sm.resources.find(r => r.id === 30000);
+      const mus = EVRSRC.parseFork(Buffer.from(forks['EV Music'])),
+        sm = EVRSRC.findType(mus, 'snd ');
+      music = sm && sm.resources.find((r) => r.id === 30000);
     }
-    if (music) { const d = decodePcm(music.data()); if (d) await cache.put(base + 'evassets/music/snd_30000.wav', wavResp(d)); }
+    if (music) {
+      const d = decodePcm(music.data());
+      if (d) await cache.put(base + 'evassets/music/snd_30000.wav', wavResp(d));
+    }
     // One summary line, and a loud warning if a whole category was attempted but
     // entirely failed — the signature of a decoder regression, not stray data.
     if (log) {
-      log('  assets: ' + (tried.pict - skip.pict) + '/' + tried.pict + ' pictures, ' +
-        (tried.sprite - skip.sprite) + '/' + tried.sprite + ' sprites, ' +
-        (tried.snd - skip.snd) + '/' + tried.snd + ' sounds');
+      log(
+        '  assets: ' +
+          (tried.pict - skip.pict) +
+          '/' +
+          tried.pict +
+          ' pictures, ' +
+          (tried.sprite - skip.sprite) +
+          '/' +
+          tried.sprite +
+          ' sprites, ' +
+          (tried.snd - skip.snd) +
+          '/' +
+          tried.snd +
+          ' sounds',
+      );
       for (const k of ['pict', 'sprite', 'snd'])
-        if (tried[k] > 0 && skip[k] === tried[k]) log('  ⚠ every ' + k + ' failed to decode — likely a regression', 'err');
+        if (tried[k] > 0 && skip[k] === tried[k])
+          log('  ⚠ every ' + k + ' failed to decode — likely a regression', 'err');
     }
   }
 
@@ -189,17 +359,26 @@
     // Fail loudly if the template lost a placeholder (a .replace of a missing
     // marker is a silent no-op → a subtly broken flight.html); evexport --flight
     // guards the same way.
-    for (const ph of ['/*__ENGINE__*/', '/*__SHELL__*/', '/*__EVDATA__*/null', '/*__MANIFEST__*/null', '/*__NAMES__*/null'])
+    for (const ph of [
+      '/*__ENGINE__*/',
+      '/*__SHELL__*/',
+      '/*__EVDATA__*/null',
+      '/*__MANIFEST__*/null',
+      '/*__NAMES__*/null',
+    ])
       if (!src.tpl.includes(ph)) throw new Error('flight template missing placeholder ' + ph);
     // DATA/MANIFEST hold strings from the untrusted archive and are injected
     // into a <script> as JS literals. Escape the sequences that would break out
     // of the script element or of a JS string: '<' (so "</script>" can't close
     // the tag) and the U+2028/U+2029 line terminators.
-    const inject = obj => JSON.stringify(obj)
-      .replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+    const inject = (obj) =>
+      JSON.stringify(obj)
+        .replace(/</g, '\\u003c')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
     return src.tpl
       .replace('/*__ENGINE__*/', () => src.core)
-      .replace('/*__SHELL__*/', () => src.shell)   // the esbuild shell bundle
+      .replace('/*__SHELL__*/', () => src.shell) // the esbuild shell bundle
       .replace('/*__EVDATA__*/null', () => inject(DATA))
       .replace('/*__MANIFEST__*/null', () => inject(MANIFEST))
       .replace('/*__NAMES__*/null', () => 'null');
@@ -214,19 +393,27 @@
     const pluginForks = plugins;
     // Ask the browser to keep this origin's storage under pressure — the whole
     // first-run cache lives here, so persistence cuts "it forgot my game".
-    if (navigator.storage && navigator.storage.persist) { try { await navigator.storage.persist(); } catch {} }
+    if (navigator.storage && navigator.storage.persist) {
+      try {
+        await navigator.storage.persist();
+      } catch {}
+    }
     const schemasByType = {};
     // Every schema is required for correct DATA generation — fail fast (naming
     // the culprits) instead of silently building a partial game database.
     const failed = [];
-    await Promise.all(SCHEMA_NAMES.map(async n => {
-      try {
-        const r = await fetch('../schemas/' + n + '.json');
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const s = await r.json();
-        schemasByType[s.name] = { alias: n, schema: s };
-      } catch (e) { failed.push(n + ' (' + e.message + ')'); }
-    }));
+    await Promise.all(
+      SCHEMA_NAMES.map(async (n) => {
+        try {
+          const r = await fetch('../schemas/' + n + '.json');
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const s = await r.json();
+          schemasByType[s.name] = { alias: n, schema: s };
+        } catch (e) {
+          failed.push(n + ' (' + e.message + ')');
+        }
+      }),
+    );
     if (failed.length) throw new Error('Could not load game schemas: ' + failed.join(', '));
     log('Building game database…');
     const DATA = EVBUILD.buildData(forks['EV Data'], schemasByType, pluginForks);
@@ -242,7 +429,12 @@
     // Stage the engine + service worker first (fast) so the game is launchable
     // promptly; the assets stream into the cache right after.
     log('Assembling the engine…');
-    await cache.put(base + 'flight.html', new Response(assembleFlight(src, DATA, MANIFEST), { headers: { 'content-type': 'text/html; charset=utf-8' } }));
+    await cache.put(
+      base + 'flight.html',
+      new Response(assembleFlight(src, DATA, MANIFEST), {
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
     log('Starting the service worker…');
     await registerSW();
     if (!opts.skipAssets) {
@@ -256,10 +448,18 @@
       // Record the plugin identity too (count + content hash), so the cached
       // build's provenance is explicit — a return visit knows it was built with
       // plug-ins rather than silently replaying them (see checkBuilt/resume).
-      await cache.put(base + BUILT_MARKER, new Response(
-        JSON.stringify({ h: await sourcesHash(src), built: Date.now(),
-          plugins: pluginForks.length, ph: await pluginsHash(pluginForks) }),
-        { headers: { 'content-type': 'application/json' } }));
+      await cache.put(
+        base + BUILT_MARKER,
+        new Response(
+          JSON.stringify({
+            h: await sourcesHash(src),
+            built: Date.now(),
+            plugins: pluginForks.length,
+            ph: await pluginsHash(pluginForks),
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        ),
+      );
     }
     log('Ready.');
     return 'game/flight.html';
@@ -268,7 +468,7 @@
   /* Is a complete, current build already cached from a previous visit?
    * Returns the marker ({h, built}) if so, else null — never throws. */
   async function checkBuilt() {
-    if (typeof caches === 'undefined') return null;   // needs a secure context
+    if (typeof caches === 'undefined') return null; // needs a secure context
     try {
       const cache = await caches.open('ve-game');
       const base = gameBase();
@@ -281,9 +481,16 @@
       // Compare against the current sources. If they can't be fetched (offline —
       // the whole point of the cache), trust the marker; only a successful but
       // *different* hash invalidates.
-      let h; try { h = await sourcesHash(await fetchEngineSources()); } catch { return m; }
+      let h;
+      try {
+        h = await sourcesHash(await fetchEngineSources());
+      } catch {
+        return m;
+      }
       return m.h === h ? m : null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
 
   /* Play an already-cached build: (re)register the SW to serve the game subtree

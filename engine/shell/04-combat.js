@@ -1,5 +1,22 @@
-import { S, outfits, params, persGrudge, reputation, ships, showMsg, spinOfShip, systs } from './01-state.js';
-import { chargeEscortUpkeep, fightersOut, launchFighter, recallFighters, spawnEscorts, systemGovt } from './02-spawning.js';
+import {
+  S,
+  outfits,
+  params,
+  persGrudge,
+  reputation,
+  ships,
+  showMsg,
+  spinOfShip,
+  systs,
+} from './01-state.js';
+import {
+  chargeEscortUpkeep,
+  fightersOut,
+  launchFighter,
+  recallFighters,
+  spawnEscorts,
+  systemGovt,
+} from './02-spawning.js';
 import { attenuate, masterVol, playSnd, sndEl, stopSnd } from './03-sound.js';
 import { checkExpiredMissions, govtAllies, govts, onMissionShipDisabled } from './08-missions.js';
 import { PF } from './15-pers.js';
@@ -21,8 +38,12 @@ import { loadSystem } from './09-step.js';
  * into its own module moved it here. It's referenced lazily everywhere else, so
  * the position is safe; it's grouped with combat only by adjacency. */
 
-export const player = EV.makeShip(ships[S.playerShipId],
-  +(params.get('x') || 0), +(params.get('y') || 300), +(params.get('heading') || 0));
+export const player = EV.makeShip(
+  ships[S.playerShipId],
+  +(params.get('x') || 0),
+  +(params.get('y') || 300),
+  +(params.get('heading') || 0),
+);
 player.shipId = S.playerShipId;
 S.fuel = ships[S.playerShipId].Fuel;
 export let fuelMax = ships[S.playerShipId].Fuel;
@@ -31,28 +52,39 @@ S.landedAt = null;
 
 /* ---- combat state (spec: "Combat") ---- */
 export const weaps = DATA.types.weap;
-S.shots = []; S.beams = []; S.explosions = [];
+S.shots = [];
+S.beams = [];
+S.explosions = [];
 S.gameOver = false;
 
 // ammo pool key for a weapon record (AmmoType 0-63 -> weapon 128+n's pool)
-export const poolKey = rec => rec.AmmoType >= 0 && rec.AmmoType <= 63 ? 128 + rec.AmmoType : null;
+export const poolKey = (rec) =>
+  rec.AmmoType >= 0 && rec.AmmoType <= 63 ? 128 + rec.AmmoType : null;
 
 /* Give an entity combat stats + stock loadout from its shïp record. */
 export function armShip(e, rec) {
-  e.shieldMax = rec.Shield; e.shields = rec.Shield;
-  e.armorMax = rec.Armor; e.armor = rec.Armor;
-  e.shieldRe = rec.ShieldRe; e.mass = Math.max(rec.Mass, 1);
+  e.shieldMax = rec.Shield;
+  e.shields = rec.Shield;
+  e.armorMax = rec.Armor;
+  e.armor = rec.Armor;
+  e.shieldRe = rec.ShieldRe;
+  e.mass = Math.max(rec.Mass, 1);
   e.deathDelay = rec.DeathDelay;
   // Only AI ships can be disabled and boarded; the player is destroyed
   // outright (no disabled limbo), so damage never returns 'disabled' for it.
-  e.disableFrac = e === player ? 0 : (rec.Flags & 0x0010) ? 0.10 : 1 / 3;
-  e.deathT = -1; e.disabled = false; e.hostile = false; e.fleeing = false;
-  e.weapons = []; e.pools = {}; e.poolCap = {};
+  e.disableFrac = e === player ? 0 : rec.Flags & 0x0010 ? 0.1 : 1 / 3;
+  e.deathT = -1;
+  e.disabled = false;
+  e.hostile = false;
+  e.fleeing = false;
+  e.weapons = [];
+  e.pools = {};
+  e.poolCap = {};
   for (let i = 1; i <= 4; i++) {
     const t = rec['WeapType' + i];
     if (t >= 128 && weaps[t]) {
       const w = { id: t, rec: weaps[t], n: Math.max(rec['WeapCount' + i], 1), cool: 0 };
-      if (w.rec.Guidance === 99) w.have = w.n;   // fighter bay: fighters docked
+      if (w.rec.Guidance === 99) w.have = w.n; // fighter bay: fighters docked
       e.weapons.push(w);
       const pk = poolKey(weaps[t]);
       if (pk) {
@@ -71,7 +103,7 @@ export function rebuildPlayerWeapons() {
     const o = DATA.types.outf[oid];
     if (!o || !n || !o.$sem) continue;
     if (o.$sem.modType === 'weapon' && weaps[o.ModVal]) {
-      const existing = player.weapons.find(w => w.id === o.ModVal);
+      const existing = player.weapons.find((w) => w.id === o.ModVal);
       if (existing) existing.n += n;
       else player.weapons.push({ id: o.ModVal, rec: weaps[o.ModVal], n, cool: 0 });
     } else if (o.$sem.modType === 'ammunition' && weaps[o.ModVal]) {
@@ -83,8 +115,8 @@ export function rebuildPlayerWeapons() {
   // Fighter bays rearm to full capacity here (rebuild runs on landing, same as
   // the ammo-refill simplification) — every bay's docked count = its size.
   for (const w of player.weapons) if (w.rec.Guidance === 99) w.have = w.n;
-  if (!player.weapons.some(w => w === player.selSecondary))
-    player.selSecondary = player.weapons.find(w => w.rec.MiscFlags & 2) || null;
+  if (!player.weapons.some((w) => w === player.selSecondary))
+    player.selSecondary = player.weapons.find((w) => w.rec.MiscFlags & 2) || null;
 }
 export function armShipKeepingCondition(e, s) {
   const frac = e.shieldMax ? e.shields / e.shieldMax : 1;
@@ -111,7 +143,8 @@ export function fire(e, target, primary) {
     if (primary ? sec : w !== e.selSecondary) continue;
     if (w.cool > 0) continue;
     const g = w.rec.Guidance;
-    if (g === 99) {                    // fighter bay: launch a carried ship (player only)
+    if (g === 99) {
+      // fighter bay: launch a carried ship (player only)
       if (e === player && launchFighter(w)) {
         w.cool = w.rec.Reload;
         if (w.rec.Sound >= 0) playSnd(200 + w.rec.Sound, attenuate(e.x, e.y));
@@ -119,7 +152,8 @@ export function fire(e, target, primary) {
       continue;
     }
     const pk = poolKey(w.rec);
-    if (g === 0 || g === 3) { // beam
+    if (g === 0 || g === 3) {
+      // beam
       if (pk && !((e.pools[pk] || 0) > 0)) continue;
       if (pk) e.pools[pk]--;
       S.beams.push({ owner: e, rec: w.rec, life: w.rec.Count, turreted: g === 3, target });
@@ -129,9 +163,13 @@ export function fire(e, target, primary) {
     }
     let fired = false;
     for (let i = 0; i < w.n; i++) {
-      if (pk) { if ((e.pools[pk] || 0) < 1) break; e.pools[pk]--; }
+      if (pk) {
+        if ((e.pools[pk] || 0) < 1) break;
+        e.pools[pk]--;
+      }
       let aim = e.heading;
-      if ((g === 1 || g === 2 || g === 4) && target) aim = leadAim(e, target, EV.shotSpeedOf(w.rec));
+      if ((g === 1 || g === 2 || g === 4) && target)
+        aim = leadAim(e, target, EV.shotSpeedOf(w.rec));
       if (g === 7 || g === 8) {
         const base = g === 7 ? e.heading : EV.norm(e.heading + 180);
         aim = target ? clampArc(leadAim(e, target, EV.shotSpeedOf(w.rec)), base, 45) : base;
@@ -139,7 +177,7 @@ export function fire(e, target, primary) {
       aim = EV.norm(aim + (Math.random() * 2 - 1) * w.rec.Inaccuracy);
       const shot = EV.makeShot(w.rec, e, aim);
       shot.owner = e;
-      shot.homing = (g === 1 || g === 2) ? target : null;
+      shot.homing = g === 1 || g === 2 ? target : null;
       S.shots.push(shot);
       fired = true;
     }
@@ -167,13 +205,14 @@ export function beginDestruction(v) {
 
 export function grudge(victim, attacker) {
   if (attacker !== player || !victim.aiType) return;
-  const react = s => {
+  const react = (s) => {
     if (s.aiType >= 3 || s.aiType === 2) s.hostile = true;
     else s.fleeing = true;
   };
   react(victim);
   for (const s of S.aiShips) if (s.govt === victim.govt && s.govt >= 128) react(s);
-  if (victim.isPers) {                        // a character you fired on won't deal with you
+  if (victim.isPers) {
+    // a character you fired on won't deal with you
     victim.offered = true;
     if (victim.persFlags & PF.GRUDGE) persGrudge.add(victim.persId); // and remembers it
   }
@@ -236,23 +275,44 @@ export function shipHalf(e) {
  * every owned outfit's effect; outfit Mass consumes the hull's FreeMass. */
 export function effectiveShip() {
   const rec = { ...ships[S.playerShipId] };
-  let h = rec.Holds, fm = rec.Fuel, massUsed = 0;
+  let h = rec.Holds,
+    fm = rec.Fuel,
+    massUsed = 0;
   for (const [id, n] of Object.entries(outfits)) {
     const o = DATA.types.outf[id];
     if (!o || !n) continue;
     massUsed += o.Mass * n;
     switch (o.$sem && o.$sem.modType) {
-      case 'cargoSpace':     h += o.ModVal * n; break;
-      case 'fuelCapacity':   fm += o.ModVal * n; break;
-      case 'shieldCapacity': rec.Shield += o.ModVal * n; break;
-      case 'armor':          rec.Armor += o.ModVal * n; break;
-      case 'accelBoost':     rec.Accel += o.ModVal * n; break;
-      case 'speedBoost':     rec.Speed += o.ModVal * n; break;
-      case 'turnBoost':      rec.Maneuver += o.ModVal * n; break;
+      case 'cargoSpace':
+        h += o.ModVal * n;
+        break;
+      case 'fuelCapacity':
+        fm += o.ModVal * n;
+        break;
+      case 'shieldCapacity':
+        rec.Shield += o.ModVal * n;
+        break;
+      case 'armor':
+        rec.Armor += o.ModVal * n;
+        break;
+      case 'accelBoost':
+        rec.Accel += o.ModVal * n;
+        break;
+      case 'speedBoost':
+        rec.Speed += o.ModVal * n;
+        break;
+      case 'turnBoost':
+        rec.Maneuver += o.ModVal * n;
+        break;
     }
   }
-  return { rec, holds: h, fuelMax: fm, massUsed,
-           freeMass: ships[S.playerShipId].FreeMass - massUsed };
+  return {
+    rec,
+    holds: h,
+    fuelMax: fm,
+    massUsed,
+    freeMass: ships[S.playerShipId].FreeMass - massUsed,
+  };
 }
 export function applyShipStats() {
   const s = effectiveShip();
@@ -281,15 +341,20 @@ export function linkedSystems() {
 }
 
 export function mapBearingTo(destId) {
-  const a = systs[S.SYSTEM_ID], b = systs[destId];
+  const a = systs[S.SYSTEM_ID],
+    b = systs[destId];
   return EV.bearing(b.xPos - a.xPos, b.yPos - a.yPos);
 }
 
 export function nearestSpobInfo() {
-  let best = null, bd = Infinity;
+  let best = null,
+    bd = Infinity;
   for (const p of S.spobs) {
     const d = Math.hypot(p.x - player.x, p.y - player.y);
-    if (d < bd) { bd = d; best = p; }
+    if (d < bd) {
+      bd = d;
+      best = p;
+    }
   }
   return { spob: best, dist: bd };
 }
@@ -297,7 +362,10 @@ export let warpSnd = null;
 export function beginJump() {
   if (S.jump || S.landedAt) return;
   if (S.jumpDest == null || !linkedSystems().includes(S.jumpDest)) return;
-  if (S.fuel < EV.JUMP_FUEL) { showMsg('Not enough fuel to jump.'); return; }
+  if (S.fuel < EV.JUMP_FUEL) {
+    showMsg('Not enough fuel to jump.');
+    return;
+  }
   const near = nearestSpobInfo();
   if (near.spob && near.dist < EV.JUMP_MIN_DIST) {
     showMsg(`You are too close to ${near.spob.name} to engage your hyperdrive.`);
@@ -315,22 +383,23 @@ export function beginJump() {
 }
 export function abortJump() {
   S.jump = null;
-  stopSnd(warpSnd); warpSnd = null;
+  stopSnd(warpSnd);
+  warpSnd = null;
 }
 export function completeJump() {
   const from = S.SYSTEM_ID;
-  S.gameDay++;                    // a day passes each hyperspace jump (spec)
+  S.gameDay++; // a day passes each hyperspace jump (spec)
   if (fightersOut()) recallFighters(); // fighters dock before the carrier jumps out
   loadSystem(S.jump.destId);
   // placeAtArrival wants the inbound bearing (origin → dest); from the
   // destination, mapBearingTo(origin) is the reverse bearing, so flip it.
   EV.placeAtArrival(player, EV.norm(mapBearingTo(from) + 180));
-  spawnEscorts();               // fleet jumps in around the now-placed player
+  spawnEscorts(); // fleet jumps in around the now-placed player
   S.fuel -= EV.JUMP_FUEL;
-  S.jump = null; S.jumpDest = null;
+  S.jump = null;
+  S.jumpDest = null;
   checkExpiredMissions();
-  chargeEscortUpkeep();          // pay the fleet's salaries; the unpaid quit here
+  chargeEscortUpkeep(); // pay the fleet's salaries; the unpaid quit here
   warpSnd = null; // Warp Up ends naturally as the streak completes
   playSnd(130); // Warp Out
 }
-

@@ -13,7 +13,7 @@
 
 function compositeSprite(sprite, mask) {
   const { width, height, rgba } = sprite;
-  const out = new Uint8ClampedArray(rgba);         // copy the RGB
+  const out = new Uint8ClampedArray(rgba); // copy the RGB
   if (mask && mask.width === width && mask.height === height) {
     // Alpha = mask luminance (Rec.601), matching ImageMagick CopyOpacity —
     // masks are grayscale, but decoded edge pixels can carry slight color.
@@ -30,4 +30,6 @@ function compositeSprite(sprite, mask) {
 // xSize/ySize — kept in one place there to avoid two copies drifting.)
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { compositeSprite };
-if (typeof self !== 'undefined') { self.compositeSprite = compositeSprite; }
+if (typeof self !== 'undefined') {
+  self.compositeSprite = compositeSprite;
+}

@@ -35,12 +35,18 @@ const IS_NODE = typeof process !== 'undefined' && !!(process.versions && process
 // In the browser these stay unused (the loader calls only the read path). If a
 // Node-only entry point like loadFork() is reached there anyway, throw a clear
 // message on first access instead of a cryptic "Cannot read properties of null".
-const nodeOnly = (name) => new Proxy({}, {
-  get(_t, prop) {
-    throw new Error(`evrsrc.js: '${name}.${String(prop)}' is Node-only and unavailable in the browser — ` +
-      `use the read path (parseFork/decodeRecord/decodeStrList/findType) instead`);
-  },
-});
+const nodeOnly = (name) =>
+  new Proxy(
+    {},
+    {
+      get(_t, prop) {
+        throw new Error(
+          `evrsrc.js: '${name}.${String(prop)}' is Node-only and unavailable in the browser — ` +
+            `use the read path (parseFork/decodeRecord/decodeStrList/findType) instead`,
+        );
+      },
+    },
+  );
 const fs = IS_NODE ? require('fs') : nodeOnly('fs');
 const path = IS_NODE ? require('path') : nodeOnly('path');
 
@@ -66,7 +72,10 @@ function stringToMacRoman(str) {
   for (let i = 0; i < str.length; i++) {
     const c = str[i];
     const cc = c.charCodeAt(0);
-    if (cc < 0x80) { out[i] = cc; continue; }
+    if (cc < 0x80) {
+      out[i] = cc;
+      continue;
+    }
     const hi = MACROMAN_HIGH.indexOf(c);
     if (hi < 0) throw new Error(`Character '${c}' not representable in MacRoman`);
     out[i] = 0x80 + hi;
@@ -79,11 +88,30 @@ function stringToMacRoman(str) {
  * all-ASCII type codes. Aliases below cover classic EV / Override / Nova.
  */
 const TYPE_ALIASES = {
-  ship: 'shïp', spob: 'spöb', syst: 'sÿst', weap: 'wëap', misn: 'mïsn',
-  dude: 'düde', govt: 'gövt', spin: 'spïn', desc: 'dësc', outf: 'oütf',
-  char: 'chär', pers: 'përs', boom: 'bööm', intf: 'ïntf', cron: 'crön',
-  nebu: 'nëbu', junk: 'jünk', oops: 'öops', rank: 'ränk', roid: 'röid',
-  flet: 'flët', shan: 'shän', rled: 'rlëD', colr: 'cölr',
+  ship: 'shïp',
+  spob: 'spöb',
+  syst: 'sÿst',
+  weap: 'wëap',
+  misn: 'mïsn',
+  dude: 'düde',
+  govt: 'gövt',
+  spin: 'spïn',
+  desc: 'dësc',
+  outf: 'oütf',
+  char: 'chär',
+  pers: 'përs',
+  boom: 'bööm',
+  intf: 'ïntf',
+  cron: 'crön',
+  nebu: 'nëbu',
+  junk: 'jünk',
+  oops: 'öops',
+  rank: 'ränk',
+  roid: 'röid',
+  flet: 'flët',
+  shan: 'shän',
+  rled: 'rlëD',
+  colr: 'cölr',
 };
 
 function resolveType(arg) {
@@ -104,12 +132,17 @@ function resolveType(arg) {
 
 function looksLikeResourceFork(buf) {
   if (buf.length < 16) return false;
-  const dataOff = buf.readUInt32BE(0), mapOff = buf.readUInt32BE(4);
-  const dataLen = buf.readUInt32BE(8), mapLen = buf.readUInt32BE(12);
-  return dataOff >= 16 && mapLen >= 30 &&
+  const dataOff = buf.readUInt32BE(0),
+    mapOff = buf.readUInt32BE(4);
+  const dataLen = buf.readUInt32BE(8),
+    mapLen = buf.readUInt32BE(12);
+  return (
+    dataOff >= 16 &&
+    mapLen >= 30 &&
     dataOff + dataLen <= buf.length &&
     mapOff + mapLen <= buf.length &&
-    mapOff >= dataOff + dataLen;
+    mapOff >= dataOff + dataLen
+  );
 }
 
 function unwrapMacBinary(buf) {
@@ -136,8 +169,10 @@ function unwrapAppleDouble(buf) {
   const n = buf.readUInt16BE(24);
   for (let i = 0; i < n; i++) {
     const e = 26 + i * 12;
-    if (buf.readUInt32BE(e) === 2) { // entry ID 2 = resource fork
-      const off = buf.readUInt32BE(e + 4), len = buf.readUInt32BE(e + 8);
+    if (buf.readUInt32BE(e) === 2) {
+      // entry ID 2 = resource fork
+      const off = buf.readUInt32BE(e + 4),
+        len = buf.readUInt32BE(e + 8);
       return { container: 'AppleDouble', fork: buf.subarray(off, off + len) };
     }
   }
@@ -152,13 +187,18 @@ function unwrapFork(buf) {
   const ad = unwrapAppleDouble(buf);
   if (ad) return ad;
   if (looksLikeResourceFork(buf)) return { container: 'raw fork', fork: buf };
-  throw new Error('not MacBinary, AppleDouble, or a raw resource fork ' +
-    "(if this is a .sit/.cpt archive, expand it first — 'unar' handles StuffIt)");
+  throw new Error(
+    'not MacBinary, AppleDouble, or a raw resource fork ' +
+      "(if this is a .sit/.cpt archive, expand it first — 'unar' handles StuffIt)",
+  );
 }
 
 function loadFork(file) {
-  try { return unwrapFork(fs.readFileSync(file)); }
-  catch (e) { throw new Error(`${file}: ${e.message}`, { cause: e }); }
+  try {
+    return unwrapFork(fs.readFileSync(file));
+  } catch (e) {
+    throw new Error(`${file}: ${e.message}`, { cause: e });
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -195,7 +235,10 @@ function parseFork(fork) {
         name = macRomanToString(map.subarray(np + 1, np + 1 + map[np]));
       }
       resources.push({
-        id, name, attrs, length: len,
+        id,
+        name,
+        attrs,
+        length: len,
         data: () => fork.subarray(dataOff + dOff + 4, dataOff + dOff + 4 + len),
       });
     }
@@ -226,7 +269,12 @@ function mergeTypes(...typeArrays) {
     for (const t of types) {
       let entry = byType.get(t.typeHex);
       if (!entry) {
-        entry = { typeBytes: t.typeBytes, typeName: t.typeName, typeHex: t.typeHex, ids: new Map() };
+        entry = {
+          typeBytes: t.typeBytes,
+          typeName: t.typeName,
+          typeHex: t.typeHex,
+          ids: new Map(),
+        };
         byType.set(t.typeHex, entry);
       }
       // Map.set on an existing key overrides the value but keeps its position;
@@ -234,15 +282,17 @@ function mergeTypes(...typeArrays) {
       for (const r of t.resources) entry.ids.set(r.id, r);
     }
   }
-  return [...byType.values()].map(e => ({
-    typeBytes: e.typeBytes, typeName: e.typeName, typeHex: e.typeHex,
+  return [...byType.values()].map((e) => ({
+    typeBytes: e.typeBytes,
+    typeName: e.typeName,
+    typeHex: e.typeHex,
     resources: [...e.ids.values()],
   }));
 }
 
 function findType(types, typeArg) {
   const want = resolveType(typeArg);
-  return types.find(t => t.typeBytes.equals(want));
+  return types.find((t) => t.typeBytes.equals(want));
 }
 
 /* ------------------------------------------------------------------ */
@@ -262,18 +312,33 @@ function decodeRecord(buf, schema) {
     if (repeat) for (let i = 1; i <= repeat; i++) fields.push([`${name}${i}`, type]);
     else fields.push([name, type]);
   }
-  const size = (t) => ({ i8: 1, u8: 1, i16: 2, u16: 2, i32: 4, u32: 4 }[t] ??
-    +(/(\d+)$/.exec(t) || [0, 0])[1]);
+  const size = (t) =>
+    ({ i8: 1, u8: 1, i16: 2, u16: 2, i32: 4, u32: 4 })[t] ?? +(/(\d+)$/.exec(t) || [0, 0])[1];
   for (const [name, type] of fields) {
-    if (off + size(type) > buf.length) { out.__truncatedAt = name; break; }
+    if (off + size(type) > buf.length) {
+      out.__truncatedAt = name;
+      break;
+    }
     let m;
-    if (type === 'i8') { out[name] = buf.readInt8(off); off += 1; }
-    else if (type === 'u8') { out[name] = buf.readUInt8(off); off += 1; }
-    else if (type === 'i16') { out[name] = buf.readInt16BE(off); off += 2; }
-    else if (type === 'u16') { out[name] = buf.readUInt16BE(off); off += 2; }
-    else if (type === 'i32') { out[name] = buf.readInt32BE(off); off += 4; }
-    else if (type === 'u32') { out[name] = buf.readUInt32BE(off); off += 4; }
-    else if ((m = /^pstr(\d+)$/.exec(type))) {
+    if (type === 'i8') {
+      out[name] = buf.readInt8(off);
+      off += 1;
+    } else if (type === 'u8') {
+      out[name] = buf.readUInt8(off);
+      off += 1;
+    } else if (type === 'i16') {
+      out[name] = buf.readInt16BE(off);
+      off += 2;
+    } else if (type === 'u16') {
+      out[name] = buf.readUInt16BE(off);
+      off += 2;
+    } else if (type === 'i32') {
+      out[name] = buf.readInt32BE(off);
+      off += 4;
+    } else if (type === 'u32') {
+      out[name] = buf.readUInt32BE(off);
+      off += 4;
+    } else if ((m = /^pstr(\d+)$/.exec(type))) {
       const n = +m[1];
       out[name] = macRomanToString(buf.subarray(off + 1, off + 1 + Math.min(buf[off], n - 1)));
       off += n;
@@ -314,12 +379,13 @@ function buildFork(entries) {
   // entries: [{type: Buffer4, id, name?, data: Buffer}]
   const dataParts = [];
   let dOff = 0;
-  const withOffsets = entries.map(e => {
+  const withOffsets = entries.map((e) => {
     const rec = Buffer.alloc(4 + e.data.length);
     rec.writeUInt32BE(e.data.length, 0);
     e.data.copy(rec, 4);
     dataParts.push(rec);
-    const o = dOff; dOff += rec.length;
+    const o = dOff;
+    dOff += rec.length;
     return { ...e, dataOffset: o };
   });
   const dataArea = Buffer.concat(dataParts);
@@ -337,7 +403,8 @@ function buildFork(entries) {
     if (e.name != null) {
       const nb = stringToMacRoman(e.name);
       nameParts.push(Buffer.concat([Buffer.from([nb.length]), nb]));
-      e.nameOffset = nameOff; nameOff += 1 + nb.length;
+      e.nameOffset = nameOff;
+      nameOff += 1 + nb.length;
     } else e.nameOffset = 0xffff;
   }
   const nameList = Buffer.concat(nameParts.length ? nameParts : [Buffer.alloc(0)]);
@@ -370,8 +437,8 @@ function buildFork(entries) {
   const mapHeaderLen = 28;
   const mapLen = mapHeaderLen + typeList.length + nameList.length;
   const map = Buffer.alloc(mapLen);
-  map.writeUInt16BE(mapHeaderLen, 24);                    // type list offset
-  map.writeUInt16BE(mapHeaderLen + typeList.length, 26);  // name list offset
+  map.writeUInt16BE(mapHeaderLen, 24); // type list offset
+  map.writeUInt16BE(mapHeaderLen + typeList.length, 26); // name list offset
   typeList.copy(map, mapHeaderLen);
   nameList.copy(map, mapHeaderLen + typeList.length);
 
@@ -391,12 +458,9 @@ function buildFork(entries) {
 function selftest() {
   const shipType = resolveType('ship');
   const ship = Buffer.alloc(20);
-  ship.writeInt16BE(120, 0);   // pretend Holds
-  ship.writeInt16BE(4200, 2);  // pretend Shield
-  const strs = Buffer.concat([
-    Buffer.from([0, 2]),
-    Buffer.from([5]), stringToMacRoman('Aurora'),
-  ]);
+  ship.writeInt16BE(120, 0); // pretend Holds
+  ship.writeInt16BE(4200, 2); // pretend Shield
+  const strs = Buffer.concat([Buffer.from([0, 2]), Buffer.from([5]), stringToMacRoman('Aurora')]);
   // deliberate: 'Aurora' is 6 chars but we wrote len 5 -> catches slicing bugs
   const fork = buildFork([
     { type: shipType, id: 128, name: 'Shuttle', data: ship },
@@ -404,7 +468,9 @@ function selftest() {
     { type: resolveType('hex:53545223'), id: 200, data: strs }, // 'STR#'
   ]);
 
-  const assert = (cond, msg) => { if (!cond) throw new Error('selftest: ' + msg); };
+  const assert = (cond, msg) => {
+    if (!cond) throw new Error('selftest: ' + msg);
+  };
   assert(looksLikeResourceFork(fork), 'synthetic fork failed sniff test');
   const types = parseFork(fork);
   assert(types.length === 2, `expected 2 types, got ${types.length}`);
@@ -419,7 +485,8 @@ function selftest() {
 
   // Round-trip through MacBinary too.
   const mb = Buffer.alloc(128 + Math.ceil(fork.length / 128) * 128);
-  mb[1] = 4; mb.write('test', 2, 'ascii');
+  mb[1] = 4;
+  mb.write('test', 2, 'ascii');
   stringToMacRoman('Mpïn').copy(mb, 65);
   mb.write('EV..', 69, 'ascii');
   mb.writeUInt32BE(0, 83);
@@ -456,28 +523,38 @@ function main() {
   const types = parseFork(src.fork);
 
   if (cmd === 'info') {
-    console.log(`container: ${src.container}` +
-      (src.filename ? `  name: "${src.filename}"  type/creator: ${src.type}/${src.creator}` : ''));
-    console.log(`fork: ${src.fork.length} bytes, ${types.length} resource types, ` +
-      `${types.reduce((n, t) => n + t.resources.length, 0)} resources`);
+    console.log(
+      `container: ${src.container}` +
+        (src.filename ? `  name: "${src.filename}"  type/creator: ${src.type}/${src.creator}` : ''),
+    );
+    console.log(
+      `fork: ${src.fork.length} bytes, ${types.length} resource types, ` +
+        `${types.reduce((n, t) => n + t.resources.length, 0)} resources`,
+    );
     for (const t of types) {
       const sz = t.resources.reduce((n, r) => n + r.length, 0);
-      console.log(`  ${t.typeName.padEnd(4)} (${t.typeHex})  ` +
-        `${String(t.resources.length).padStart(4)} resources  ${sz} bytes`);
+      console.log(
+        `  ${t.typeName.padEnd(4)} (${t.typeHex})  ` +
+          `${String(t.resources.length).padStart(4)} resources  ${sz} bytes`,
+      );
     }
   } else if (cmd === 'list') {
     const list = args[1] ? [findType(types, args[1])].filter(Boolean) : types;
     for (const t of list)
       for (const r of t.resources)
-        console.log(`${t.typeName}  ${String(r.id).padStart(6)}  ` +
-          `${String(r.length).padStart(8)}B  ${r.name ?? ''}`);
+        console.log(
+          `${t.typeName}  ${String(r.id).padStart(6)}  ` +
+            `${String(r.length).padStart(8)}B  ${r.name ?? ''}`,
+        );
   } else if (cmd === 'extract') {
     if (!outDir) throw new Error('extract requires -o <dir>');
     const list = args[1] ? [findType(types, args[1])].filter(Boolean) : types;
     let n = 0;
     for (const t of list) {
-      const dir = path.join(outDir, t.typeHex + '_' +
-        t.typeName.replace(/[^\x20-\x7e]/g, '_').trim());
+      const dir = path.join(
+        outDir,
+        t.typeHex + '_' + t.typeName.replace(/[^\x20-\x7e]/g, '_').trim(),
+      );
       fs.mkdirSync(dir, { recursive: true });
       for (const r of t.resources) {
         const safe = r.name ? '_' + r.name.replace(/[^\w-]/g, '_') : '';
@@ -492,16 +569,18 @@ function main() {
     const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
     const t = findType(types, typeArg);
     if (!t) throw new Error(`type ${typeArg} not present`);
-    const r = t.resources.find(r => r.id === +idArg);
+    const r = t.resources.find((r) => r.id === +idArg);
     if (!r) throw new Error(`${typeArg} ${idArg} not found`);
     const rec = decodeRecord(r.data(), schema);
     if (rec.__schemaBytes !== rec.__recordBytes)
-      console.error(`⚠ schema covers ${rec.__schemaBytes}B but record is ` +
-        `${rec.__recordBytes}B — layout is wrong or partial, verify against the Bible`);
+      console.error(
+        `⚠ schema covers ${rec.__schemaBytes}B but record is ` +
+          `${rec.__recordBytes}B — layout is wrong or partial, verify against the Bible`,
+      );
     console.log(JSON.stringify({ id: r.id, name: r.name, ...rec }, null, 2));
   } else if (cmd === 'strings') {
     const t = findType(types, 'hex:53545223');
-    const r = t && t.resources.find(r => r.id === +args[1]);
+    const r = t && t.resources.find((r) => r.id === +args[1]);
     if (!r) throw new Error(`STR# ${args[1]} not found`);
     decodeStrList(r.data()).forEach((s, i) => console.log(`${i}\t${s}`));
   } else {
@@ -510,14 +589,28 @@ function main() {
 }
 
 const EVRSRC_API = {
-  loadFork, unwrapFork, parseFork, mergeTypes, findType, resolveType, decodeRecord, decodeStrList,
-  buildFork, macRomanToString, stringToMacRoman,
+  loadFork,
+  unwrapFork,
+  parseFork,
+  mergeTypes,
+  findType,
+  resolveType,
+  decodeRecord,
+  decodeStrList,
+  buildFork,
+  macRomanToString,
+  stringToMacRoman,
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = EVRSRC_API;
-if (typeof self !== 'undefined') self.EVRSRC = EVRSRC_API;   // browser loader
+if (typeof self !== 'undefined') self.EVRSRC = EVRSRC_API; // browser loader
 
 // Guard `module` too: a bundler can define `require` in the browser without a
 // `module` global, and `require.main === module` would then ReferenceError.
 if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
-  try { main(); } catch (e) { console.error('error:', e.message); process.exit(1); }
+  try {
+    main();
+  } catch (e) {
+    console.error('error:', e.message);
+    process.exit(1);
+  }
 }

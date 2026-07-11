@@ -1,4 +1,15 @@
-import { COMMODITIES, PRICE_MULT, S, cargo, html, outfits, preloadSprites, ships, showMsg, spinOfShip } from './01-state.js';
+import {
+  COMMODITIES,
+  PRICE_MULT,
+  S,
+  cargo,
+  html,
+  outfits,
+  preloadSprites,
+  ships,
+  showMsg,
+  spinOfShip,
+} from './01-state.js';
 import { applyShipStats, effectiveShip, fuelMax, holds, player } from './04-combat.js';
 import { renderBar, renderComputer } from './08-missions.js';
 import { renderPlanetScreen } from './14-landing.js';
@@ -15,7 +26,8 @@ import { renderPlanetScreen } from './14-landing.js';
 
 export const cargoNames = DATA.strings[4000].list.slice(0, 6);
 export const basePrices = DATA.strings[4004].list.slice(0, 6).map(Number);
-export const missionCargoUsed = () => S.activeMissions.reduce((n, a) => n + (a.cargoLoaded ? a.cargoQty : 0), 0);
+export const missionCargoUsed = () =>
+  S.activeMissions.reduce((n, a) => n + (a.cargoLoaded ? a.cargoQty : 0), 0);
 export const cargoUsed = () => COMMODITIES.reduce((n, c) => n + cargo[c], 0) + missionCargoUsed();
 
 export function priceAt(spob, i) {
@@ -41,12 +53,27 @@ export function trade(i, qty) {
  * shell reads it to know a dialog is up (pause the sim, swallow keys). */
 export let activeView = null;
 export class View {
-  constructor(panelId, cardId, render) { this.panelId = panelId; this.cardId = cardId; this.render = render; }
-  refresh() { document.getElementById(this.cardId).innerHTML = this.render(); }
-  open() { activeView = this; this.refresh(); document.getElementById(this.panelId).style.display = 'flex'; }
-  close() { if (activeView === this) activeView = null; document.getElementById(this.panelId).style.display = 'none'; }
+  constructor(panelId, cardId, render) {
+    this.panelId = panelId;
+    this.cardId = cardId;
+    this.render = render;
+  }
+  refresh() {
+    document.getElementById(this.cardId).innerHTML = this.render();
+  }
+  open() {
+    activeView = this;
+    this.refresh();
+    document.getElementById(this.panelId).style.display = 'flex';
+  }
+  close() {
+    if (activeView === this) activeView = null;
+    document.getElementById(this.panelId).style.display = 'none';
+  }
 }
-export const refreshView = () => { if (activeView) activeView.refresh(); };
+export const refreshView = () => {
+  if (activeView) activeView.refresh();
+};
 
 // The five landing-screen services share the one 'service' panel; each is a View
 // over a pure render function (renderExchange/… below and in 08-missions.js).
@@ -58,8 +85,13 @@ export const SERVICE_VIEWS = {
   missioncomputer: new View('service', 'serviceCard', renderComputer),
 };
 export function openService(kind) {
-  const gate = { exchange: 'commodityExchange', outfitter: 'outfitter', shipyard: 'shipyard',
-    bar: 'bar', missioncomputer: 'canLand' }[kind];
+  const gate = {
+    exchange: 'commodityExchange',
+    outfitter: 'outfitter',
+    shipyard: 'shipyard',
+    bar: 'bar',
+    missioncomputer: 'canLand',
+  }[kind];
   if (!S.landedAt || !(S.landedAt.$sem && S.landedAt.$sem[gate])) return;
   if (kind === 'outfitter' && !outfitterStock(S.landedAt).length) return;
   if (kind === 'shipyard' && !shipyardStock(S.landedAt).length) return;
@@ -83,7 +115,8 @@ export function techAvailable(itemTech, p) {
 }
 
 export function renderExchange() {
-  const p = S.landedAt, m = p.$sem || {};
+  const p = S.landedAt,
+    m = p.$sem || {};
   const rows = [];
   for (let i = 0; i < 6; i++) {
     const price = priceAt(p, i);
@@ -92,11 +125,15 @@ export function renderExchange() {
     const lvl = m.prices[COMMODITIES[i]];
     rows.push(html`<tr><td>${cargoNames[i]}${lvl ? html` <span class="meta" style="margin:0">(${lvl})</span>` : ''}</td>
       <td class="num">${price != null ? price + ' cr' : '—'}</td>
-      <td class="num">${held}</td><td style="text-align:right">${price != null ? html`
+      <td class="num">${held}</td><td style="text-align:right">${
+        price != null
+          ? html`
         <button onclick="trade(${i},-10)" ${held < 1 ? 'disabled' : ''}>-10</button>
         <button onclick="trade(${i},-1)"  ${held < 1 ? 'disabled' : ''}>-1</button>
         <button onclick="trade(${i},1)"   ${cargoUsed() >= holds || S.credits < price ? 'disabled' : ''}>+1</button>
-        <button onclick="trade(${i},10)"  ${cargoUsed() >= holds || S.credits < price ? 'disabled' : ''}>+10</button>` : ''}</td></tr>`);
+        <button onclick="trade(${i},10)"  ${cargoUsed() >= holds || S.credits < price ? 'disabled' : ''}>+10</button>`
+          : ''
+      }</td></tr>`);
   }
   return html`<h2>Commodity Exchange</h2>
     <div class="meta">${p.name} · prices per ton</div>
@@ -106,8 +143,8 @@ export function renderExchange() {
 
 /* ---- outfitter ---- */
 
-export const outfitName = id => DATA.strings[5000].list[id - 128] ||
-  (DATA.types.outf[id] ? 'outfit ' + id : null);
+export const outfitName = (id) =>
+  DATA.strings[5000].list[id - 128] || (DATA.types.outf[id] ? 'outfit ' + id : null);
 
 export function buyOutfit(id, qty) {
   const o = DATA.types.outf[id];
@@ -128,7 +165,7 @@ export function buyOutfit(id, qty) {
   applyShipStats();
   // cargo can't exceed a shrunken hold: dump overflow (paid nothing for it)
   while (cargoUsed() > holds) {
-    const c = COMMODITIES.find(c => cargo[c] > 0);
+    const c = COMMODITIES.find((c) => cargo[c] > 0);
     if (!c) break;
     cargo[c]--;
   }
@@ -138,7 +175,8 @@ export function buyOutfit(id, qty) {
 /* Classic shop layout. Menu-sheet thumbnails: outfit i (id−128) lives at
  * cell (i%8, ⌊i/8⌋) of PICT 6100; ships likewise in PICT 5100. Large
  * 100×100 dialog art: outfit → PICT 6000+i, ship → PICT 5000+i. */
-export let selOutfitId = null, selShipId = null;
+export let selOutfitId = null,
+  selShipId = null;
 
 /* Only items actually available here are shown — no empty or grayed
  * slots (the grid compacts; each thumbnail is still sliced from the
@@ -157,30 +195,38 @@ export function shopGrid(sheet, items, selId, clickFn) {
 /* Would this spob's shop have anything to show? Gates both the dialog
  * and the button on the landing screen. */
 export function outfitterStock(p) {
-  return Object.entries(DATA.types.outf).filter(([id, o]) =>
-    o.MissionBit < 0 && (techAvailable(o.TechLevel, p) || (outfits[id] || 0) > 0));
+  return Object.entries(DATA.types.outf).filter(
+    ([id, o]) => o.MissionBit < 0 && (techAvailable(o.TechLevel, p) || (outfits[id] || 0) > 0),
+  );
 }
 export function shipyardStock(p) {
-  return Object.entries(ships).filter(([, r]) =>
-    r.MissionBit < 0 && techAvailable(r.TechLevel, p));
+  return Object.entries(ships).filter(([, r]) => r.MissionBit < 0 && techAvailable(r.TechLevel, p));
 }
 
-export function selectOutfit(id) { selOutfitId = id; refreshView(); }
-export function selectShip(id) { selShipId = id; refreshView(); }
+export function selectOutfit(id) {
+  selOutfitId = id;
+  refreshView();
+}
+export function selectShip(id) {
+  selShipId = id;
+  refreshView();
+}
 
 export function renderOutfitter() {
   const p = S.landedAt;
   const s = effectiveShip();
   const items = outfitterStock(p).map(([id]) => ({ id: +id }));
-  if (selOutfitId == null || !items.some(x => x.id === selOutfitId))
+  if (selOutfitId == null || !items.some((x) => x.id === selOutfitId))
     selOutfitId = items.length ? items[0].id : null;
 
   let pane = '';
   if (selOutfitId != null) {
     const o = DATA.types.outf[selOutfitId];
     const own = outfits[selOutfitId] || 0;
-    const canBuy = techAvailable(o.TechLevel, p) &&
-      S.credits >= o.Cost && (o.Max <= 0 || own < o.Max) &&
+    const canBuy =
+      techAvailable(o.TechLevel, p) &&
+      S.credits >= o.Cost &&
+      (o.Max <= 0 || own < o.Max) &&
       (o.Mass <= 0 || s.freeMass >= o.Mass);
     pane = html`<div class="shoppane">
       <img src="evassets/graphics/PICT_${6000 + (selOutfitId - 128)}.png" onerror="this.style.visibility='hidden'">
@@ -200,16 +246,21 @@ export function renderOutfitter() {
 
 /* ---- shipyard ---- */
 
-export const shipyardName = id => DATA.strings[5001].list[id - 128] ||
-  (ships[id] ? ships[id].name : null);
+export const shipyardName = (id) =>
+  DATA.strings[5001].list[id - 128] || (ships[id] ? ships[id].name : null);
 
 /* Trade-in per the resource bible: "the cost of buying a ship is always
  * the cost of the new ship minus 25% of the original cost of your current
  * ship and upgrades." */
 export function tradeInValue() {
-  return Math.round(0.25 * (ships[S.playerShipId].Cost +
-    Object.entries(outfits).reduce((n, [oid, c]) =>
-      n + (DATA.types.outf[oid] ? DATA.types.outf[oid].Cost * c : 0), 0)));
+  return Math.round(
+    0.25 *
+      (ships[S.playerShipId].Cost +
+        Object.entries(outfits).reduce(
+          (n, [oid, c]) => n + (DATA.types.outf[oid] ? DATA.types.outf[oid].Cost * c : 0),
+          0,
+        )),
+  );
 }
 export function buyShip(id) {
   const rec = ships[id];
@@ -217,7 +268,10 @@ export function buyShip(id) {
   const refund = tradeInValue();
   const price = rec.Cost - refund;
   if (S.credits < price) return;
-  if (cargoUsed() > rec.Holds) { showMsg('Your cargo would not fit aboard.'); return; }
+  if (cargoUsed() > rec.Holds) {
+    showMsg('Your cargo would not fit aboard.');
+    return;
+  }
   S.credits -= price;
   S.playerShipId = id;
   player.shipId = id;
@@ -233,7 +287,7 @@ export function renderShipyard() {
   const p = S.landedAt;
   const refund = tradeInValue();
   const items = shipyardStock(p).map(([id]) => ({ id: +id }));
-  if (selShipId == null || !items.some(x => x.id === selShipId))
+  if (selShipId == null || !items.some((x) => x.id === selShipId))
     selShipId = items.length ? items[0].id : null;
 
   let pane = '';
@@ -258,4 +312,3 @@ export function renderShipyard() {
        trade-in: 25% of hull + upgrades (${refund.toLocaleString('en-US')} cr)</div>
      <div class="shop">${shopGrid('PICT_5100.png', items, selShipId, 'selectShip')}${pane}</div>${walletHtml()}`;
 }
-

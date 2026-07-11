@@ -22,15 +22,19 @@ const SPOB_FLAGS = {
   0x00000002: 'commodityExchange',
   0x00000004: 'outfitter',
   0x00000008: 'shipyard',
-  0x00000010: 'station',        // else planet
-  0x00000020: 'uninhabited',    // no traffic control
+  0x00000010: 'station', // else planet
+  0x00000020: 'uninhabited', // no traffic control
   0x00000040: 'bar',
 };
 
 // Commodity price levels live in nibbles 7..2 of spöb Flags (1/2/4 = low/med/high).
 const COMMODITY_NIBBLES = [
-  ['food', 7], ['industrial', 6], ['medical', 5],
-  ['luxury', 4], ['metal', 3], ['equipment', 2],
+  ['food', 7],
+  ['industrial', 6],
+  ['medical', 5],
+  ['luxury', 4],
+  ['metal', 3],
+  ['equipment', 2],
 ];
 const PRICE_LEVEL = { 0: null, 1: 'low', 2: 'medium', 4: 'high' };
 
@@ -39,8 +43,8 @@ function decodeSpobFlags(flags) {
   const out = { prices: {} };
   for (const [bit, name] of Object.entries(SPOB_FLAGS)) out[name] = !!(f & bit);
   for (const [commodity, nibble] of COMMODITY_NIBBLES) {
-    const lvl = PRICE_LEVEL[(f >>> (nibble * 4)) & 0xF];
-    if (lvl === undefined) out.prices[commodity] = `invalid(${(f >>> (nibble * 4)) & 0xF})`;
+    const lvl = PRICE_LEVEL[(f >>> (nibble * 4)) & 0xf];
+    if (lvl === undefined) out.prices[commodity] = `invalid(${(f >>> (nibble * 4)) & 0xf})`;
     else if (lvl) out.prices[commodity] = lvl;
   }
   return out;
@@ -49,20 +53,20 @@ function decodeSpobFlags(flags) {
 /* ---------------- gövt ---------------- */
 
 const GOVT_FLAGS = {
-  0x0001: 'xenophobic',               // warships attack everyone but allies
-  0x0002: 'enforcesLawsEverywhere',   // attacks player-criminals in non-allied systems
+  0x0001: 'xenophobic', // warships attack everyone but allies
+  0x0002: 'enforcesLawsEverywhere', // attacks player-criminals in non-allied systems
   0x0004: 'alwaysAttacksPlayer',
   0x0010: 'retreatsAt25pctShields',
   0x0020: 'ignoredByGoodSamaritan',
-  0x0040: 'neverAttacksPlayer',       // player's weapons can't hit them either
+  0x0040: 'neverAttacksPlayer', // player's weapons can't hit them either
   0x0100: 'persNoEscapePod',
   0x0200: 'warshipsTakeBribes',
   0x0400: 'cannotHail',
-  0x0800: 'startsDisabled',           // derelicts
+  0x0800: 'startsDisabled', // derelicts
   0x1000: 'plundersEnemies',
   0x2000: 'freightersTakeBribes',
   0x4000: 'planetsTakeBribes',
-  0x8000: 'greedyBribes',             // demand more, planets always take bribes
+  0x8000: 'greedyBribes', // demand more, planets always take bribes
 };
 
 /* ---------------- mïsn ---------------- */
@@ -74,12 +78,12 @@ const MISN_FLAGS = {
   0x0010: 'infiniteAuxShips',
   0x0020: 'removePrepaidOutfitOnFail',
   0x0040: 'abortReversal5xCompReward',
-  0x0080: 'jettisonPenalty',          // ignored by engine
+  0x0080: 'jettisonPenalty', // ignored by engine
   0x0100: 'greenArrowInBriefing',
   0x0200: 'arrowOnShipSyst',
-  0x1000: 'critical',                 // offered before others in the bar
-  0x2000: 'notForCargoShips',         // player inherentAI 1-2
-  0x4000: 'notForWarships',           // player inherentAI 3-4
+  0x1000: 'critical', // offered before others in the bar
+  0x2000: 'notForCargoShips', // player inherentAI 1-2
+  0x4000: 'notForWarships', // player inherentAI 3-4
 };
 
 /* ---------------- përs ---------------- */
@@ -109,20 +113,45 @@ const PERS_FLAGS = {
 // 1 = Torpedos, 2 = Missiles/Seeker Drones — two homing variants (different
 // seeker/jamming behavior) that Override later merged into 1.
 const GUIDANCE = {
-  '-1': 'unguided', 0: 'beam', 1: 'homing', 2: 'homing2', 3: 'turretedBeam',
-  4: 'turret', 5: 'freefallBomb', 6: 'rocket',
-  7: 'frontQuadrantTurret', 8: 'rearQuadrantTurret',
-  99: 'fighterBay',       // AmmoType is the shïp class ID
+  '-1': 'unguided',
+  0: 'beam',
+  1: 'homing',
+  2: 'homing2',
+  3: 'turretedBeam',
+  4: 'turret',
+  5: 'freefallBomb',
+  6: 'rocket',
+  7: 'frontQuadrantTurret',
+  8: 'rearQuadrantTurret',
+  99: 'fighterBay', // AmmoType is the shïp class ID
 };
 
 const MOD_TYPES = {
-  1: 'weapon', 2: 'cargoSpace', 3: 'ammunition', 4: 'shieldCapacity',
-  5: 'shieldRecharge', 6: 'armor', 7: 'accelBoost', 8: 'speedBoost',
-  9: 'turnBoost', 10: 'ecm', 11: 'escapePod', 12: 'fuelCapacity',
-  13: 'densityScanner', 14: 'iff', 15: 'afterburner', 16: 'map',
-  17: 'cloakingDevice', 18: 'fuelScoop', 19: 'autoRefueller',
-  20: 'autoEject', 21: 'cleanLegalRecord', 22: 'hyperspaceSpeedMod',
-  23: 'hyperspaceDistMod', 24: 'interferenceMod', 25: 'marines',
+  1: 'weapon',
+  2: 'cargoSpace',
+  3: 'ammunition',
+  4: 'shieldCapacity',
+  5: 'shieldRecharge',
+  6: 'armor',
+  7: 'accelBoost',
+  8: 'speedBoost',
+  9: 'turnBoost',
+  10: 'ecm',
+  11: 'escapePod',
+  12: 'fuelCapacity',
+  13: 'densityScanner',
+  14: 'iff',
+  15: 'afterburner',
+  16: 'map',
+  17: 'cloakingDevice',
+  18: 'fuelScoop',
+  19: 'autoRefueller',
+  20: 'autoEject',
+  21: 'cleanLegalRecord',
+  22: 'hyperspaceSpeedMod',
+  23: 'hyperspaceDistMod',
+  24: 'interferenceMod',
+  25: 'marines',
   26: 'alterMissionBit',
 };
 
@@ -133,10 +162,17 @@ const SPIN_BASES = { ship: 128, weapon: 200, stellar: 300, explosion: 400, box: 
 
 // STR# roles, straight from the resource names in EV Data.
 const STRING_ROLES = {
-  134: 'legalStatus', 138: 'combatRatings', 1100: 'stellarTypes',
-  4000: 'cargoNames', 4001: 'cargoNamesLC', 4002: 'cargoAbbrev',
-  4004: 'cargoBasePrices', 5000: 'outfitNames', 5001: 'shipyardNames',
-  5002: 'shipLongNames', 6000: 'govtTransponders',
+  134: 'legalStatus',
+  138: 'combatRatings',
+  1100: 'stellarTypes',
+  4000: 'cargoNames',
+  4001: 'cargoNamesLC',
+  4002: 'cargoAbbrev',
+  4004: 'cargoBasePrices',
+  5000: 'outfitNames',
+  5001: 'shipyardNames',
+  5002: 'shipLongNames',
+  6000: 'govtTransponders',
 };
 
 /* ---------------- decoding helpers ---------------- */
@@ -162,34 +198,34 @@ function decorate(db) {
     for (const [id, r] of Object.entries(db.types[type] || {})) r.$sem = fn(r, +id);
   };
 
-  each('spob', p => ({
+  each('spob', (p) => ({
     ...decodeSpobFlags(p.Flags),
     stellarType: stellarTypes[p.Type] || null,
     spinID: SPIN_BASES.stellar + p.Type,
     system: ref(db, 'syst', p.System),
     govt: ref(db, 'govt', p.Govt),
   }));
-  each('syst', s => ({
+  each('syst', (s) => ({
     govt: ref(db, 'govt', s.Govt),
   }));
-  each('govt', g => ({ flags: flagNames(GOVT_FLAGS, g.Flags) }));
-  each('weap', w => ({
+  each('govt', (g) => ({ flags: flagNames(GOVT_FLAGS, g.Flags) }));
+  each('weap', (w) => ({
     guidance: GUIDANCE[w.Guidance] ?? `unknown(${w.Guidance})`,
     carriedShip: w.Guidance === 99 ? ref(db, 'ship', w.AmmoType) : undefined,
   }));
-  each('outf', o => ({ modType: MOD_TYPES[o.ModType] ?? `unknown(${o.ModType})` }));
-  each('dude', u => ({
+  each('outf', (o) => ({ modType: MOD_TYPES[o.ModType] ?? `unknown(${o.ModType})` }));
+  each('dude', (u) => ({
     aiType: AI_TYPES[u.AIType] ?? `unknown(${u.AIType})`,
     govt: ref(db, 'govt', u.Govt),
   }));
-  each('pers', p => ({
+  each('pers', (p) => ({
     aiType: AI_TYPES[p.AIType] ?? `unknown(${p.AIType})`,
     flags: flagNames(PERS_FLAGS, p.Flags),
     govt: ref(db, 'govt', p.Govt),
     ship: ref(db, 'ship', p.ShipType),
   }));
-  each('misn', m => ({ flags: flagNames(MISN_FLAGS, m.Flags) }));
-  each('ship', s => ({
+  each('misn', (m) => ({ flags: flagNames(MISN_FLAGS, m.Flags) }));
+  each('ship', (s) => ({
     inherentAI: AI_TYPES[s.InherentAI] ?? `unknown(${s.InherentAI})`,
     inherentGovt: ref(db, 'govt', s.InherentGovt),
   }));
@@ -197,9 +233,19 @@ function decorate(db) {
 }
 
 const SEMANTICS_API = {
-  SPOB_FLAGS, GOVT_FLAGS, MISN_FLAGS, PERS_FLAGS,
-  GUIDANCE, MOD_TYPES, AI_TYPES, SPIN_BASES, STRING_ROLES, PRICE_LEVEL,
-  decodeSpobFlags, flagNames, decorate,
+  SPOB_FLAGS,
+  GOVT_FLAGS,
+  MISN_FLAGS,
+  PERS_FLAGS,
+  GUIDANCE,
+  MOD_TYPES,
+  AI_TYPES,
+  SPIN_BASES,
+  STRING_ROLES,
+  PRICE_LEVEL,
+  decodeSpobFlags,
+  flagNames,
+  decorate,
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = SEMANTICS_API;
-if (typeof self !== 'undefined') self.SEMANTICS = SEMANTICS_API;   // browser loader
+if (typeof self !== 'undefined') self.SEMANTICS = SEMANTICS_API; // browser loader

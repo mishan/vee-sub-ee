@@ -40,7 +40,7 @@ function exportAll(file, schemaDir, pluginFiles = []) {
   // first). Merges game records + STR#; plugin graphics/sounds are handled by
   // the asset pipeline (not this record export).
   const types = pluginFiles.length
-    ? mergeTypes(baseTypes, ...pluginFiles.map(f => parseFork(loadFork(f).fork)))
+    ? mergeTypes(baseTypes, ...pluginFiles.map((f) => parseFork(loadFork(f).fork)))
     : baseTypes;
   const schemas = loadSchemas(schemaDir);
   const out = {
@@ -52,7 +52,8 @@ function exportAll(file, schemaDir, pluginFiles = []) {
   const warnings = [];
 
   for (const t of types) {
-    if (t.typeHex === '53545223') { // STR#
+    if (t.typeHex === '53545223') {
+      // STR#
       for (const r of t.resources)
         out.strings[r.id] = { name: r.name, list: decodeStrList(r.data()) };
       continue;
@@ -63,8 +64,11 @@ function exportAll(file, schemaDir, pluginFiles = []) {
     for (const r of t.resources) {
       const rec = decodeRecord(r.data(), s.schema);
       if (rec.__schemaBytes !== rec.__recordBytes)
-        warnings.push(`${t.typeName} ${r.id}: schema ${rec.__schemaBytes}B vs record ${rec.__recordBytes}B`);
-      delete rec.__schemaBytes; delete rec.__recordBytes;
+        warnings.push(
+          `${t.typeName} ${r.id}: schema ${rec.__schemaBytes}B vs record ${rec.__recordBytes}B`,
+        );
+      delete rec.__schemaBytes;
+      delete rec.__recordBytes;
       records[r.id] = { name: r.name, ...rec };
     }
     out.types[s.alias] = records;
@@ -74,13 +78,20 @@ function exportAll(file, schemaDir, pluginFiles = []) {
 
 function main() {
   const args = process.argv.slice(2);
-  const opt = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args.splice(i, 2)[1] : null; };
+  const opt = (flag) => {
+    const i = args.indexOf(flag);
+    return i >= 0 ? args.splice(i, 2)[1] : null;
+  };
   // Repeatable: --plugin A.rsrc --plugin B.rsrc (in load order; later wins).
   const opts = (flag) => {
-    const v = []; let i;
+    const v = [];
+    let i;
     while ((i = args.indexOf(flag)) >= 0) {
       const val = args.splice(i, 2)[1];
-      if (val == null) { console.error(`error: ${flag} needs a file argument`); process.exit(1); }
+      if (val == null) {
+        console.error(`error: ${flag} needs a file argument`);
+        process.exit(1);
+      }
       v.push(val);
     }
     return v;
@@ -96,16 +107,22 @@ function main() {
   const semantic = (semanticIdx >= 0 && !!args.splice(semanticIdx, 1)) || !!flightPath;
   const file = args[0];
   if (!file || (!outPath && !mapPath && !flightPath)) {
-    console.error('usage: evexport.js <datafile> [--plugin file]… [-o evdata.json] [--map galaxy.html] [--flight flight.html]');
+    console.error(
+      'usage: evexport.js <datafile> [--plugin file]… [-o evdata.json] [--map galaxy.html] [--flight flight.html]',
+    );
     process.exit(1);
   }
 
   const { out, warnings } = exportAll(file, schemaDir, pluginFiles);
-  if (pluginFiles.length) console.error(`merged ${pluginFiles.length} plugin(s): ${pluginFiles.map(f => path.basename(f)).join(', ')}`);
+  if (pluginFiles.length)
+    console.error(
+      `merged ${pluginFiles.length} plugin(s): ${pluginFiles.map((f) => path.basename(f)).join(', ')}`,
+    );
   if (semantic) require('./semantics.js').decorate(out);
   for (const w of warnings) console.error('⚠ ' + w);
   const counts = Object.entries(out.types)
-    .map(([k, v]) => `${k}:${Object.keys(v).length}`).join(' ');
+    .map(([k, v]) => `${k}:${Object.keys(v).length}`)
+    .join(' ');
   console.error(`decoded ${counts} STR#:${Object.keys(out.strings).length}`);
 
   if (outPath) {
@@ -114,7 +131,8 @@ function main() {
   }
   if (mapPath) {
     const tpl = fs.readFileSync(path.join(__dirname, 'galaxy_viewer.html'), 'utf8');
-    if (!tpl.includes('/*__EVDATA__*/null')) throw new Error('viewer template missing __EVDATA__ placeholder');
+    if (!tpl.includes('/*__EVDATA__*/null'))
+      throw new Error('viewer template missing __EVDATA__ placeholder');
     fs.writeFileSync(mapPath, tpl.replace('/*__EVDATA__*/null', JSON.stringify(out)));
     console.error(`wrote ${mapPath}`);
   }
@@ -127,8 +145,13 @@ function main() {
     // Every placeholder must be present, or the matching .replace() below turns
     // into a silent no-op and ships a subtly broken flight.html. (loader/launch.js
     // validates the same set — keep them in parity.)
-    for (const ph of ['/*__ENGINE__*/', '/*__SHELL__*/', '/*__EVDATA__*/null',
-                      '/*__MANIFEST__*/null', '/*__NAMES__*/null'])
+    for (const ph of [
+      '/*__ENGINE__*/',
+      '/*__SHELL__*/',
+      '/*__EVDATA__*/null',
+      '/*__MANIFEST__*/null',
+      '/*__NAMES__*/null',
+    ])
       if (!tpl.includes(ph)) throw new Error(`flight template missing ${ph} placeholder`);
     // The flight shell is authored as ES modules under engine/shell/ and bundled
     // by esbuild into engine/shell.bundle.js (an IIFE, built by `make`); inject
@@ -143,27 +166,37 @@ function main() {
     if (appPath) {
       try {
         const { loadFork, parseFork, decodeStrList } = require('./evrsrc.js');
-        const t = parseFork(loadFork(appPath).fork).find(x => x.typeName === 'STR#');
-        const r = t && t.resources.find(x => x.id === 128);
+        const t = parseFork(loadFork(appPath).fork).find((x) => x.typeName === 'STR#');
+        const r = t && t.resources.find((x) => x.id === 128);
         const list = r ? decodeStrList(r.data()) : [];
         if (list.length >= 2) {
           const h = Math.ceil(list.length / 2);
           names = JSON.stringify({ pilots: list.slice(0, h), ships: list.slice(h) });
         }
-      } catch (e) { console.error('⚠ name suggestions: ' + e.message); }
+      } catch (e) {
+        console.error('⚠ name suggestions: ' + e.message);
+      }
     }
-    fs.writeFileSync(flightPath, tpl
-      .replace('/*__ENGINE__*/', () => engine)
-      .replace('/*__SHELL__*/', () => shell)
-      .replace('/*__EVDATA__*/null', JSON.stringify(out))
-      .replace('/*__MANIFEST__*/null', manifest.trim())
-      .replace('/*__NAMES__*/null', () => names));
+    fs.writeFileSync(
+      flightPath,
+      tpl
+        .replace('/*__ENGINE__*/', () => engine)
+        .replace('/*__SHELL__*/', () => shell)
+        .replace('/*__EVDATA__*/null', JSON.stringify(out))
+        .replace('/*__MANIFEST__*/null', manifest.trim())
+        .replace('/*__NAMES__*/null', () => names),
+    );
     console.error(`wrote ${flightPath}`);
   }
 }
 
 if (require.main === module) {
-  try { main(); } catch (e) { console.error('error:', e.message); process.exit(1); }
+  try {
+    main();
+  } catch (e) {
+    console.error('error:', e.message);
+    process.exit(1);
+  }
 }
 
 module.exports = { exportAll };
