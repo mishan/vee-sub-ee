@@ -52,7 +52,11 @@ export let last = performance.now(), acc = 0;
 export function frame(now) {
   acc += Math.min(now - last, 250); last = now;
   const dt = 1000 / EV.FPS;
-  const steps = fastForward ? 2 : 1; // Caps Lock: two sim ticks per real tick
+  // Two sim ticks per real tick when fast-forward (2×) is on — but never while
+  // hyperspacing: the warp spin-up/streak is timed to the Warp Up sound, so
+  // running it at 2× desyncs the audio. The original disables 2× during warp;
+  // the toggle state is kept, so 2× resumes on arrival (S.jump back to null).
+  const steps = (fastForward && !S.jump) ? 2 : 1;
   while (acc >= dt) { for (let s = 0; s < steps; s++) step(); acc -= dt; }
   render();
   requestAnimationFrame(frame);
