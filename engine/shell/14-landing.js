@@ -11,13 +11,29 @@ import { spawnEscorts } from './02-spawning.js';
 import { loopSnd, playSnd, stopAllLoops } from './03-sound.js';
 import { fuelMax, holds, player, rebuildPlayerWeapons } from './04-combat.js';
 import { distTo, nearestLandable } from './06-interaction.js';
-import { activeView, cargoUsed, closeService, outfitterStock, shipyardStock } from './07-trade.js';
+import {
+  activeView,
+  cargoUsed,
+  closeService,
+  openService,
+  outfitterStock,
+  shipyardStock,
+} from './07-trade.js';
 import { missionLandingEvents, offeredMissions } from './08-missions.js';
 import { loadSystem } from './09-step.js';
+import { Dialog } from './ui/dialog.js';
 
 export let missionNotes = []; // dialog text queued by the last landing
-export function renderPlanetScreen() {
+
+/* The planet-side landing screen is a Dialog over this pure render function: it
+ * mounts in the `landed` panel/card and its service buttons carry data-action
+ * (routed to landedActions) instead of inline onclick="openService(…)", so the
+ * hub no longer relies on the globalThis bridge. The Take Off button lives on the
+ * panel itself (outside the card), so it stays a plain template handler, like the
+ * service dialogs' Back button. */
+function landedBody() {
   const p = S.landedAt;
+  if (!p) return '';
   const m = p.$sem || {};
   const desc = DATA.types.desc[p.id];
   const compOffers = offeredMissions(p, 0).length;
@@ -55,27 +71,36 @@ export function renderPlanetScreen() {
   for (const note of missionNotes)
     out += html`<div class="desc" style="color:#98c379;border-left:2px solid #98c379;padding-left:8px">${note}</div>`;
   // services row — a shop with nothing to show doesn't get a button
-  out += html`<div>${m.commodityExchange ? html`<button class="svc" onclick="openService('exchange')">Commodity Exchange</button>` : ''}${
+  out += html`<div>${m.commodityExchange ? html`<button class="svc" data-action="service" data-arg="exchange">Commodity Exchange</button>` : ''}${
     m.outfitter && outfitterStock(p).length
-      ? html`<button class="svc" onclick="openService('outfitter')">Outfitter</button>`
+      ? html`<button class="svc" data-action="service" data-arg="outfitter">Outfitter</button>`
       : ''
   }${
     m.shipyard && shipyardStock(p).length
-      ? html`<button class="svc" onclick="openService('shipyard')">Shipyard</button>`
+      ? html`<button class="svc" data-action="service" data-arg="shipyard">Shipyard</button>`
       : ''
   }${
     m.bar
-      ? html`<button class="svc" onclick="openService('bar')">Spaceport Bar${barOffers ? ` (${barOffers})` : ''}</button>`
+      ? html`<button class="svc" data-action="service" data-arg="bar">Spaceport Bar${barOffers ? ` (${barOffers})` : ''}</button>`
       : ''
   }${
     m.canLand && compOffers
-      ? html`<button class="svc" onclick="openService('missioncomputer')">Mission BBS (${compOffers})</button>`
+      ? html`<button class="svc" data-action="service" data-arg="missioncomputer">Mission BBS (${compOffers})</button>`
       : ''
   }</div>`;
   out += html`<div class="wallet"><b>${wallet.credits.toLocaleString('en-US')}</b> credits ·
     cargo ${cargoUsed()}/${holds} tons${missionLog.count ? ` · ${missionLog.count} active mission${missionLog.count > 1 ? 's' : ''}` : ''}</div>
     <div class="hint">Take Off ▲ (top-right) — or press Esc</div>`;
-  document.getElementById('landedCard').innerHTML = out;
+  return out;
+}
+
+const landedActions = { service: (kind) => openService(kind) };
+export const landedDialog = new Dialog('landed', 'landedCard', landedBody, landedActions);
+// Re-render the hub in place (e.g. closeService refreshes the wallet line on
+// returning from a shop). Kept as renderPlanetScreen so existing callers, which
+// relied on its innerHTML side effect, need no change.
+export function renderPlanetScreen() {
+  landedDialog.refresh();
 }
 
 /* L: select the nearest landable planet (brackets show it), or — if it's
@@ -116,8 +141,7 @@ export function tryLand() {
   if (p.CustSndID >= 0) S.ambientSnd = loopSnd(p.CustSndID, 0.6); // planet ambient
   missionNotes = missionLandingEvents(p); // cargo pickup/dropoff, completion
   savePilot(p.id); // classic: the game saves when you land (after mission events)
-  renderPlanetScreen();
-  document.getElementById('landed').style.display = 'flex';
+  landedDialog.open(); // renders the hub and shows the panel
 }
 export function takeOff() {
   if (!S.landedAt) return;
@@ -127,7 +151,7 @@ export function takeOff() {
   stopAllLoops();
   S.landedAt = null;
   missionNotes = [];
-  document.getElementById('landed').style.display = 'none';
+  landedDialog.close();
   // Rebuild the system fresh: the ships that were here when you landed are
   // gone; loadSystem respawns the ambient population and any mission ships.
   loadSystem(S.SYSTEM_ID);
