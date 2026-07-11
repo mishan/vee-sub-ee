@@ -11,8 +11,10 @@ import {
   spinOfShip,
 } from './01-state.js';
 import { applyShipStats, effectiveShip, fuelMax, holds, player } from './04-combat.js';
-import { renderBar, renderComputer } from './16-missionboard.js';
+import { hireEscort, dismissEscort } from './02-spawning.js';
+import { renderBar, renderComputer, doAcceptMission } from './16-missionboard.js';
 import { renderPlanetScreen } from './14-landing.js';
+import { Dialog } from './ui/dialog.js';
 
 /*
  * engine/shell/07-trade.js — part of the browser flight shell.
@@ -47,42 +49,51 @@ export function trade(i, qty) {
 
 /* ---- service dialogs: exchange / outfitter / shipyard ---- */
 
-/* A modal dialog View: a pure render() → SafeHtml, plus the DOM plumbing to
- * mount it in a panel/card, refresh it in place when an action changes state,
- * and hide it. `activeView` is whichever View is showing (null = none); the
- * shell reads it to know a dialog is up (pause the sim, swallow keys). */
+/* A modal dialog View: the DOM-only `Dialog` base (render + mount/refresh/hide +
+ * data-action delegation) plus `activeView` tracking. `activeView` is whichever
+ * View is showing (null = none); the shell reads it to know a dialog is up
+ * (pause the sim, swallow keys). */
 export let activeView = null;
-export class View {
-  constructor(panelId, cardId, render) {
-    this.panelId = panelId;
-    this.cardId = cardId;
-    this.render = render;
-  }
-  refresh() {
-    document.getElementById(this.cardId).innerHTML = this.render();
-  }
+export class View extends Dialog {
   open() {
     activeView = this;
-    this.refresh();
-    document.getElementById(this.panelId).style.display = 'flex';
+    super.open();
   }
   close() {
     if (activeView === this) activeView = null;
-    document.getElementById(this.panelId).style.display = 'none';
+    super.close();
   }
 }
 export const refreshView = () => {
   if (activeView) activeView.refresh();
 };
 
+/* Actions for the mission board / hire dialog (16-missionboard renders its
+ * buttons with data-action=…; the Dialog delegation routes them here). The
+ * exchange/outfitter/shipyard dialogs still use inline onclick for now. */
+const boardActions = {
+  selMisn: (id) => {
+    S.selMisnId = +id;
+    refreshView();
+  },
+  accept: () => doAcceptMission(S.selMisnId),
+  barTab: (k) => {
+    S.barTab = k;
+    refreshView();
+  },
+  close: () => closeService(),
+  hire: (id) => hireEscort(+id),
+  dismiss: (id) => dismissEscort(+id),
+};
+
 // The five landing-screen services share the one 'service' panel; each is a View
-// over a pure render function (renderExchange/… below and in 08-missions.js).
+// over a pure render function (renderExchange/… below and in 16-missionboard.js).
 export const SERVICE_VIEWS = {
   exchange: new View('service', 'serviceCard', renderExchange),
   outfitter: new View('service', 'serviceCard', renderOutfitter),
   shipyard: new View('service', 'serviceCard', renderShipyard),
-  bar: new View('service', 'serviceCard', renderBar),
-  missioncomputer: new View('service', 'serviceCard', renderComputer),
+  bar: new View('service', 'serviceCard', renderBar, boardActions),
+  missioncomputer: new View('service', 'serviceCard', renderComputer, boardActions),
 };
 export function openService(kind) {
   const gate = {
