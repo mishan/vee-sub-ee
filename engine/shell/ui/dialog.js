@@ -2,8 +2,10 @@
  * engine/shell/ui/dialog.js — DOM-only base for the modal service dialogs.
  *
  * No game imports (no S, no DATA), so it can be unit-tested under node + jsdom
- * (see test/dialog.test.mjs). A Dialog is a pure render() → HTML string plus the
- * plumbing to mount it in a panel/card, refresh it in place, and hide it.
+ * (see test/dialog.test.mjs). A Dialog is a pure render() → SafeHtml (the wrapper
+ * the shell's html`` tag returns) — or any string-coercible value, since
+ * refresh() just assigns it to innerHTML — plus the plumbing to mount it in a
+ * panel/card, refresh it in place, and hide it.
  *
  * It also owns its buttons. Instead of inline onclick="fn()" — which only reaches
  * global names (the reason for the shell's globalThis bridge) — clickable
@@ -31,7 +33,10 @@ export class Dialog {
     // routes to *this* dialog's actions (dialogs share the 'serviceCard').
     if (card._dlgClick) card.removeEventListener('click', card._dlgClick);
     card._dlgClick = (e) => {
-      const el = e.target.closest('[data-action]');
+      // e.target may not be an Element (text node, document, odd synthetic
+      // events); only Elements have closest(), so guard rather than throw.
+      const t = e.target;
+      const el = t && typeof t.closest === 'function' ? t.closest('[data-action]') : null;
       if (!el || !card.contains(el)) return;
       const fn = this.actions[el.dataset.action];
       if (fn) {

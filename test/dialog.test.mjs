@@ -1,21 +1,32 @@
 // Unit tests for the DOM-only Dialog base (engine/shell/ui/dialog.js), run under
 // jsdom so real click events exercise the data-action delegation. Run with
 // `npm test` (node --test).
-import { test } from 'node:test';
+import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { Dialog } from '../engine/shell/ui/dialog.js';
 
-function mount() {
-  const dom = new JSDOM(`<div id="panel" style="display:none"><div id="card"></div></div>`);
+// Each test runs against a fresh JSDOM. We stash the DOM globals the Dialog
+// reads (document, MouseEvent) and restore them afterwards, then close the
+// window — so this suite leaves no global state behind for sibling test files.
+let dom, prevDocument, prevMouseEvent;
+beforeEach(() => {
+  prevDocument = global.document;
+  prevMouseEvent = global.MouseEvent;
+  dom = new JSDOM(`<div id="panel" style="display:none"><div id="card"></div></div>`);
   global.document = dom.window.document;
   global.MouseEvent = dom.window.MouseEvent;
-  return dom;
-}
+});
+afterEach(() => {
+  dom.window.close();
+  if (prevDocument === undefined) delete global.document;
+  else global.document = prevDocument;
+  if (prevMouseEvent === undefined) delete global.MouseEvent;
+  else global.MouseEvent = prevMouseEvent;
+});
 const $ = (sel) => global.document.querySelector(sel);
 
 test('open() renders into the card and shows the panel', () => {
-  mount();
   const d = new Dialog('panel', 'card', () => '<b>hi</b>');
   d.open();
   assert.equal($('#card').innerHTML, '<b>hi</b>');
@@ -25,7 +36,6 @@ test('open() renders into the card and shows the panel', () => {
 });
 
 test('data-action clicks route to the actions map with data-arg', () => {
-  mount();
   const calls = [];
   const d = new Dialog(
     'panel',
@@ -50,7 +60,6 @@ test('data-action clicks route to the actions map with data-arg', () => {
 });
 
 test('a click on a child of a data-action element still routes (closest)', () => {
-  mount();
   const calls = [];
   const d = new Dialog(
     'panel',
@@ -66,7 +75,6 @@ test('a click on a child of a data-action element still routes (closest)', () =>
 });
 
 test('delegation survives refresh() (listener is on the card, not its children)', () => {
-  mount();
   let n = 0;
   const d = new Dialog('panel', 'card', () => '<button data-action="go">go</button>', {
     go: () => n++,
@@ -80,7 +88,6 @@ test('delegation survives refresh() (listener is on the card, not its children)'
 });
 
 test('close() unbinds — no stray dispatch after close', () => {
-  mount();
   let n = 0;
   const d = new Dialog('panel', 'card', () => '<button data-action="go">go</button>', {
     go: () => n++,
@@ -93,8 +100,17 @@ test('close() unbinds — no stray dispatch after close', () => {
 });
 
 test('unknown data-action is ignored (no throw)', () => {
-  mount();
   const d = new Dialog('panel', 'card', () => '<button data-action="nope">x</button>', {});
   d.open();
   assert.doesNotThrow(() => $('[data-action="nope"]').click());
+});
+
+test('non-Element event targets are ignored, not thrown', () => {
+  const d = new Dialog('panel', 'card', () => '<button data-action="go">go</button>', { go() {} });
+  d.open();
+  const handler = global.document.getElementById('card')._dlgClick;
+  // targets without a closest() method (null, plain object, document) must not throw
+  assert.doesNotThrow(() => handler({ target: null }));
+  assert.doesNotThrow(() => handler({ target: {} }));
+  assert.doesNotThrow(() => handler({ target: global.document }));
 });
