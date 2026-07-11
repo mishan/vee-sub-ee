@@ -52,8 +52,8 @@ import { introUp } from './11-title.js';
  * so the run loop (17-main) is unchanged.
  *
  * AI ships pick a behavior from a small strategy hierarchy (phase 3): the tick
- * calls `aiFor(ship).step(ship, world)` instead of an if/else-if chain on the
- * ship's flags.
+ * calls `aiFor(ship, world).step(ship, world)` instead of an if/else-if chain on
+ * the ship's flags.
  */
 /* ---------------- logic step (30Hz) ---------------- */
 
@@ -84,7 +84,7 @@ export function checkHostileAlert(aiShips = S.aiShips) {
 
 /* ---------------- AI strategies (spec: "AI …") ----------------
  * One strategy per behavior an AI ship can take, dispatched each frame by
- * `aiFor(ship)` from the ship's current disposition (docs/OOP_DESIGN.md,
+ * `aiFor(ship, world)` from the ship's current disposition (docs/OOP_DESIGN.md,
  * phase 3). Strategies are stateless — they act on the ship + world passed in —
  * so a single shared instance of each is reused. The flight math still lives in
  * the core (EV.stepWarship / stepTrader / stepFlee); the strategy decides which
