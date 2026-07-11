@@ -8,11 +8,14 @@
     "@eslint/js": "^10.0.1",
     "esbuild": "^0.28.1",
     "eslint": "^10.7.0",
-    "globals": "^17.7.0"
+    "globals": "^17.7.0",
+    "prettier": "3.9.5"
   },
   "scripts": {
     "build:engine": "esbuild engine/core.js --bundle --format=iife --global-name=EV --banner:js='/* GENERATED from engine/core.js by esbuild — do not edit. Rebuild: make engine/core.bundle.js */' --footer:js='globalThis.EV=EV;' --outfile=engine/core.bundle.js",
     "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "node --test"
   }
 }
