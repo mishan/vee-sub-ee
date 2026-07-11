@@ -279,12 +279,15 @@ export function buyShip(id) {
   if (!rec || id === S.playerShipId) return;
   const refund = tradeInValue();
   const price = rec.Cost - refund;
-  if (!wallet.canAfford(price)) return;
+  // A net-negative price (trade-in worth more than the new hull) pays the pilot,
+  // so only guard affordability for a positive net cost.
+  if (price > 0 && !wallet.canAfford(price)) return;
   if (cargoUsed() > rec.Holds) {
     showMsg('Your cargo would not fit aboard.');
     return;
   }
-  wallet.spend(price);
+  if (price >= 0) wallet.spend(price);
+  else wallet.earn(-price);
   S.playerShipId = id;
   player.shipId = id;
   for (const k of Object.keys(outfits)) delete outfits[k];
@@ -317,7 +320,7 @@ export function renderShipyard() {
       <div class="row">Fuel <b>${r.Fuel / 100}</b> jumps · Crew <b>${r.Crew}</b></div>
       <div class="row">Guns <b>${r.MaxGun}</b> · Turrets <b>${r.MaxTur}</b></div>
       <div style="margin-top:10px">
-        <button class="svc" onclick="buyShip(${selShipId})" ${own || !wallet.canAfford(net) ? 'disabled' : ''}>Buy</button>
+        <button class="svc" onclick="buyShip(${selShipId})" ${own || (net > 0 && !wallet.canAfford(net)) ? 'disabled' : ''}>Buy</button>
       </div></div>`;
   }
   return html`<h2>Shipyard</h2><div class="meta">${p.name} · tech ${p.TechLevel} ·
