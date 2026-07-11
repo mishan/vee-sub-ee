@@ -394,7 +394,7 @@ function render() {
 
   const speed = Math.hypot(player.vx, player.vy);
   document.getElementById('hud').innerHTML =
-    `<b>${syst.name}</b><br>${ships[playerShipId].name}<br>` +
+    `<b>${escapeHtml(syst.name)}</b><br>${escapeHtml(ships[playerShipId].name)}<br>` +
     `speed ${(speed * EV.FPS).toFixed(0)} px/s`;
 
   // boardable disabled mission ship in range?

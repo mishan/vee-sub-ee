@@ -64,7 +64,7 @@ function techAvailable(itemTech, p) {
 SERVICE_RENDER.exchange = function () {
   const p = landedAt, m = p.$sem || {};
   let html = `<h2>Commodity Exchange</h2>
-    <div class="meta">${p.name} · prices per ton</div>
+    <div class="meta">${escapeHtml(p.name)} · prices per ton</div>
     <table><tr><th>Commodity</th><th style="text-align:right">Price</th>
     <th style="text-align:right">Held</th><th></th></tr>`;
   for (let i = 0; i < 6; i++) {

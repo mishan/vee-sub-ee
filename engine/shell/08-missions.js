@@ -746,7 +746,7 @@ SERVICE_RENDER.outfitter = function () {
       (o.Mass <= 0 || s.freeMass >= o.Mass);
     pane = `<div class="shoppane">
       <img src="evassets/graphics/PICT_${6000 + (selOutfitId - 128)}.png" onerror="this.style.visibility='hidden'">
-      <h3>${outfitName(selOutfitId)}</h3>
+      <h3>${escapeHtml(outfitName(selOutfitId))}</h3>
       <div class="row">${o.$sem ? o.$sem.modType : ''}${o.Max > 0 ? ` · max ${o.Max}` : ''}</div>
       <div class="row">Cost: <b>${o.Cost.toLocaleString('en-US')}</b> cr</div>
       <div class="row">Mass: <b>${o.Mass}</b> tons</div>
@@ -757,7 +757,7 @@ SERVICE_RENDER.outfitter = function () {
       </div></div>`;
   }
   document.getElementById('serviceCard').innerHTML =
-    `<h2>Outfitter</h2><div class="meta">${p.name} · tech ${p.TechLevel}</div>
+    `<h2>Outfitter</h2><div class="meta">${escapeHtml(p.name)} · tech ${p.TechLevel}</div>
      <div class="shop">${shopGrid('PICT_6100.png', items, selOutfitId, 'selectOutfit')}${pane}</div>` +
     walletHtml();
 };
@@ -807,7 +807,7 @@ SERVICE_RENDER.shipyard = function () {
     const net = r.Cost - refund;
     pane = `<div class="shoppane">
       <img src="evassets/graphics/PICT_${5000 + (selShipId - 128)}.png" onerror="this.style.visibility='hidden'">
-      <h3>${shipyardName(selShipId)}${own ? ' <span class="meta" style="margin:0">(current)</span>' : ''}</h3>
+      <h3>${escapeHtml(shipyardName(selShipId))}${own ? ' <span class="meta" style="margin:0">(current)</span>' : ''}</h3>
       <div class="row">Cost: <b>${r.Cost.toLocaleString('en-US')}</b> cr` +
       (own ? '' : ` · net <b>${net.toLocaleString('en-US')}</b>`) + `</div>
       <div class="row">Shield <b>${r.Shield}</b> · Armor <b>${r.Armor}</b></div>
@@ -820,7 +820,7 @@ SERVICE_RENDER.shipyard = function () {
       </div></div>`;
   }
   document.getElementById('serviceCard').innerHTML =
-    `<h2>Shipyard</h2><div class="meta">${p.name} · tech ${p.TechLevel} ·
+    `<h2>Shipyard</h2><div class="meta">${escapeHtml(p.name)} · tech ${p.TechLevel} ·
        trade-in: 25% of hull + upgrades (${refund.toLocaleString('en-US')} cr)</div>
      <div class="shop">${shopGrid('PICT_5100.png', items, selShipId, 'selectShip')}${pane}</div>` +
     walletHtml();
@@ -844,7 +844,7 @@ function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
     list += `<div class="meta" style="margin:0 0 4px">Active missions</div>`;
     for (const a of active) {
       const days = a.timeLimit > 0 ? ` <span class="sub">(${Math.max(0, a.timeLimit - (gameDay - a.accepted))}d left)</span>` : '';
-      list += `<div class="row" style="color:#98c379">${misnName(misns[a.id], a)}${days}</div>`;
+      list += `<div class="row" style="color:#98c379">${escapeHtml(misnName(misns[a.id], a))}${days}</div>`;
     }
     list += `<hr style="border-color:#26304a;margin:8px 0">`;
   }
@@ -852,7 +852,7 @@ function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
   if (!offers.length) list += `<div class="sub">Nothing right now.</div>`;
   for (const o of offers)
     list += `<div class="row" style="cursor:pointer;color:${o.id === selMisnId ? '#ffd479' : '#cfd6e4'}"
-      onclick="selMisnId=${o.id};rerenderService()">${misnName(o, getOffer(o.id, p))}</div>`;
+      onclick="selMisnId=${o.id};rerenderService()">${escapeHtml(misnName(o, getOffer(o.id, p)))}</div>`;
   list += '</div>';
 
   let pane = '<div style="flex:1.3;min-width:240px">';
@@ -869,10 +869,10 @@ function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
       ? `${stelName(destId)}${systOfSpob(spobById(destId)) ? ' (' + systOfSpob(spobById(destId)).name + ')' : ''}`
         + (destId === p.id ? ' — return here' : '')
       : 'no fixed destination';
-    pane += `<h3>${misnName(sel, offer)}</h3>
-      <div class="desc" style="max-height:150px;overflow-y:auto">${brief}</div>
-      <div class="row">Destination: <b>${destShown}</b></div>` +
-      (offer.cargoName && offer.cargoQty ? `<div class="row">Cargo: <b>${offer.cargoQty}t ${offer.cargoName}</b></div>` : '') +
+    pane += `<h3>${escapeHtml(misnName(sel, offer))}</h3>
+      <div class="desc" style="max-height:150px;overflow-y:auto">${escapeHtml(brief)}</div>
+      <div class="row">Destination: <b>${escapeHtml(destShown)}</b></div>` +
+      (offer.cargoName && offer.cargoQty ? `<div class="row">Cargo: <b>${offer.cargoQty}t ${escapeHtml(offer.cargoName)}</b></div>` : '') +
       (sel.ShipCount > 0 && goalTxt ? `<div class="row">Objective: <b>${goalTxt}</b> (${sel.ShipCount})</div>` : '') +
       (offer.deadline != null ? `<div class="row">Deliver by: <b>${formatDate(offer.deadline)}</b> <span class="sub">(${sel.TimeLimit} days)</span></div>` : '') +
       `<div class="row">Pay: <b>${pay}</b></div>
@@ -888,7 +888,7 @@ function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
 
   document.getElementById('serviceCard').innerHTML =
     `<h2>${loc === 0 ? 'Mission Computer' : 'Spaceport Bar'}</h2>
-     <div class="meta">${p.name}</div>${topHtml}
+     <div class="meta">${escapeHtml(p.name)}</div>${topHtml}
      <div class="shop">${list}${pane}</div>
      <div class="wallet">${credits.toLocaleString('en-US')} credits · cargo ${cargoUsed()}/${holds} tons · day ${gameDay}</div>
      <div style="margin-top:10px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
@@ -914,7 +914,7 @@ function renderHireBoard() {
   for (const e of escorts) {
     const r = ships[e.shipId], kind = e.upkeep ? `~${e.upkeep.toLocaleString('en-US')} cr/jump` : 'captured';
     fleet += `<div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-      <span>${escapeHtml(e.name)} <span class="sub">${r ? r.name : ''} · ${kind}</span></span>
+      <span>${escapeHtml(e.name)} <span class="sub">${r ? escapeHtml(r.name) : ''} · ${kind}</span></span>
       <button class="svc" style="padding:2px 8px" onclick="dismissEscort(${e.id})">Dismiss</button></div>`;
   }
   if (totalUpkeep) fleet += `<div class="row sub" style="margin-top:6px">Payroll: ~${totalUpkeep.toLocaleString('en-US')} cr / jump</div>`;
@@ -929,17 +929,17 @@ function renderHireBoard() {
     const desc = shipClassDesc(id);
     hire += `<div class="row" style="border-bottom:1px solid #26304a;padding:6px 0">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-        <b>${r.name}</b>
+        <b>${escapeHtml(r.name)}</b>
         <button class="svc" style="padding:2px 10px" onclick="hireEscort(${id})"${full || !afford ? ' disabled' : ''}>Hire</button>
       </div>
       <div class="sub">Fee ~${fee.toLocaleString('en-US')} cr · ~${up.toLocaleString('en-US')} cr/jump${
         full ? ' · fleet full' : !afford ? ' · can’t afford' : ''}</div>${
-        desc ? `<div class="sub" style="margin-top:3px;max-height:64px;overflow-y:auto">${desc}</div>` : ''}</div>`;
+        desc ? `<div class="sub" style="margin-top:3px;max-height:64px;overflow-y:auto">${escapeHtml(desc)}</div>` : ''}</div>`;
   }
   hire += '</div>';
 
   document.getElementById('serviceCard').innerHTML =
-    `<h2>Spaceport Bar</h2><div class="meta">${p.name}</div>${barTabs()}
+    `<h2>Spaceport Bar</h2><div class="meta">${escapeHtml(p.name)}</div>${barTabs()}
      <div class="shop">${fleet}${hire}</div>
      <div class="wallet">${credits.toLocaleString('en-US')} credits · payroll ${totalUpkeep.toLocaleString('en-US')} cr/jump</div>
      <div style="margin-top:10px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
@@ -978,13 +978,13 @@ function renderPlanetScreen() {
       if (this.dataset.fb && !this.src.endsWith('PICT_' + this.dataset.fb + '.png'))
         this.src = 'evassets/titles/PICT_' + this.dataset.fb + '.png';
       else this.remove()">`;
-  html += `<h2>${p.name}</h2>
-    <div class="meta">${(m.stellarType || '').replace(/[()]/g, '')}` +
-    `${m.govt ? ' · ' + m.govt : ''}${svc ? ' · ' + svc : ''} · fuel topped up</div>
-    <div class="desc">${desc && desc.Description ? desc.Description : ''}</div>`;
+  html += `<h2>${escapeHtml(p.name)}</h2>
+    <div class="meta">${escapeHtml((m.stellarType || '').replace(/[()]/g, ''))}` +
+    `${m.govt ? ' · ' + escapeHtml(m.govt) : ''}${svc ? ' · ' + svc : ''} · fuel topped up</div>
+    <div class="desc">${desc && desc.Description ? escapeHtml(desc.Description) : ''}</div>`;
   // mission events from this landing (deliveries, completions) shown up top
   for (const note of missionNotes)
-    html += `<div class="desc" style="color:#98c379;border-left:2px solid #98c379;padding-left:8px">${note}</div>`;
+    html += `<div class="desc" style="color:#98c379;border-left:2px solid #98c379;padding-left:8px">${escapeHtml(note)}</div>`;
   // services row — a shop with nothing to show doesn't get a button
   html += `<div>` +
     (m.commodityExchange ? `<button class="svc" onclick="openService('exchange')">Commodity Exchange</button>` : '') +
