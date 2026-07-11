@@ -94,7 +94,10 @@ and manual states, so a keypress can't clobber a manual toggle. Caps Lock only
 toggles **in flight** — behind the splash/title/hail/service/landing/dead
 overlays (which swallow gameplay keys) it is ignored, so it can't silently arm
 2× for when you enter the game. It only changes how many `step()`s run per
-frame, not the per-step math, so the flight core is untouched.
+frame, not the per-step math, so the flight core is untouched. **Suppressed
+during hyperspace** (`S.jump` active): the warp spin-up and streak are timed to
+the Warp Up sound, so 2× would desync the audio — the loop runs at 1× while
+warping and resumes 2× on arrival (the toggle state is preserved, not cleared).
 
 ## Hyperjump
 
