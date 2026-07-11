@@ -1,4 +1,13 @@
-import { S, dudes, escorts, preloadSprites, ships, showMsg, spinOfShip } from './01-state.js';
+import {
+  wallet,
+  S,
+  dudes,
+  escorts,
+  preloadSprites,
+  ships,
+  showMsg,
+  spinOfShip,
+} from './01-state.js';
 import { attenuate, playSnd } from './03-sound.js';
 import { armShip, player } from './04-combat.js';
 import { refreshView } from './07-trade.js';
@@ -193,11 +202,11 @@ export function hireEscort(shipId) {
     return;
   }
   const fee = hireFee(r);
-  if (S.credits < fee) {
+  if (!wallet.canAfford(fee)) {
     showMsg('You can’t afford the hiring fee.');
     return;
   }
-  S.credits -= fee;
+  wallet.spend(fee);
   const esc = addEscort(shipId, r.name); // landed ⇒ joins the fleet, spawns on takeoff
   esc.upkeep = upkeepOf(r);
   playSnd(150, 0.5);
@@ -222,8 +231,8 @@ export function chargeEscortUpkeep() {
   let quit = 0;
   for (const e of [...escorts]) {
     if (!e.upkeep) continue; // captured ships draw no salary
-    if (S.credits >= e.upkeep) {
-      S.credits -= e.upkeep;
+    if (wallet.canAfford(e.upkeep)) {
+      wallet.spend(e.upkeep);
       continue;
     }
     const i = escorts.indexOf(e);

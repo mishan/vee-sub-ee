@@ -1,4 +1,5 @@
 import {
+  wallet,
   S,
   dominated,
   dudes,
@@ -493,15 +494,19 @@ export function showMissionBriefing() {
 }
 export function payMission(m) {
   const v = m.PayVal;
-  if (v > 0) S.credits += v;
+  if (v > 0) wallet.earn(v);
   else if (v >= -20255 && v <= -20128) {
     const oid = -v - 20000;
     if (DATA.types.outf[oid]) {
       outfits[oid] = (outfits[oid] || 0) + 1;
       applyShipStats();
     }
-  } else if (v >= -40099 && v <= -40001)
-    S.credits = Math.round(S.credits * (1 - (-v - 40000) / 100));
+  } else if (v >= -40099 && v <= -40001) {
+    // percentage fine: keep a fraction of the balance, deduct the rest via the
+    // Wallet API so the change stays validated like every other transaction
+    const kept = Math.round(wallet.credits * (1 - (-v - 40000) / 100));
+    wallet.spend(wallet.credits - kept);
+  }
   // -10128..-10255 clean legal record: reputation reset with that govt
   else if (v >= -10255 && v <= -10128)
     reputation[-v - 10000] = Math.max(0, reputation[-v - 10000] || 0);

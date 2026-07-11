@@ -1,4 +1,5 @@
 import {
+  wallet,
   COMMODITIES,
   PRICE_MULT,
   S,
@@ -40,10 +41,10 @@ export function trade(i, qty) {
   if (!S.landedAt) return;
   const price = priceAt(S.landedAt, i);
   if (price == null) return;
-  if (qty > 0) qty = Math.min(qty, holds - cargoUsed(), Math.floor(S.credits / price));
+  if (qty > 0) qty = Math.min(qty, holds - cargoUsed(), Math.floor(wallet.credits / price));
   else qty = Math.max(qty, -cargo[COMMODITIES[i]]);
   cargo[COMMODITIES[i]] += qty;
-  S.credits -= qty * price;
+  wallet.settle(qty * price); // buy (qty>0) charges, sell (qty<0) credits
   refreshView();
 }
 
@@ -114,7 +115,7 @@ export function closeService() {
 }
 export const walletHtml = () => {
   const fm = effectiveShip().freeMass;
-  return html`<div class="wallet"><b>${S.credits.toLocaleString('en-US')}</b> credits ·
+  return html`<div class="wallet"><b>${wallet.credits.toLocaleString('en-US')}</b> credits ·
     cargo ${cargoUsed()}/${holds} tons · ${fm} tons outfit space</div>
     <div style="margin-top:12px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
 };
@@ -141,8 +142,8 @@ export function renderExchange() {
           ? html`
         <button onclick="trade(${i},-10)" ${held < 1 ? 'disabled' : ''}>-10</button>
         <button onclick="trade(${i},-1)"  ${held < 1 ? 'disabled' : ''}>-1</button>
-        <button onclick="trade(${i},1)"   ${cargoUsed() >= holds || S.credits < price ? 'disabled' : ''}>+1</button>
-        <button onclick="trade(${i},10)"  ${cargoUsed() >= holds || S.credits < price ? 'disabled' : ''}>+10</button>`
+        <button onclick="trade(${i},1)"   ${cargoUsed() >= holds || !wallet.canAfford(price) ? 'disabled' : ''}>+1</button>
+        <button onclick="trade(${i},10)"  ${cargoUsed() >= holds || !wallet.canAfford(price) ? 'disabled' : ''}>+10</button>`
           : ''
       }</td></tr>`);
   }
@@ -164,7 +165,7 @@ export function buyOutfit(id, qty) {
   if (qty > 0) {
     if (o.Max > 0 && (outfits[id] || 0) + qty > o.Max) qty = o.Max - (outfits[id] || 0);
     if (o.Mass > 0) qty = Math.min(qty, Math.floor(s.freeMass / o.Mass));
-    if (o.Cost > 0) qty = Math.min(qty, Math.floor(S.credits / o.Cost));
+    if (o.Cost > 0) qty = Math.min(qty, Math.floor(wallet.credits / o.Cost));
     if (qty <= 0) return;
   } else {
     qty = Math.max(qty, -(outfits[id] || 0));
@@ -172,7 +173,7 @@ export function buyOutfit(id, qty) {
   }
   outfits[id] = (outfits[id] || 0) + qty;
   if (!outfits[id]) delete outfits[id];
-  S.credits -= qty * o.Cost;
+  wallet.settle(qty * o.Cost); // buy (qty>0) charges, sell (qty<0) credits
   applyShipStats();
   // cargo can't exceed a shrunken hold: dump overflow (paid nothing for it)
   while (cargoUsed() > holds) {
@@ -236,7 +237,7 @@ export function renderOutfitter() {
     const own = outfits[selOutfitId] || 0;
     const canBuy =
       techAvailable(o.TechLevel, p) &&
-      S.credits >= o.Cost &&
+      wallet.canAfford(o.Cost) &&
       (o.Max <= 0 || own < o.Max) &&
       (o.Mass <= 0 || s.freeMass >= o.Mass);
     pane = html`<div class="shoppane">
@@ -278,12 +279,14 @@ export function buyShip(id) {
   if (!rec || id === S.playerShipId) return;
   const refund = tradeInValue();
   const price = rec.Cost - refund;
-  if (S.credits < price) return;
+  // A net-negative price (trade-in worth more than the new hull) pays the pilot,
+  // so only guard affordability for a positive net cost.
+  if (price > 0 && !wallet.canAfford(price)) return;
   if (cargoUsed() > rec.Holds) {
     showMsg('Your cargo would not fit aboard.');
     return;
   }
-  S.credits -= price;
+  wallet.settle(price); // net-negative (trade-in > cost) pays the pilot
   S.playerShipId = id;
   player.shipId = id;
   for (const k of Object.keys(outfits)) delete outfits[k];
@@ -316,7 +319,7 @@ export function renderShipyard() {
       <div class="row">Fuel <b>${r.Fuel / 100}</b> jumps · Crew <b>${r.Crew}</b></div>
       <div class="row">Guns <b>${r.MaxGun}</b> · Turrets <b>${r.MaxTur}</b></div>
       <div style="margin-top:10px">
-        <button class="svc" onclick="buyShip(${selShipId})" ${own || S.credits < net ? 'disabled' : ''}>Buy</button>
+        <button class="svc" onclick="buyShip(${selShipId})" ${own || (net > 0 && !wallet.canAfford(net)) ? 'disabled' : ''}>Buy</button>
       </div></div>`;
   }
   return html`<h2>Shipyard</h2><div class="meta">${p.name} · tech ${p.TechLevel} ·

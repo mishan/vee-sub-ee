@@ -6,6 +6,7 @@
  * the leaf holding the shared state object S; modules import what they use.
  * Normative behavior: engine/ENGINE_SPEC.md.
  */
+import { Wallet } from './wallet.js';
 /* ---------------- configuration ---------------- */
 
 export const params = new URLSearchParams(location.search);
@@ -115,7 +116,7 @@ export const Save = {
       syst: S.SYSTEM_ID,
       spob: spobId,
       ship: S.playerShipId,
-      credits: S.credits,
+      credits: wallet.credits,
       cargo,
       outfits,
       explored: [...explored],
@@ -189,7 +190,7 @@ S.playerShipId = SAVED ? SAVED.ship : +(params.get('ship') || 128); // Shuttlecr
 /* player economy state (spec: "Trading") — the pilot file's contents */
 export const COMMODITIES = ['food', 'industrial', 'medical', 'luxury', 'metal', 'equipment'];
 export const PRICE_MULT = { low: 0.8, medium: 1.0, high: 1.25 };
-S.credits = SAVED ? SAVED.credits : 10000;
+export const wallet = new Wallet(SAVED ? SAVED.credits : 10000);
 export const cargo = Object.fromEntries(
   COMMODITIES.map((c) => [c, (SAVED && SAVED.cargo[c]) || 0]),
 );
