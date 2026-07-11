@@ -1,4 +1,15 @@
-import { S, dominated, dudes, escorts, html, persDone, raw, ships, showMsg } from './01-state.js';
+import {
+  wallet,
+  S,
+  dominated,
+  dudes,
+  escorts,
+  html,
+  persDone,
+  raw,
+  ships,
+  showMsg,
+} from './01-state.js';
 import { MAX_ESCORTS, weighted } from './02-spawning.js';
 import { playSnd } from './03-sound.js';
 import { armShip, commitCrime, creditKill, fuelMax, penaltyOf, player } from './04-combat.js';
@@ -153,7 +164,7 @@ export function demandTribute(p) {
   // field in classic spöb data): scales with tech level.
   dominated.add(p.id);
   const amt = 2000 * (p.TechLevel + 1);
-  S.credits += amt;
+  wallet.earn(amt);
   hailSay(
     `${pickFrom(3002, 25, 26) || 'They agree to pay you tribute.'} (+${amt.toLocaleString('en-US')} cr)`,
   );
@@ -224,11 +235,11 @@ export function payFuel(full) {
     hailSay(pickFrom(3000, 120, 124) || 'Bad mood today — no deal.');
     return;
   }
-  if (S.credits < price) {
+  if (!wallet.canAfford(price)) {
     hailSay(pickFrom(3000, 60, 64) || 'You can’t afford it.');
     return;
   }
-  S.credits -= price;
+  wallet.spend(price);
   S.fuel = fuelMax;
   S.hailTarget.mode = 'main';
   hailSay(
@@ -242,7 +253,7 @@ export function begForMercy(_s) {
   if (Math.random() < 0.45) {
     // they'll entertain a bribe
     S.hailTarget.mode = 'mercy';
-    S.hailTarget.bribe = Math.max(500, Math.min(5000, Math.round(S.credits * 0.2)));
+    S.hailTarget.bribe = Math.max(500, Math.min(5000, Math.round(wallet.credits * 0.2)));
     hailSay(`They'll let you go... for ${S.hailTarget.bribe.toLocaleString('en-US')} credits.`);
   } else {
     hailSay(pickFrom(3000, 15, 19) || 'Calling to beg for your life?');
@@ -251,11 +262,11 @@ export function begForMercy(_s) {
 }
 export function payBribe(s) {
   hailClick();
-  if (S.credits < S.hailTarget.bribe) {
+  if (!wallet.canAfford(S.hailTarget.bribe)) {
     hailSay(pickFrom(3000, 60, 64) || 'You can’t afford it.');
     return;
   }
-  S.credits -= S.hailTarget.bribe;
+  wallet.spend(S.hailTarget.bribe);
   s.hostile = false;
   s.fleeing = true; // breaks off and runs
   hailSay(pickFrom(3000, 135, 139) || 'All right, I’ll leave you alone.');
@@ -269,7 +280,7 @@ export function demandSurrender(s) {
     return;
   }
   const loot = 500 + Math.floor(Math.random() * 2000);
-  S.credits += loot;
+  wallet.earn(loot);
   // same consequences as boarding: it's piracy, and the ship is gone once
   // plundered (was repeatable free loot, and left defenders "in the fight").
   commitCrime(s.govt, penaltyOf(s.govt, 'BoardPenalty'));

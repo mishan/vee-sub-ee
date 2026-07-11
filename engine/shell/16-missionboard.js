@@ -1,4 +1,4 @@
-import { S, html, escorts, ships, savePilot, showMsg } from './01-state.js';
+import { wallet, S, html, escorts, ships, savePilot, showMsg } from './01-state.js';
 import { HIRE_ROSTER, MAX_ESCORTS, hireFee, shipClassDesc, upkeepOf } from './02-spawning.js';
 import { holds } from './04-combat.js';
 import { cargoUsed, refreshView } from './07-trade.js';
@@ -101,7 +101,7 @@ export function renderMissionBoard(loc, topHtml = '') {
   return html`<h2>${loc === 0 ? 'Mission Computer' : 'Spaceport Bar'}</h2>
      <div class="meta">${p.name}</div>${topHtml}
      <div class="shop">${list}${pane}</div>
-     <div class="wallet">${S.credits.toLocaleString('en-US')} credits · cargo ${cargoUsed()}/${holds} tons · day ${S.gameDay}</div>
+     <div class="wallet">${wallet.credits.toLocaleString('en-US')} credits · cargo ${cargoUsed()}/${holds} tons · day ${S.gameDay}</div>
      <div style="margin-top:10px"><button class="svc" data-action="close">Done (Esc)</button></div>`;
 }
 
@@ -147,7 +147,7 @@ export function renderHireBoard() {
     const fee = hireFee(r),
       up = upkeepOf(r);
     const full = escorts.length >= MAX_ESCORTS,
-      afford = S.credits >= fee;
+      afford = wallet.canAfford(fee);
     const desc = shipClassDesc(id);
     hireItems.push(html`<div class="row" style="border-bottom:1px solid #26304a;padding:6px 0">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -167,7 +167,7 @@ export function renderHireBoard() {
 
   return html`<h2>Spaceport Bar</h2><div class="meta">${p.name}</div>${barTabs()}
      <div class="shop">${fleet}${hire}</div>
-     <div class="wallet">${S.credits.toLocaleString('en-US')} credits · payroll ${totalUpkeep.toLocaleString('en-US')} cr/jump</div>
+     <div class="wallet">${wallet.credits.toLocaleString('en-US')} credits · payroll ${totalUpkeep.toLocaleString('en-US')} cr/jump</div>
      <div style="margin-top:10px"><button class="svc" data-action="close">Done (Esc)</button></div>`;
 }
 

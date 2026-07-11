@@ -7,6 +7,7 @@
  */
 
 import {
+  wallet,
   COMMODITIES,
   S,
   cargo,
@@ -109,7 +110,7 @@ export function lootVessel() {
   if (booty & 0x40) {
     // Money — a slice of the hull's purchase price (bible)
     const money = Math.max(200, Math.round((rec.Cost || 0) * (0.03 + Math.random() * 0.07)));
-    S.credits += money;
+    wallet.earn(money);
     got.push(`${money.toLocaleString('en-US')} cr`);
   }
   let free = holds - cargoUsed(); // commodity flags 0x01..0x20 → the six goods

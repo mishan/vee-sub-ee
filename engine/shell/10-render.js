@@ -1,4 +1,5 @@
 import {
+  wallet,
   COMMODITIES,
   S,
   cargo,
@@ -334,7 +335,7 @@ export function drawPanel(w, h) {
 
   /* cargo / wallet box */
   const cb = { x: px + 9, y: py + 398 };
-  panelText(cb.x, cb.y, `Credits: ${S.credits.toLocaleString('en-US')}`);
+  panelText(cb.x, cb.y, `Credits: ${wallet.credits.toLocaleString('en-US')}`);
   panelText(cb.x, cb.y + 13, `Jumps left: ${Math.floor(S.fuel / EV.JUMP_FUEL)}`);
   let cy = cb.y + 30;
   const held = COMMODITIES.map((c, i) => [cargoNames[i], cargo[c]]).filter(([, q]) => q > 0);
