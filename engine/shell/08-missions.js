@@ -705,15 +705,14 @@ let selOutfitId = null, selShipId = null;
  * slots (the grid compacts; each thumbnail is still sliced from the
  * item's fixed cell in the original menu sheet). */
 function shopGrid(sheet, items, selId, clickFn) {
-  let out = '';
-  for (const { id } of items) {
+  const cells = items.map(({ id }) => {
     const i = id - 128;
-    out += html`<button class="cell${id === selId ? ' sel' : ''}"
+    return html`<button class="cell${id === selId ? ' sel' : ''}"
       style="background-image:url(evassets/graphics/${sheet});
              background-position:-${(i % 8) * 32}px -${Math.floor(i / 8) * 32}px"
       onclick="${clickFn}(${id})"></button>`;
-  }
-  return html`<div class="shopgrid">${raw(out)}</div>`;
+  });
+  return html`<div class="shopgrid">${cells}</div>`;
 }
 
 /* Would this spob's shop have anything to show? Gates both the dialog
@@ -836,23 +835,23 @@ function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
     selMisnId = offers.length ? offers[0].id : null;
   const sel = selMisnId != null ? misns[selMisnId] : null;
 
-  let list = '<div style="flex:1;min-width:210px;max-height:340px;overflow-y:auto">';
+  const listItems = [];
   if (active.length) {
-    list += html`<div class="meta" style="margin:0 0 4px">Active missions</div>`;
+    listItems.push(html`<div class="meta" style="margin:0 0 4px">Active missions</div>`);
     for (const a of active) {
       const days = a.timeLimit > 0 ? html` <span class="sub">(${Math.max(0, a.timeLimit - (gameDay - a.accepted))}d left)</span>` : '';
-      list += html`<div class="row" style="color:#98c379">${misnName(misns[a.id], a)}${days}</div>`;
+      listItems.push(html`<div class="row" style="color:#98c379">${misnName(misns[a.id], a)}${days}</div>`);
     }
-    list += html`<hr style="border-color:#26304a;margin:8px 0">`;
+    listItems.push(html`<hr style="border-color:#26304a;margin:8px 0">`);
   }
-  list += html`<div class="meta" style="margin:0 0 4px">Available here (${offers.length})</div>`;
-  if (!offers.length) list += html`<div class="sub">Nothing right now.</div>`;
+  listItems.push(html`<div class="meta" style="margin:0 0 4px">Available here (${offers.length})</div>`);
+  if (!offers.length) listItems.push(html`<div class="sub">Nothing right now.</div>`);
   for (const o of offers)
-    list += html`<div class="row" style="cursor:pointer;color:${o.id === selMisnId ? '#ffd479' : '#cfd6e4'}"
-      onclick="selMisnId=${o.id};rerenderService()">${misnName(o, getOffer(o.id, p))}</div>`;
-  list += '</div>';
+    listItems.push(html`<div class="row" style="cursor:pointer;color:${o.id === selMisnId ? '#ffd479' : '#cfd6e4'}"
+      onclick="selMisnId=${o.id};rerenderService()">${misnName(o, getOffer(o.id, p))}</div>`);
+  const list = html`<div style="flex:1;min-width:210px;max-height:340px;overflow-y:auto">${listItems}</div>`;
 
-  let pane = '<div style="flex:1.3;min-width:240px">';
+  let paneBody;
   if (sel) {
     const offer = getOffer(selMisnId, p);                // resolved once, stable
     const brief = descText(sel.BriefText, offer) || descText(sel.QuickBrief, offer)
@@ -866,7 +865,7 @@ function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
       ? `${stelName(destId)}${systOfSpob(spobById(destId)) ? ' (' + systOfSpob(spobById(destId)).name + ')' : ''}`
         + (destId === p.id ? ' — return here' : '')
       : 'no fixed destination';
-    pane += html`<h3>${misnName(sel, offer)}</h3>
+    paneBody = html`<h3>${misnName(sel, offer)}</h3>
       <div class="desc" style="max-height:150px;overflow-y:auto">${brief}</div>
       <div class="row">Destination: <b>${destShown}</b></div>
       ${offer.cargoName && offer.cargoQty ? html`<div class="row">Cargo: <b>${offer.cargoQty}t ${offer.cargoName}</b></div>` : ''}
@@ -877,16 +876,16 @@ function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
         <button class="svc" onclick="doAcceptMission(${selMisnId})">Accept</button>
       </div>`;
   } else if (active.length) {
-    pane += html`<div class="sub">Select an available mission, or check your active missions (press I in flight for the briefing).</div>`;
+    paneBody = html`<div class="sub">Select an available mission, or check your active missions (press I in flight for the briefing).</div>`;
   } else {
-    pane += html`<div class="sub">No missions are available here right now. Try the ${loc === 0 ? 'bar' : 'mission computer'}, or another world.</div>`;
+    paneBody = html`<div class="sub">No missions are available here right now. Try the ${loc === 0 ? 'bar' : 'mission computer'}, or another world.</div>`;
   }
-  pane += '</div>';
+  const pane = html`<div style="flex:1.3;min-width:240px">${paneBody}</div>`;
 
   document.getElementById('serviceCard').innerHTML =
     html`<h2>${loc === 0 ? 'Mission Computer' : 'Spaceport Bar'}</h2>
      <div class="meta">${p.name}</div>${topHtml}
-     <div class="shop">${raw(list)}${raw(pane)}</div>
+     <div class="shop">${list}${pane}</div>
      <div class="wallet">${credits.toLocaleString('en-US')} credits · cargo ${cargoUsed()}/${holds} tons · day ${gameDay}</div>
      <div style="margin-top:10px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
 }
@@ -905,39 +904,39 @@ function renderHireBoard() {
   const p = landedAt;
   const totalUpkeep = escorts.reduce((n, e) => n + (e.upkeep || 0), 0);
 
-  let fleet = `<div style="flex:1;min-width:210px;max-height:340px;overflow-y:auto">
-    <div class="meta" style="margin:0 0 4px">Your fleet (${escorts.length}/${MAX_ESCORTS})</div>`;
-  if (!escorts.length) fleet += html`<div class="sub">You have no escorts yet.</div>`;
+  const fleetItems = [];
+  if (!escorts.length) fleetItems.push(html`<div class="sub">You have no escorts yet.</div>`);
   for (const e of escorts) {
     const r = ships[e.shipId], kind = e.upkeep ? `~${e.upkeep.toLocaleString('en-US')} cr/jump` : 'captured';
-    fleet += html`<div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+    fleetItems.push(html`<div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
       <span>${e.name} <span class="sub">${r ? r.name : ''} · ${kind}</span></span>
-      <button class="svc" style="padding:2px 8px" onclick="dismissEscort(${e.id})">Dismiss</button></div>`;
+      <button class="svc" style="padding:2px 8px" onclick="dismissEscort(${e.id})">Dismiss</button></div>`);
   }
-  if (totalUpkeep) fleet += html`<div class="row sub" style="margin-top:6px">Payroll: ~${totalUpkeep.toLocaleString('en-US')} cr / jump</div>`;
-  fleet += '</div>';
+  if (totalUpkeep) fleetItems.push(html`<div class="row sub" style="margin-top:6px">Payroll: ~${totalUpkeep.toLocaleString('en-US')} cr / jump</div>`);
+  const fleet = html`<div style="flex:1;min-width:210px;max-height:340px;overflow-y:auto">
+    <div class="meta" style="margin:0 0 4px">Your fleet (${escorts.length}/${MAX_ESCORTS})</div>${fleetItems}</div>`;
 
-  let hire = `<div style="flex:1.3;min-width:240px;max-height:340px;overflow-y:auto">
-    <div class="meta" style="margin:0 0 4px">Pilots for hire</div>`;
+  const hireItems = [];
   for (const id of HIRE_ROSTER) {
     const r = ships[id]; if (!r) continue;
     const fee = hireFee(r), up = upkeepOf(r);
     const full = escorts.length >= MAX_ESCORTS, afford = credits >= fee;
     const desc = shipClassDesc(id);
-    hire += html`<div class="row" style="border-bottom:1px solid #26304a;padding:6px 0">
+    hireItems.push(html`<div class="row" style="border-bottom:1px solid #26304a;padding:6px 0">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
         <b>${r.name}</b>
         <button class="svc" style="padding:2px 10px" onclick="hireEscort(${id})"${full || !afford ? ' disabled' : ''}>Hire</button>
       </div>
       <div class="sub">Fee ~${fee.toLocaleString('en-US')} cr · ~${up.toLocaleString('en-US')} cr/jump${
         full ? ' · fleet full' : !afford ? ' · can’t afford' : ''}</div>${
-        desc ? html`<div class="sub" style="margin-top:3px;max-height:64px;overflow-y:auto">${desc}</div>` : ''}</div>`;
+        desc ? html`<div class="sub" style="margin-top:3px;max-height:64px;overflow-y:auto">${desc}</div>` : ''}</div>`);
   }
-  hire += '</div>';
+  const hire = html`<div style="flex:1.3;min-width:240px;max-height:340px;overflow-y:auto">
+    <div class="meta" style="margin:0 0 4px">Pilots for hire</div>${hireItems}</div>`;
 
   document.getElementById('serviceCard').innerHTML =
     html`<h2>Spaceport Bar</h2><div class="meta">${p.name}</div>${barTabs()}
-     <div class="shop">${raw(fleet)}${raw(hire)}</div>
+     <div class="shop">${fleet}${hire}</div>
      <div class="wallet">${credits.toLocaleString('en-US')} credits · payroll ${totalUpkeep.toLocaleString('en-US')} cr/jump</div>
      <div style="margin-top:10px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
 }

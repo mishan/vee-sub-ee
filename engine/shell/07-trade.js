@@ -63,24 +63,24 @@ function techAvailable(itemTech, p) {
 
 SERVICE_RENDER.exchange = function () {
   const p = landedAt, m = p.$sem || {};
-  let rows = '';
+  const rows = [];
   for (let i = 0; i < 6; i++) {
     const price = priceAt(p, i);
     const held = cargo[COMMODITIES[i]];
     if (price == null && !held) continue;
     const lvl = m.prices[COMMODITIES[i]];
-    rows += html`<tr><td>${cargoNames[i]}${lvl ? html` <span class="meta" style="margin:0">(${lvl})</span>` : ''}</td>
+    rows.push(html`<tr><td>${cargoNames[i]}${lvl ? html` <span class="meta" style="margin:0">(${lvl})</span>` : ''}</td>
       <td class="num">${price != null ? price + ' cr' : '—'}</td>
       <td class="num">${held}</td><td style="text-align:right">${price != null ? html`
         <button onclick="trade(${i},-10)" ${held < 1 ? 'disabled' : ''}>-10</button>
         <button onclick="trade(${i},-1)"  ${held < 1 ? 'disabled' : ''}>-1</button>
         <button onclick="trade(${i},1)"   ${cargoUsed() >= holds || credits < price ? 'disabled' : ''}>+1</button>
-        <button onclick="trade(${i},10)"  ${cargoUsed() >= holds || credits < price ? 'disabled' : ''}>+10</button>` : ''}</td></tr>`;
+        <button onclick="trade(${i},10)"  ${cargoUsed() >= holds || credits < price ? 'disabled' : ''}>+10</button>` : ''}</td></tr>`);
   }
   document.getElementById('serviceCard').innerHTML = html`<h2>Commodity Exchange</h2>
     <div class="meta">${p.name} · prices per ton</div>
     <table><tr><th>Commodity</th><th style="text-align:right">Price</th>
-    <th style="text-align:right">Held</th><th></th></tr>${raw(rows)}</table>${walletHtml()}`;
+    <th style="text-align:right">Held</th><th></th></tr>${rows}</table>${walletHtml()}`;
 };
 
 /* ---- outfitter ---- */

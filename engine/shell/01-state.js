@@ -18,16 +18,18 @@ function escapeHtml(s) {
 }
 // Auto-escaping HTML template tag. `html`...`` escapes every ${interpolation}
 // unless it is trusted markup — the result of another html`` (below) or wrapped
-// in raw(). Since data values default to escaped, dialogs can't be XSS'd by a
-// modified data fork, and nested html`` fragments compose without re-escaping.
+// in raw(). An array interpolates each element the same way and joins them, so a
+// list of html`` fragments composes without escaping while a stray plain string
+// in the array is still escaped. Since data values default to escaped, dialogs
+// can't be XSS'd by a modified data fork, and nested fragments never re-escape.
 class SafeHtml { constructor(s) { this.value = s; } toString() { return this.value; } }
 function raw(s) { return new SafeHtml(s == null ? '' : String(s)); }   // opt out: trust this markup
 function html(strings, ...values) {
+  const render = v => v instanceof SafeHtml ? v.value
+    : Array.isArray(v) ? v.map(render).join('')
+    : escapeHtml(v == null ? '' : v);
   let out = strings[0];
-  for (let i = 0; i < values.length; i++) {
-    const v = values[i];
-    out += (v instanceof SafeHtml ? v.value : escapeHtml(v == null ? '' : v)) + strings[i + 1];
-  }
+  for (let i = 0; i < values.length; i++) out += render(values[i]) + strings[i + 1];
   return new SafeHtml(out);
 }
 
