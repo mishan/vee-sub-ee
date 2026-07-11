@@ -155,7 +155,7 @@ function decodePict(bytes) {
   }
 
   // --- DirectBitsRect (0x009A) / DirectBitsRgn (0x009B): direct 16/32-bit ---
-  function renderDirectBits(hasRegion) {
+  function renderDirectBits(_hasRegion) {
     p += 4;                     // pmBaseAddr (dummy 0x000000FF)
     const rowBytes = rd16() & 0x7fff;
     const bounds = rdRect();
@@ -231,7 +231,7 @@ const BLACK = [0, 0, 0], WHITE = [255, 255, 255];
 
 /* PackBits (RLE) row decode: `count` input bytes at src[off] -> up to `outLen`. */
 function unpackBits(src, off, count, out, outLen) {
-  let i = off, end = off + count, o = 0;
+  const end = off + count; let i = off, o = 0;
   while (i < end && o < outLen) {
     const n = src[i++] << 24 >> 24; // sign-extend
     if (n >= 0) { for (let k = 0; k <= n && o < outLen && i < end; k++) out[o++] = src[i++]; }
