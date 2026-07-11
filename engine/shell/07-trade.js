@@ -71,8 +71,7 @@ export const refreshView = () => {
 };
 
 /* Actions for the mission board / hire dialog (16-missionboard renders its
- * buttons with data-action=…; the Dialog delegation routes them here). The
- * exchange/outfitter/shipyard dialogs still use inline onclick for now. */
+ * buttons with data-action=…; the Dialog delegation routes them here). */
 const boardActions = {
   selMisn: (id) => {
     S.selMisnId = +id;
@@ -88,12 +87,24 @@ const boardActions = {
   dismiss: (id) => dismissEscort(+id),
 };
 
+/* Actions for the exchange / outfitter / shipyard dialogs. Two-value buttons
+ * (trade, buyOutfit) encode data-arg="a:b" and split it here. */
+const pair = (arg) => arg.split(':').map(Number);
+const shopActions = {
+  close: () => closeService(),
+  trade: (arg) => trade(...pair(arg)),
+  selectOutfit: (id) => selectOutfit(+id),
+  buyOutfit: (arg) => buyOutfit(...pair(arg)),
+  selectShip: (id) => selectShip(+id),
+  buyShip: (id) => buyShip(+id),
+};
+
 // The five landing-screen services share the one 'service' panel; each is a View
 // over a pure render function (renderExchange/… below and in 16-missionboard.js).
 export const SERVICE_VIEWS = {
-  exchange: new View('service', 'serviceCard', renderExchange),
-  outfitter: new View('service', 'serviceCard', renderOutfitter),
-  shipyard: new View('service', 'serviceCard', renderShipyard),
+  exchange: new View('service', 'serviceCard', renderExchange, shopActions),
+  outfitter: new View('service', 'serviceCard', renderOutfitter, shopActions),
+  shipyard: new View('service', 'serviceCard', renderShipyard, shopActions),
   bar: new View('service', 'serviceCard', renderBar, boardActions),
   missioncomputer: new View('service', 'serviceCard', renderComputer, boardActions),
 };
@@ -118,7 +129,7 @@ export const walletHtml = () => {
   const fm = effectiveShip().freeMass;
   return html`<div class="wallet"><b>${wallet.credits.toLocaleString('en-US')}</b> credits ·
     cargo ${cargoUsed()}/${holds} tons · ${fm} tons outfit space</div>
-    <div style="margin-top:12px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
+    <div style="margin-top:12px"><button class="svc" data-action="close">Done (Esc)</button></div>`;
 };
 
 /* tech availability (spec: spöb TechLevel gate + SpecialTech exact match) */
@@ -141,10 +152,10 @@ export function renderExchange() {
       <td class="num">${held}</td><td style="text-align:right">${
         price != null
           ? html`
-        <button onclick="trade(${i},-10)" ${held < 1 ? 'disabled' : ''}>-10</button>
-        <button onclick="trade(${i},-1)"  ${held < 1 ? 'disabled' : ''}>-1</button>
-        <button onclick="trade(${i},1)"   ${cargoUsed() >= holds || !wallet.canAfford(price) ? 'disabled' : ''}>+1</button>
-        <button onclick="trade(${i},10)"  ${cargoUsed() >= holds || !wallet.canAfford(price) ? 'disabled' : ''}>+10</button>`
+        <button data-action="trade" data-arg="${i}:-10" ${held < 1 ? 'disabled' : ''}>-10</button>
+        <button data-action="trade" data-arg="${i}:-1"  ${held < 1 ? 'disabled' : ''}>-1</button>
+        <button data-action="trade" data-arg="${i}:1"   ${cargoUsed() >= holds || !wallet.canAfford(price) ? 'disabled' : ''}>+1</button>
+        <button data-action="trade" data-arg="${i}:10"  ${cargoUsed() >= holds || !wallet.canAfford(price) ? 'disabled' : ''}>+10</button>`
           : ''
       }</td></tr>`);
   }
@@ -200,7 +211,7 @@ export function shopGrid(sheet, items, selId, clickFn) {
     return html`<button class="cell${id === selId ? ' sel' : ''}"
       style="background-image:url(evassets/graphics/${sheet});
              background-position:-${(i % 8) * 32}px -${Math.floor(i / 8) * 32}px"
-      onclick="${clickFn}(${id})"></button>`;
+      data-action="${clickFn}" data-arg="${id}"></button>`;
   });
   return html`<div class="shopgrid">${cells}</div>`;
 }
@@ -249,8 +260,8 @@ export function renderOutfitter() {
       <div class="row">Mass: <b>${o.Mass}</b> tons</div>
       <div class="row">Owned: <b>${own}</b></div>
       <div style="margin-top:10px">
-        <button class="svc" onclick="buyOutfit(${selOutfitId},1)" ${canBuy ? '' : 'disabled'}>Buy</button>
-        <button class="svc" onclick="buyOutfit(${selOutfitId},-1)" ${own < 1 ? 'disabled' : ''}>Sell</button>
+        <button class="svc" data-action="buyOutfit" data-arg="${selOutfitId}:1" ${canBuy ? '' : 'disabled'}>Buy</button>
+        <button class="svc" data-action="buyOutfit" data-arg="${selOutfitId}:-1" ${own < 1 ? 'disabled' : ''}>Sell</button>
       </div></div>`;
   }
   return html`<h2>Outfitter</h2><div class="meta">${p.name} · tech ${p.TechLevel}</div>
@@ -320,7 +331,7 @@ export function renderShipyard() {
       <div class="row">Fuel <b>${r.Fuel / 100}</b> jumps · Crew <b>${r.Crew}</b></div>
       <div class="row">Guns <b>${r.MaxGun}</b> · Turrets <b>${r.MaxTur}</b></div>
       <div style="margin-top:10px">
-        <button class="svc" onclick="buyShip(${selShipId})" ${own || (net > 0 && !wallet.canAfford(net)) ? 'disabled' : ''}>Buy</button>
+        <button class="svc" data-action="buyShip" data-arg="${selShipId}" ${own || (net > 0 && !wallet.canAfford(net)) ? 'disabled' : ''}>Buy</button>
       </div></div>`;
   }
   return html`<h2>Shipyard</h2><div class="meta">${p.name} · tech ${p.TechLevel} ·
