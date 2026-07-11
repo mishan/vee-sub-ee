@@ -10,11 +10,15 @@
 
 const params = new URLSearchParams(location.search);
 
-// Escape untrusted game-data strings before putting them in element text via
-// innerHTML. Text-context only (&<>); values in HTML attributes would also need
-// quote-escaping. Lives here (an early module) so later modules can call it.
+// Escape untrusted game-data strings interpolated into innerHTML by the html``
+// tag. Escapes quotes as well as &<> because the tag is also used inside quoted
+// HTML attributes (onclick, style, …), where an unescaped quote would break out
+// of the attribute. (Quote-escaping stops attribute breakout, not script
+// injection — inline JS handler attributes must still never take untrusted
+// values.) Lives here (an early module) so later modules can call it.
 function escapeHtml(s) {
-  return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 // Auto-escaping HTML template tag. `html`...`` escapes every ${interpolation}
 // unless it is trusted markup — the result of another html`` (below) or wrapped

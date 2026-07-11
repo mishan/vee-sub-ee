@@ -894,8 +894,8 @@ function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
  * toggled by a pair of tabs (spec: "Escorts for hire"). */
 let barTab = 'missions';
 function barTabs() {
-  const t = k => html`<button class="svc" onclick="barTab='${k}';rerenderService()"${barTab === k ? ' disabled' : ''}>`;
-  return html`<div style="margin:6px 0 2px">${t('missions')}Missions</button> ${t('hire')}Hire Escorts</button></div>`;
+  const t = (k, label) => html`<button class="svc" onclick="barTab='${k}';rerenderService()"${barTab === k ? ' disabled' : ''}>${label}</button>`;
+  return html`<div style="margin:6px 0 2px">${t('missions', 'Missions')} ${t('hire', 'Hire Escorts')}</div>`;
 }
 SERVICE_RENDER.bar = () => barTab === 'hire' ? renderHireBoard() : renderMissionBoard(1, barTabs());
 SERVICE_RENDER.missioncomputer = () => renderMissionBoard(0);
