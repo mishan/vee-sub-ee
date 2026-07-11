@@ -44,7 +44,7 @@ export function trade(i, qty) {
   if (qty > 0) qty = Math.min(qty, holds - cargoUsed(), Math.floor(wallet.credits / price));
   else qty = Math.max(qty, -cargo[COMMODITIES[i]]);
   cargo[COMMODITIES[i]] += qty;
-  wallet.credits -= qty * price;
+  wallet.settle(qty * price); // buy (qty>0) charges, sell (qty<0) credits
   refreshView();
 }
 
@@ -173,7 +173,7 @@ export function buyOutfit(id, qty) {
   }
   outfits[id] = (outfits[id] || 0) + qty;
   if (!outfits[id]) delete outfits[id];
-  wallet.credits -= qty * o.Cost;
+  wallet.settle(qty * o.Cost); // buy (qty>0) charges, sell (qty<0) credits
   applyShipStats();
   // cargo can't exceed a shrunken hold: dump overflow (paid nothing for it)
   while (cargoUsed() > holds) {
@@ -286,8 +286,7 @@ export function buyShip(id) {
     showMsg('Your cargo would not fit aboard.');
     return;
   }
-  if (price >= 0) wallet.spend(price);
-  else wallet.earn(-price);
+  wallet.settle(price); // net-negative (trade-in > cost) pays the pilot
   S.playerShipId = id;
   player.shipId = id;
   for (const k of Object.keys(outfits)) delete outfits[k];

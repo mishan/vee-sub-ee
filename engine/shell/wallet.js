@@ -49,4 +49,12 @@ export class Wallet {
     }
     this.credits -= c;
   }
+
+  // Apply a signed transaction in one call: a positive net is a charge (spend), a
+  // negative net a credit (earn). Lets buy/sell flows — where the quantity can be
+  // negative — settle through the validated methods instead of touching credits.
+  settle(net) {
+    if (net >= 0) this.spend(net);
+    else this.earn(-net);
+  }
 }

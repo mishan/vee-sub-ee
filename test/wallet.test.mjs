@@ -35,6 +35,18 @@ test('a fresh Wallet defaults to 0 credits', () => {
   assert.equal(new Wallet().credits, 0);
 });
 
+test('settle applies a signed transaction (spend if positive, earn if negative)', () => {
+  const w = new Wallet(100);
+  w.settle(30); // positive net → charge
+  assert.equal(w.credits, 70);
+  w.settle(-50); // negative net → credit (a sale / net-negative trade-in)
+  assert.equal(w.credits, 120);
+  w.settle(0); // zero net → no-op
+  assert.equal(w.credits, 120);
+  assert.throws(() => w.settle(200), RangeError); // an unaffordable positive net still fails fast
+  assert.equal(w.credits, 120);
+});
+
 test('the constructor coerces and sanitizes the starting balance', () => {
   assert.equal(new Wallet('50').credits, 50); // numeric string coerces
   assert.equal(new Wallet(-5).credits, 0); // negative resets to 0
