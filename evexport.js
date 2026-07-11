@@ -124,15 +124,22 @@ function main() {
     const manifest = fs.readFileSync(path.join(assetDir, 'manifest.json'), 'utf8');
     const engine = fs.readFileSync(path.join(__dirname, 'engine', 'core.js'), 'utf8');
     const tpl = fs.readFileSync(path.join(__dirname, 'flight_template.html'), 'utf8');
-    if (!tpl.includes('/*__EVDATA__*/null')) throw new Error('flight template missing __EVDATA__ placeholder');
-    if (!tpl.includes('/*__SHELL__*/')) throw new Error('flight template missing __SHELL__ placeholder');
+    // Every placeholder must be present, or the matching .replace() below turns
+    // into a silent no-op and ships a subtly broken flight.html. (loader/launch.js
+    // validates the same set — keep them in parity.)
+    for (const ph of ['/*__ENGINE__*/', '/*__SHELL__*/', '/*__EVDATA__*/null',
+                      '/*__MANIFEST__*/null', '/*__NAMES__*/null'])
+      if (!tpl.includes(ph)) throw new Error(`flight template missing ${ph} placeholder`);
     // The browser flight shell is split into engine/shell/*.js for readability;
     // concatenate them (in order.json order) into the one template <script>.
     const shellDir = path.join(__dirname, 'engine', 'shell');
     const shellOrder = JSON.parse(fs.readFileSync(path.join(shellDir, 'order.json'), 'utf8'));
-    // order.json must list exactly the shell modules on disk — a new file that
-    // isn't added would be silently dropped from the build, mysteriously
-    // removing whatever it did.
+    // order.json must list exactly the shell modules on disk, once each — a new
+    // file that isn't listed is silently dropped from the build (removing
+    // whatever it did), and a duplicate would concatenate a module twice
+    // (redeclaring its top-level bindings).
+    const dupes = [...new Set(shellOrder.filter((f, i) => shellOrder.indexOf(f) !== i))];
+    if (dupes.length) throw new Error('engine/shell/order.json lists duplicate(s): ' + dupes.join(', '));
     const onDisk = fs.readdirSync(shellDir).filter(f => f.endsWith('.js')).sort();
     const listed = [...shellOrder].sort();
     if (onDisk.join() !== listed.join()) {

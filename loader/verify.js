@@ -299,8 +299,15 @@ checkSnd();
 // top-level redeclaration before a browser would. No game data needed.
 function checkShellAssembles() {
   const shellDir = path.join(ROOT, 'engine', 'shell');
-  const order = JSON.parse(fs.readFileSync(path.join(shellDir, 'order.json'), 'utf8'));
-  const shell = order.map(f => fs.readFileSync(path.join(shellDir, f), 'utf8')).join('\n');
+  let order, shell;
+  try {
+    order = JSON.parse(fs.readFileSync(path.join(shellDir, 'order.json'), 'utf8'));
+    shell = order.map(f => fs.readFileSync(path.join(shellDir, f), 'utf8')).join('\n');
+  } catch (e) {                          // bad/missing order.json or module file
+    console.log('  ✗ could not read shell sources: ' + e.message);
+    process.exitCode = 1;
+    return;
+  }
   const preamble = "'use strict';\nconst DATA = null, MANIFEST = null, NAMES = null;\n";
   try {
     new Function(preamble + shell);   // eslint-disable-line no-new-func
