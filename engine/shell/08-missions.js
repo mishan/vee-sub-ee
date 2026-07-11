@@ -501,8 +501,12 @@ export function payMission(m) {
       outfits[oid] = (outfits[oid] || 0) + 1;
       applyShipStats();
     }
-  } else if (v >= -40099 && v <= -40001)
-    wallet.credits = Math.round(wallet.credits * (1 - (-v - 40000) / 100));
+  } else if (v >= -40099 && v <= -40001) {
+    // percentage fine: keep a fraction of the balance, deduct the rest via the
+    // Wallet API so the change stays validated like every other transaction
+    const kept = Math.round(wallet.credits * (1 - (-v - 40000) / 100));
+    wallet.spend(wallet.credits - kept);
+  }
   // -10128..-10255 clean legal record: reputation reset with that govt
   else if (v >= -10255 && v <= -10128)
     reputation[-v - 10000] = Math.max(0, reputation[-v - 10000] || 0);
