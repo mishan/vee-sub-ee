@@ -1,4 +1,5 @@
 import {
+  missionLog,
   wallet,
   COMMODITIES,
   PRICE_MULT,
@@ -30,7 +31,7 @@ import { Dialog } from './ui/dialog.js';
 export const cargoNames = DATA.strings[4000].list.slice(0, 6);
 export const basePrices = DATA.strings[4004].list.slice(0, 6).map(Number);
 export const missionCargoUsed = () =>
-  S.activeMissions.reduce((n, a) => n + (a.cargoLoaded ? a.cargoQty : 0), 0);
+  missionLog.list.reduce((n, a) => n + (a.cargoLoaded ? a.cargoQty : 0), 0);
 export const cargoUsed = () => COMMODITIES.reduce((n, c) => n + cargo[c], 0) + missionCargoUsed();
 
 export function priceAt(spob, i) {

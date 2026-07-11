@@ -3,7 +3,7 @@ import {
   S,
   dominated,
   dudes,
-  missionBits,
+  missionLog,
   outfits,
   params,
   legal,
@@ -35,14 +35,14 @@ export const systOfSpob = (p) => p && systs[p.System];
 export const bitReq = (v) => {
   // AvailBitSet-style code check
   if (v < 0) return true;
-  if (v >= 1000) return !missionBits[v - 1000];
-  return !!missionBits[v];
+  if (v >= 1000) return !missionLog.bit(v - 1000);
+  return missionLog.bit(v);
 };
 export function setBitCode(v) {
   // CompBitSet-style: 0-511 set, 1000-1511 clear
   if (v == null || v < 0) return; // classic misn lacks some Nova bit fields
-  if (v >= 1000) missionBits[v - 1000] = 0;
-  else missionBits[v] = 1;
+  if (v >= 1000) missionLog.clearBit(v - 1000);
+  else missionLog.setBit(v);
 }
 export const field = (m, k, dflt = -1) => (m[k] == null ? dflt : m[k]); // classic vs Nova
 
@@ -105,7 +105,7 @@ export function missionAvailable(m, p, loc) {
   if (!goalSupported(m)) return false;
   if (!availStelMatch(m.AvailStel, p)) return false;
   if (!bitReq(m.AvailBitSet)) return false;
-  if (m.AvailBitClr >= 0 && missionBits[m.AvailBitClr]) return false;
+  if (m.AvailBitClr >= 0 && missionLog.bit(m.AvailBitClr)) return false;
   // combat rating gate: -1 ignore, else kills must be at least AvailRating
   if (m.AvailRating >= 0 && legal.kills < m.AvailRating) return false;
   // legal-record gate (record with this spöb's govt): 0 ignore, positive =
@@ -127,17 +127,16 @@ export function missionAvailable(m, p, loc) {
   if (ast >= 2128 && ast <= 2255 && ships[S.playerShipId].InherentGovt !== ast - 2000) return false;
   // AvailRandom rerolled per system arrival, cached on the spob-visit
   if (!MISN_ALL && m.AvailRandom > 0 && m.AvailRandom < 100) {
-    S.availRandom[m.id] = S.availRandom[m.id] ?? Math.random() * 100;
-    if (S.availRandom[m.id] >= m.AvailRandom) return false;
+    missionLog.availRandom[m.id] = missionLog.availRandom[m.id] ?? Math.random() * 100;
+    if (missionLog.availRandom[m.id] >= m.AvailRandom) return false;
   }
   return true;
 }
-S.availRandom = {}; // misnId -> rolled %, reset each system arrival
 
 export function offeredMissions(p, loc) {
   const out = [];
   for (const [id, m] of Object.entries(misns)) {
-    if (S.activeMissions.some((a) => a.id === +id)) continue; // already accepted (raw records have no id)
+    if (missionLog.has(+id)) continue; // already accepted (raw records have no id)
     if (missionAvailable(m, p, loc)) out.push({ id: +id, ...m });
   }
   // critical missions (Flags 0x1000) first, else by id
@@ -196,7 +195,6 @@ export const misnCargoName = (m) => {
  * the real destination/cargo/deadline and accepting yields the same thing
  * (classic EV fixes these when the mission is first shown). Cached by id,
  * per system visit (cleared alongside availRandom in loadSystem). */
-S.resolvedOffers = {};
 /* id is passed explicitly: raw misn records (misns[id]) carry no `id`
  * field, so keying off m.id silently collapsed every offer onto one
  * cache slot — the bug where every briefing showed the same destination. */
@@ -205,7 +203,7 @@ export function getOffer(id, here) {
   // relative to `here`, so the same mission offered at a second spöb in the
   // same system must not reuse the first spöb's resolution.
   const key = `${id}@${here ? here.id : ''}`;
-  if (S.resolvedOffers[key]) return S.resolvedOffers[key];
+  if (missionLog.resolvedOffers[key]) return missionLog.resolvedOffers[key];
   const m = misns[id];
   const qty =
     m.CargoQty <= -2
@@ -219,7 +217,7 @@ export function getOffer(id, here) {
     cargoQty: qty,
     deadline: m.TimeLimit > 0 ? S.gameDay + m.TimeLimit : null,
   };
-  S.resolvedOffers[key] = o;
+  missionLog.resolvedOffers[key] = o;
   return o;
 }
 
@@ -260,18 +258,17 @@ export function acceptMission(id, here) {
   }
   // cargo picked up at accept
   if (A.cargoName && A.pickupMode === 0) A.cargoLoaded = true;
-  S.activeMissions.push(A);
+  missionLog.add(A);
   maybeSpawnMissionShips(A);
   showMsg(`Mission accepted: ${misnName(m, A)}`);
 }
 
 export function abortMission(id) {
-  const i = S.activeMissions.findIndex((a) => a.id === id);
-  if (i < 0) return;
+  const A = missionLog.find(id);
+  if (!A) return;
   const m = misns[id];
-  const A = S.activeMissions[i];
   if (m.Flags & 0x0040) legal.adjust(m.CompGovt, -5 * m.CompReward); // abort reversal
-  S.activeMissions.splice(i, 1);
+  missionLog.remove(id);
   // clear its mission ships from the system
   S.aiShips = S.aiShips.filter((s) => s.misnId !== id);
   showMsg(`Mission abandoned: ${misnName(m, A)}`);
@@ -343,7 +340,7 @@ export function dudeShipPairs(dude) {
 
 /* Called when a mission ship is destroyed (from hitShip). */
 export function onMissionShipDestroyed(s) {
-  const A = S.activeMissions.find((a) => a.id === s.misnId);
+  const A = missionLog.find(s.misnId);
   if (!A) return;
   switch (A.shipGoal) {
     case 3: // escort: any loss fails the mission
@@ -368,7 +365,7 @@ export function onMissionShipDestroyed(s) {
 /* Called when a mission ship becomes disabled (from hitShip). Disable goal
  * counts it done; Board/Rescue now allow boarding. */
 export function onMissionShipDisabled(s) {
-  const A = S.activeMissions.find((a) => a.id === s.misnId);
+  const A = missionLog.find(s.misnId);
   if (!A) return;
   if (A.shipGoal === 1) {
     // Disable but don't destroy
@@ -385,7 +382,7 @@ export function onMissionShipDisabled(s) {
 
 /* An escort ship reached its destination safely. */
 export function onMissionEscortArrived(s) {
-  const A = S.activeMissions.find((a) => a.id === s.misnId);
+  const A = missionLog.find(s.misnId);
   if (!A) return;
   if (!S.aiShips.some((x) => x.misnId === A.id && x !== s))
     showMsg(`${misnName(misns[A.id], A)}: escort delivered — return for payment.`);
@@ -415,7 +412,7 @@ export function goalFailed(A) {
  * chunks to append to the planet screen. */
 export function missionLandingEvents(p) {
   const notes = [];
-  for (const A of [...S.activeMissions]) {
+  for (const A of [...missionLog.list]) {
     const m = misns[A.id];
     // cargo pickup at TravelStel
     if (A.cargoName && !A.cargoLoaded && A.pickupMode === 1 && A.travelStel === p.id) {
@@ -453,11 +450,11 @@ export function missionLandingEvents(p) {
   return notes;
 }
 export function removeMission(id) {
-  S.activeMissions = S.activeMissions.filter((a) => a.id !== id);
+  missionLog.remove(id);
   S.aiShips = S.aiShips.filter((s) => s.misnId !== id);
 }
 export function checkExpiredMissions() {
-  for (const A of [...S.activeMissions]) {
+  for (const A of [...missionLog.list]) {
     if (A.timeLimit > 0 && S.gameDay - A.accepted > A.timeLimit) {
       const m = misns[A.id];
       setBitCode(m.FailBitSet);
@@ -470,11 +467,11 @@ export function checkExpiredMissions() {
 }
 /* I in flight: briefing for the active missions (QuickBrief). */
 export function showMissionBriefing() {
-  if (!S.activeMissions.length) {
+  if (!missionLog.count) {
     showMsg('No active missions.');
     return;
   }
-  const lines = S.activeMissions.map((a) => {
+  const lines = missionLog.list.map((a) => {
     const destId = a.travelStel != null ? a.travelStel : a.returnStel;
     const dest =
       destId != null

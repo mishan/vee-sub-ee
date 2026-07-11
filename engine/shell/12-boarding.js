@@ -7,6 +7,7 @@
  */
 
 import {
+  missionLog,
   wallet,
   COMMODITIES,
   S,
@@ -63,10 +64,7 @@ export function boardTarget() {
     showMsg('Slow down to board.');
     return;
   }
-  const A =
-    best.misnGoal === 2 || best.misnGoal === 5
-      ? S.activeMissions.find((a) => a.id === best.misnId)
-      : null;
+  const A = best.misnGoal === 2 || best.misnGoal === 5 ? missionLog.find(best.misnId) : null;
   playSnd(390, 0.7); // Airlock — the boarding sound
   if (A) {
     // mission boarding: complete the objective, no plunder dialog

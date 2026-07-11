@@ -8,6 +8,7 @@
  */
 import { Wallet } from './wallet.js';
 import { LegalRecord } from './legal.js';
+import { MissionLog } from './mission-log.js';
 /* ---------------- configuration ---------------- */
 
 export const params = new URLSearchParams(location.search);
@@ -121,12 +122,12 @@ export const Save = {
       cargo,
       outfits,
       explored: [...explored],
-      bits: [...missionBits.keys()].filter((b) => missionBits[b]),
+      bits: [...missionLog.bits.keys()].filter((b) => missionLog.bits[b]),
       day: S.gameDay,
       born: pilotBorn,
       rep: legal.records,
       kills: legal.kills,
-      missions: S.activeMissions,
+      missions: missionLog.list,
       dominated: [...dominated],
       name: pilotName,
       shipName,
@@ -203,8 +204,6 @@ export const explored = new Set(SAVED ? SAVED.explored : []);
 /* mission state (spec: "Missions") — also part of the pilot file. 512 flags:
  * set/clear codes address bits 0–511 (0–511 set, 1000–1511 clear), and përs
  * MissionBit likewise ranges 0–511, so the store must span the full range. */
-export const missionBits = new Uint8Array(512);
-if (SAVED && SAVED.bits) for (const b of SAVED.bits) missionBits[b] = 1;
 S.gameDay = SAVED ? SAVED.day || 0 : 0;
 // Real-world epoch the pilot was created, so the displayed in-game date is
 // stable across sessions (legacy saves without it fall back to now).
@@ -226,7 +225,10 @@ export const persDone = new Set(SAVED && SAVED.persDone ? SAVED.persDone : []);
 // përs who hold a grudge (you attacked them): they won't offer you work again.
 export const persGrudge = new Set(SAVED && SAVED.persGrudge ? SAVED.persGrudge : []);
 /* active missions: resolved, live copies (not the raw records) */
-S.activeMissions = SAVED && SAVED.missions ? SAVED.missions.map((m) => ({ ...m })) : [];
+export const missionLog = new MissionLog(
+  SAVED && SAVED.missions ? SAVED.missions.map((m) => ({ ...m })) : [],
+  (SAVED && SAVED.bits) || [],
+);
 /* player-owned escorts (spec: "Escorts") — allied ships that follow the
  * player, fight the player's enemies, and persist across jumps/landings.
  * Saved as {id, shipId, name}; the live AI entity is respawned each system. */
