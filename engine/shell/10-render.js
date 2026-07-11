@@ -159,9 +159,9 @@ function drawPanel(w, h) {
     return [x, y];
   };
   for (const p of spobs) blip(p, '#7fd0ff', 3);
-  for (const s of aiShips) {
+  for (const s of S.aiShips) {
     const at = blip(s, s.playerEscort ? '#67d967' : radarColor(s.govt), 2);
-    if (at && s === shipTarget) {
+    if (at && s === S.shipTarget) {
       ctx.strokeStyle = '#ffd479'; ctx.strokeRect(at[0] - 3, at[1] - 3, 6, 6);
     }
   }
@@ -172,7 +172,7 @@ function drawPanel(w, h) {
   ctx.fillStyle = GREEN;
   ctx.fillRect(px + 60, py + 154,
     Math.round(74 * Math.max(0, player.shields / player.shieldMax)), 6);
-  ctx.fillRect(px + 60, py + 170, Math.round(74 * (fuel / fuelMax)), 6);
+  ctx.fillRect(px + 60, py + 170, Math.round(74 * (S.fuel / fuelMax)), 6);
 
   /* secondary weapon display (classic behavior — not a message mirror) */
   const sw = player.selSecondary;
@@ -192,39 +192,39 @@ function drawPanel(w, h) {
   }
 
   /* status strip: hyperspace destination */
-  const destName = jumpDest != null && systs[jumpDest] ? systs[jumpDest].name : null;
+  const destName = S.jumpDest != null && systs[S.jumpDest] ? systs[S.jumpDest].name : null;
   panelText(px + 9, py + 248,
-    jump ? `Hyperspace: ${systs[jump.destId].name}` :
+    S.jump ? `Hyperspace: ${systs[S.jump.destId].name}` :
     destName ? `Dest: ${destName} (J)` : syst.name);
 
   /* target display */
   const tb = { x: px + 5, y: py + 262, w: 134, h: 117 };
-  if (shipTarget) {
+  if (S.shipTarget) {
     // classic schematic target pic (PICT 3000 + ship index); sprite fallback
-    if (!drawGfxFit(ctx, 3000 + (shipTarget.shipId - 128), tb.x + tb.w / 2, tb.y + 40, tb.w - 8, 74))
-      drawSpin(ctx, spinOfShip(shipTarget.shipId), tb.x + tb.w / 2, tb.y + 40, shipTarget.heading);
-    const govtName = shipTarget.govt >= 128 && DATA.types.govt[shipTarget.govt]
-      ? DATA.types.govt[shipTarget.govt].name : 'Independent';
-    panelText(tb.x + tb.w / 2, tb.y + 86, shipTarget.misnName || ships[shipTarget.shipId].name, '#fff', 'center');
+    if (!drawGfxFit(ctx, 3000 + (S.shipTarget.shipId - 128), tb.x + tb.w / 2, tb.y + 40, tb.w - 8, 74))
+      drawSpin(ctx, spinOfShip(S.shipTarget.shipId), tb.x + tb.w / 2, tb.y + 40, S.shipTarget.heading);
+    const govtName = S.shipTarget.govt >= 128 && DATA.types.govt[S.shipTarget.govt]
+      ? DATA.types.govt[S.shipTarget.govt].name : 'Independent';
+    panelText(tb.x + tb.w / 2, tb.y + 86, S.shipTarget.misnName || ships[S.shipTarget.shipId].name, '#fff', 'center');
     panelText(tb.x + tb.w / 2, tb.y + 98,
-      shipTarget.bounty ? 'Bounty Hunter' : govtName,
-      shipTarget.bounty ? '#e06c75' : radarColor(shipTarget.govt), 'center');
-    const shp = Math.round(100 * Math.max(0, shipTarget.shields) / shipTarget.shieldMax);
+      S.shipTarget.bounty ? 'Bounty Hunter' : govtName,
+      S.shipTarget.bounty ? '#e06c75' : radarColor(S.shipTarget.govt), 'center');
+    const shp = Math.round(100 * Math.max(0, S.shipTarget.shields) / S.shipTarget.shieldMax);
     panelText(tb.x + tb.w / 2, tb.y + 110,
-      shipTarget.disabled ? 'DISABLED' : `Shields ${shp}% · ${Math.round(distTo(shipTarget))}px`,
-      shipTarget.disabled ? '#e06c75' : GREEN, 'center');
-  } else if (navTarget) {
-    drawSpin(ctx, spinOfSpob(navTarget), tb.x + tb.w / 2, tb.y + 44, 0);
-    panelText(tb.x + tb.w / 2, tb.y + 98, navTarget.name, '#fff', 'center');
-    panelText(tb.x + tb.w / 2, tb.y + 110, `${Math.round(distTo(navTarget))}px`, GREEN, 'center');
+      S.shipTarget.disabled ? 'DISABLED' : `Shields ${shp}% · ${Math.round(distTo(S.shipTarget))}px`,
+      S.shipTarget.disabled ? '#e06c75' : GREEN, 'center');
+  } else if (S.navTarget) {
+    drawSpin(ctx, spinOfSpob(S.navTarget), tb.x + tb.w / 2, tb.y + 44, 0);
+    panelText(tb.x + tb.w / 2, tb.y + 98, S.navTarget.name, '#fff', 'center');
+    panelText(tb.x + tb.w / 2, tb.y + 110, `${Math.round(distTo(S.navTarget))}px`, GREEN, 'center');
   } else {
     panelText(tb.x + tb.w / 2, tb.y + 62, 'No target', DIMGREEN, 'center');
   }
 
   /* cargo / wallet box */
   const cb = { x: px + 9, y: py + 398 };
-  panelText(cb.x, cb.y, `Credits: ${credits.toLocaleString('en-US')}`);
-  panelText(cb.x, cb.y + 13, `Jumps left: ${Math.floor(fuel / EV.JUMP_FUEL)}`);
+  panelText(cb.x, cb.y, `Credits: ${S.credits.toLocaleString('en-US')}`);
+  panelText(cb.x, cb.y + 13, `Jumps left: ${Math.floor(S.fuel / EV.JUMP_FUEL)}`);
   let cy = cb.y + 30;
   const held = COMMODITIES.map((c, i) => [cargoNames[i], cargo[c]]).filter(([, q]) => q > 0);
   if (held.length === 0) panelText(cb.x, cy, `Cargo: ${holds} tons free`, DIMGREEN);
@@ -269,7 +269,7 @@ function drawMap(w, h) {
     if (+id === SYSTEM_ID) {
       ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.stroke();
     }
-    if (+id === jumpDest) {
+    if (+id === S.jumpDest) {
       ctx.strokeStyle = '#ffd479'; ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.stroke();
     }
     if (adjacent) mapHit.push({ x, y, id: +id });
@@ -281,7 +281,7 @@ function drawMap(w, h) {
   }
   // Legal status for the selected system (destination if chosen, else the
   // current one), plus the player's combat rating.
-  const shownId = jumpDest >= 128 && systs[jumpDest] ? jumpDest : SYSTEM_ID;
+  const shownId = S.jumpDest >= 128 && systs[S.jumpDest] ? S.jumpDest : SYSTEM_ID;
   const shownSys = systs[shownId];
   const statusG = shownSys.Govt >= 128 ? shownSys.Govt : 128;
   const status = legalStatus(statusG);
@@ -296,12 +296,12 @@ function drawMap(w, h) {
   ctx.fillStyle = '#8fa3c8';
   ctx.fillText(`Combat rating: ${combatRating()}` +
     `   ·   click a linked system, then J to jump` +
-    (fuel < EV.JUMP_FUEL ? '  (out of fuel!)' : ''), mx + 14, my + mh - 12);
+    (S.fuel < EV.JUMP_FUEL ? '  (out of fuel!)' : ''), mx + 14, my + mh - 12);
 }
 canvas.addEventListener('pointerdown', e => {
-  if (!mapOpen) return;
+  if (!S.mapOpen) return;
   for (const t of mapHit) // generous hit radius so it works with a fingertip too
-    if (Math.hypot(e.clientX - t.x, e.clientY - t.y) < (TOUCH ? 22 : 12)) { jumpDest = t.id; return; }
+    if (Math.hypot(e.clientX - t.x, e.clientY - t.y) < (TOUCH ? 22 : 12)) { S.jumpDest = t.id; return; }
 });
 
 function render() {
@@ -311,7 +311,7 @@ function render() {
   ctx.clearRect(0, 0, w, h);
   ctx.imageSmoothingEnabled = false;
 
-  const streak = jump && jump.phase === 'streak' ? jump.t : 0;
+  const streak = S.jump && S.jump.phase === 'streak' ? S.jump.t : 0;
   drawStars(player.x, player.y, w, h, streak);
   const toScreen = (x, y) => [x - player.x + w / 2, y - player.y + h / 2];
 
@@ -323,13 +323,13 @@ function render() {
     ctx.textAlign = 'center';
     ctx.fillText(p.name, x, y + 50);
     ctx.textAlign = 'left';
-    if (p === navTarget) {
+    if (p === S.navTarget) {
       const ok = !p.$sem || p.$sem.canLand;
       drawBrackets(x, y, spriteHalf(spinOfSpob(p), 48),
         ok ? 'rgba(120,230,140,.9)' : 'rgba(150,160,180,.7)');
     }
   }
-  for (const s of aiShips) {
+  for (const s of S.aiShips) {
     const [x, y] = toScreen(s.x, s.y);
     if (x < -100 || x > w + 100 || y < -100 || y > h + 100) continue;
     // disintegration: fade the hull out under the fireball (not a hard flicker)
@@ -347,11 +347,11 @@ function render() {
     drawSpin(ctx, spinOfShip(s.shipId), x, y, s.heading);
     drawFlame(s, x, y);
     ctx.globalAlpha = 1;
-    if (s === shipTarget)
+    if (s === S.shipTarget)
       drawBrackets(x, y, spriteHalf(spinOfShip(s.shipId), 32),
         s.hostile ? 'rgba(224,108,117,.9)' : 'rgba(255,212,121,.9)');
   }
-  if (!landedAt && !gameOver) {
+  if (!S.landedAt && !S.gameOver) {
     if (player.deathT >= 0) ctx.globalAlpha = Math.max(0, player.deathT / Math.max(player.deathDelay, 1));
     drawSpin(ctx, spinOfShip(player.shipId), w / 2, h / 2, player.heading);
     drawFlame(player, w / 2, h / 2);
@@ -361,7 +361,7 @@ function render() {
   /* shots, beams, explosions */
   const BEAM_COLORS = { '-2': '#ff5050', '-3': '#50ff70', '-4': '#5080ff',
     '-5': '#50ffff', '-6': '#ff50ff', '-7': '#ffff50' };
-  for (const b of beams) {
+  for (const b of S.beams) {
     const [x1, y1] = toScreen(b.owner.x, b.owner.y);
     const a = EV.rad(b.heading), len = b.len ?? b.rec.Speed;
     ctx.strokeStyle = BEAM_COLORS[b.rec.Graphic] || '#ffffff';
@@ -372,14 +372,14 @@ function render() {
     ctx.stroke();
     ctx.lineWidth = 1;
   }
-  for (const shot of shots) {
+  for (const shot of S.shots) {
     const [x, y] = toScreen(shot.x, shot.y);
     if (x < -40 || x > w + 40 || y < -40 || y > h + 40) continue;
     const spin = 200 + shot.rec.Graphic;
     if (MANIFEST.spins[spin]) drawSpin(ctx, spin, x, y, shot.heading);
     else { ctx.fillStyle = '#fff'; ctx.fillRect(x - 1, y - 1, 2, 2); }
   }
-  for (const ex of explosions) {
+  for (const ex of S.explosions) {
     const [x, y] = toScreen(ex.x, ex.y);
     const meta = MANIFEST.spins[ex.spin];
     const s = sprites.get(ex.spin);
@@ -390,22 +390,22 @@ function render() {
       x - meta.frameW / 2, y - meta.frameH / 2, meta.frameW, meta.frameH);
   }
   drawPanel(w, h);
-  if (mapOpen) drawMap(w, h);
+  if (S.mapOpen) drawMap(w, h);
 
   const speed = Math.hypot(player.vx, player.vy);
   document.getElementById('hud').innerHTML = html`
-    <b>${syst.name}</b><br>${ships[playerShipId].name}<br>speed ${(speed * EV.FPS).toFixed(0)} px/s`;
+    <b>${syst.name}</b><br>${ships[S.playerShipId].name}<br>speed ${(speed * EV.FPS).toFixed(0)} px/s`;
 
   // boardable disabled mission ship in range?
-  const boardable = landedAt ? null : aiShips.find(s => s.misnId != null && s.disabled &&
+  const boardable = S.landedAt ? null : S.aiShips.find(s => s.misnId != null && s.disabled &&
     s.deathT < 0 && (s.misnGoal === 2 || s.misnGoal === 5) &&
     Math.hypot(s.x - player.x, s.y - player.y) < 50);
-  const near = (landedAt || jump || !navTarget ||
-    (navTarget.$sem && !navTarget.$sem.canLand) ||
-    distTo(navTarget) >= EV.LAND_DIST) ? null : navTarget;
+  const near = (S.landedAt || S.jump || !S.navTarget ||
+    (S.navTarget.$sem && !S.navTarget.$sem.canLand) ||
+    distTo(S.navTarget) >= EV.LAND_DIST) ? null : S.navTarget;
   document.getElementById('prompt').textContent =
-    jump && jump.phase === 'engage'
-      ? (jump.t < EV.JUMP_WARMUP_FRAMES ? 'Hyperdrive spinning up — Esc to abort'
+    S.jump && S.jump.phase === 'engage'
+      ? (S.jump.t < EV.JUMP_WARMUP_FRAMES ? 'Hyperdrive spinning up — Esc to abort'
                                         : 'Entering hyperspace…') :
     boardable ? 'Press B to board' :
     near ? (speed > EV.LAND_SPEED ? `Slow down to land on ${near.name}`

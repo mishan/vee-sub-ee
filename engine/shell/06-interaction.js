@@ -10,8 +10,8 @@
 
 /* ---- targeting & messages ---- */
 
-let navTarget = null;   // spob (landing/nav target)
-let shipTarget = null;  // AI entity (comm/targeting)
+S.navTarget = null;   // spob (landing/nav target)
+S.shipTarget = null;  // AI entity (comm/targeting)
 let msgTimer = null;
 
 let lastMsg = '';
@@ -39,17 +39,17 @@ function nearestLandable() {
 function cyclePlanetTarget() {
   if (!spobs.length) { showMsg('No stellar objects in this system.'); return; }
   const sorted = [...spobs].sort((a, b) => distTo(a) - distTo(b));
-  const i = navTarget ? sorted.indexOf(navTarget) : -1;
-  navTarget = (i + 1 < sorted.length) ? sorted[i + 1] : null;
-  if (!navTarget) showMsg('Navigation target cleared.');
+  const i = S.navTarget ? sorted.indexOf(S.navTarget) : -1;
+  S.navTarget = (i + 1 < sorted.length) ? sorted[i + 1] : null;
+  if (!S.navTarget) showMsg('Navigation target cleared.');
   playSnd(150, 0.5);
 }
 function cycleShipTarget() {
-  if (!aiShips.length) { showMsg('No ships on scope.'); shipTarget = null; return; }
-  const sorted = [...aiShips].sort((a, b) => distTo(a) - distTo(b));
-  const i = shipTarget ? sorted.indexOf(shipTarget) : -1;
-  shipTarget = (i + 1 < sorted.length) ? sorted[i + 1] : null;
-  if (!shipTarget) showMsg('Target cleared.');
+  if (!S.aiShips.length) { showMsg('No ships on scope.'); S.shipTarget = null; return; }
+  const sorted = [...S.aiShips].sort((a, b) => distTo(a) - distTo(b));
+  const i = S.shipTarget ? sorted.indexOf(S.shipTarget) : -1;
+  S.shipTarget = (i + 1 < sorted.length) ? sorted[i + 1] : null;
+  if (!S.shipTarget) showMsg('Target cleared.');
   playSnd(150, 0.5);
 }
 
@@ -78,7 +78,7 @@ const subdued = new Set(); // spob ids whose defense fleet you've just cleared (
  * either way that ship is out of the fight. */
 function checkDefenseCleared(defOf, excluding) {
   if (defOf == null) return;
-  if (aiShips.some(x => x !== excluding && x.defOf === defOf)) return;
+  if (S.aiShips.some(x => x !== excluding && x.defOf === defOf)) return;
   subdued.add(defOf);
   const p = spobById(defOf);
   if (p) showMsg(`${p.name}'s defenses are broken — hail it to demand tribute.`);
@@ -109,7 +109,7 @@ function demandTribute(p) {
     hailSay('They have already submitted to you.'); return;
   }
   // still defended? refuse and scramble the defense fleet.
-  const defendersHere = aiShips.some(s => s.defOf === p.id);
+  const defendersHere = S.aiShips.some(s => s.defOf === p.id);
   if (defWave(p) > 0 && !subdued.has(p.id)) {
     hailSay(pickFrom(3002, 10, 14) || 'You will regret this.');
     if (!defendersHere) spawnDefenseFleet(p);
@@ -120,7 +120,7 @@ function demandTribute(p) {
   // field in classic spöb data): scales with tech level.
   dominated.add(p.id);
   const amt = 2000 * (p.TechLevel + 1);
-  credits += amt;
+  S.credits += amt;
   hailSay(`${pickFrom(3002, 25, 26) || 'They agree to pay you tribute.'} (+${amt.toLocaleString('en-US')} cr)`);
   playSnd(150, 0.5);
 }
@@ -138,7 +138,7 @@ function spawnDefenseFleet(p) {
     e.defOf = p.id; e.hostile = true; e.warpIn = 18;
     e.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
     armShip(e, ships[shipId]);
-    aiShips.push(e);
+    S.aiShips.push(e);
   }
   showMsg(`${p.name} launches its defense fleet!`);
 }
@@ -157,7 +157,7 @@ function shipGreeting(s) {
 function requestAssistance(s) {
   hailClick();
   if (s.hostile) { hailSay(pickFrom(3000, 95, 99) || pickFrom(3000, 50, 59)); return; }
-  if (fuel >= fuelMax) { hailSay(pickFrom(3000, 70, 74) || 'You look fine to me.'); return; }
+  if (S.fuel >= fuelMax) { hailSay(pickFrom(3000, 70, 74) || 'You look fine to me.'); return; }
   hailTarget.mode = 'fuel';                       // offer fuel for a price
   hailSay(pickFrom(3000, 140, 144) || 'I can spare fuel, for a price.');
 }
@@ -170,9 +170,9 @@ function payFuel(full) {
     hailSay(pickFrom(3000, 120, 124) || 'Bad mood today — no deal.');
     return;
   }
-  if (credits < price) { hailSay(pickFrom(3000, 60, 64) || 'You can’t afford it.'); return; }
-  credits -= price;
-  fuel = fuelMax;
+  if (S.credits < price) { hailSay(pickFrom(3000, 60, 64) || 'You can’t afford it.'); return; }
+  S.credits -= price;
+  S.fuel = fuelMax;
   hailTarget.mode = 'main';
   hailSay((full ? pickFrom(3000, 100, 104) : pickFrom(3000, 115, 119)) +
     ` (−${price.toLocaleString('en-US')} cr, refuelled)`);
@@ -182,7 +182,7 @@ function begForMercy(s) {
   hailClick();
   if (Math.random() < 0.45) {                     // they'll entertain a bribe
     hailTarget.mode = 'mercy';
-    hailTarget.bribe = Math.max(500, Math.min(5000, Math.round(credits * 0.2)));
+    hailTarget.bribe = Math.max(500, Math.min(5000, Math.round(S.credits * 0.2)));
     hailSay(`They'll let you go... for ${hailTarget.bribe.toLocaleString('en-US')} credits.`);
   } else {
     hailSay(pickFrom(3000, 15, 19) || 'Calling to beg for your life?');
@@ -191,8 +191,8 @@ function begForMercy(s) {
 }
 function payBribe(s) {
   hailClick();
-  if (credits < hailTarget.bribe) { hailSay(pickFrom(3000, 60, 64) || 'You can’t afford it.'); return; }
-  credits -= hailTarget.bribe;
+  if (S.credits < hailTarget.bribe) { hailSay(pickFrom(3000, 60, 64) || 'You can’t afford it.'); return; }
+  S.credits -= hailTarget.bribe;
   s.hostile = false; s.fleeing = true;            // breaks off and runs
   hailSay(pickFrom(3000, 135, 139) || 'All right, I’ll leave you alone.');
   playSnd(150, 0.4);
@@ -202,13 +202,13 @@ function demandSurrender(s) {
   hailClick();
   if (!s.disabled) { hailSay(pickFrom(3002, 7, 9) || 'Surrender? To you? Ha!'); return; }
   const loot = 500 + Math.floor(Math.random() * 2000);
-  credits += loot;
+  S.credits += loot;
   // same consequences as boarding: it's piracy, and the ship is gone once
   // plundered (was repeatable free loot, and left defenders "in the fight").
   commitCrime(s.govt, penaltyOf(s.govt, 'BoardPenalty'));
-  const i = aiShips.indexOf(s);
-  if (i >= 0) aiShips.splice(i, 1);
-  if (shipTarget === s) shipTarget = null;
+  const i = S.aiShips.indexOf(s);
+  if (i >= 0) S.aiShips.splice(i, 1);
+  if (S.shipTarget === s) S.shipTarget = null;
   checkDefenseCleared(s.defOf, s);
   showMsg(`You plunder the disabled ship. (+${loot.toLocaleString('en-US')} cr)`);
   closeHail(); // a comm demand, not a physical boarding — no airlock sound
@@ -334,10 +334,10 @@ function renderHail() {
 }
 
 function hail() {
-  if (shipTarget) openHail('ship', shipTarget);
-  else if (navTarget) {
-    const m = navTarget.$sem || {};
-    if (m.uninhabited || !m.canLand) showMsg(`${navTarget.name} does not respond.`);
-    else openHail('planet', navTarget);
+  if (S.shipTarget) openHail('ship', S.shipTarget);
+  else if (S.navTarget) {
+    const m = S.navTarget.$sem || {};
+    if (m.uninhabited || !m.canLand) showMsg(`${S.navTarget.name} does not respond.`);
+    else openHail('planet', S.navTarget);
   } else showMsg('No target to hail. (Tab: ships, N: planets)');
 }

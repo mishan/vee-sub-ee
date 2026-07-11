@@ -80,9 +80,9 @@ function titleAbout() {
   document.getElementById('about').style.display = 'flex';
 }
 function titlePrefs() {
-  soundOn = !soundOn;
-  if (!soundOn) stopTitleMusic(); else startTitleMusic();
-  showMsg('Sound ' + (soundOn ? 'on' : 'off'));
+  S.soundOn = !S.soundOn;
+  if (!S.soundOn) stopTitleMusic(); else startTitleMusic();
+  showMsg('Sound ' + (S.soundOn ? 'on' : 'off'));
 }
 
 /* The title viewscreen shows a summary of the current pilot's game (as the
@@ -93,7 +93,7 @@ function gameDate() {
   // creation epoch so the date is stable across sessions.
   const base = new Date(pilotBorn);
   const d = new Date(base.getFullYear() + 250, base.getMonth(), base.getDate());
-  d.setDate(d.getDate() + gameDay);
+  d.setDate(d.getDate() + S.gameDay);
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
     'August', 'September', 'October', 'November', 'December'];
   const day = d.getDate();
@@ -129,7 +129,7 @@ function renderTitleSummary() {
     g.textAlign = 'left';
     return;
   }
-  const shipTypeName = ships[playerShipId] ? ships[playerShipId].name : 'Shuttlecraft';
+  const shipTypeName = ships[S.playerShipId] ? ships[S.playerShipId].name : 'Shuttlecraft';
   const fields = [
     ['Pilot', pilotName || 'Pilot'],
     ['Ship name', shipName || shipTypeName],

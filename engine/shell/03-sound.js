@@ -9,7 +9,7 @@
 /* ---- audio (spec: "Audio") ----
  * Plain Audio elements (file:// safe). Browsers block playback until the
  * first user gesture; failed play()s are swallowed until then. */
-let soundOn = !params.has('mute');
+S.soundOn = !params.has('mute');
 /* master volume, 0..1 in 10% steps ([ and ] keys), persisted */
 let masterVol = (() => {
   try { const v = parseFloat(localStorage.getItem('ve_volume')); return isNaN(v) ? 1 : Math.max(0, Math.min(1, v)); }
@@ -19,7 +19,7 @@ function setVolume(delta) {
   masterVol = Math.max(0, Math.min(1, Math.round((masterVol + delta) * 10) / 10));
   try { localStorage.setItem('ve_volume', String(masterVol)); } catch {}
   // adjust every currently-playing long sound live
-  for (const a of [ambientSnd, warpSnd])
+  for (const a of [S.ambientSnd, warpSnd])
     if (a) a.volume = Math.min((a._baseVol ?? 1) * masterVol, 1);
   if (titleGain) titleGain.gain.value = titleVol();
   if (titleAudioEl) titleAudioEl.volume = titleVol();
@@ -33,13 +33,13 @@ function sndEl(id) {
   return a;
 }
 function playSnd(id, vol = 1) {
-  if (!soundOn || vol * masterVol <= 0.02) return;
+  if (!S.soundOn || vol * masterVol <= 0.02) return;
   const a = sndEl(id).cloneNode();
   a.volume = Math.min(vol * masterVol, 1);
   a.play().catch(() => {});
 }
 function loopSnd(id, vol = 1) {
-  if (!soundOn || masterVol <= 0) return null;
+  if (!S.soundOn || masterVol <= 0) return null;
   const a = sndEl(id).cloneNode();
   a._baseVol = vol;
   a.volume = Math.min(vol * masterVol, 1);
@@ -86,7 +86,7 @@ if (!TEST_MODE) {
   }
 }
 function startTitleMusic() {
-  if (!soundOn || masterVol <= 0 || !introUp()) return;
+  if (!S.soundOn || masterVol <= 0 || !introUp()) return;
   musicWanted = true;
   if (titleBuffer && audioCtx) {                // Web Audio path
     if (audioCtx.state === 'suspended') audioCtx.resume(); // unlock inside the gesture
@@ -131,8 +131,8 @@ function armAudioUnlock() {
   for (const e of evs) addEventListener(e, tryUnlock, true);
 }
 const attenuate = (x, y) => Math.max(0, 1 - Math.hypot(x - player.x, y - player.y) / 1200);
-let ambientSnd = null, klaxxonArmed = true;
+S.ambientSnd = null; S.klaxxonArmed = true;
 function stopAllLoops() {
-  stopSnd(ambientSnd); ambientSnd = null;
+  stopSnd(S.ambientSnd); S.ambientSnd = null;
 }
 

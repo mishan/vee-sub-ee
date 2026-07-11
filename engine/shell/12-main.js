@@ -14,10 +14,10 @@ if (SAVED && SAVED.spob != null) {
   const p = spobs.find(sp => sp.id === SAVED.spob);
   if (p) { // resume docked where you last saved, like the original
     player.x = p.x; player.y = p.y;
-    landedAt = p;
-    fuel = fuelMax;
+    S.landedAt = p;
+    S.fuel = fuelMax;
     player.shields = player.shieldMax; player.armor = player.armorMax;
-    if (p.CustSndID >= 0) ambientSnd = loopSnd(p.CustSndID, 0.6);
+    if (p.CustSndID >= 0) S.ambientSnd = loopSnd(p.CustSndID, 0.6);
     renderPlanetScreen();
     document.getElementById('landed').style.display = 'flex';
     showMsg('Pilot restored.');
@@ -25,14 +25,14 @@ if (SAVED && SAVED.spob != null) {
 }
 // Escorts only materialise when in flight; if we restored docked, takeOff()
 // spawns them (after it places the player on the launch pad).
-if (!landedAt) spawnEscorts();
+if (!S.landedAt) spawnEscorts();
 if (params.has('fire')) keys[' '] = true; // test affordance: hold the trigger
 
 // Test/dev affordances (URL params): ?map=1 opens the map,
 // ?dest=<systId> preselects a destination, ?jump=1 engages the jump
 // autopilot, ?ff=N fast-forwards N logic frames before the first render.
-if (params.has('map')) mapOpen = true;
-if (params.has('dest')) jumpDest = +params.get('dest');
+if (params.has('map')) S.mapOpen = true;
+if (params.has('dest')) S.jumpDest = +params.get('dest');
 if (params.has('jump')) beginJump();
 const FF = +(params.get('ff') || 0);
 

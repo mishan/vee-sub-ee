@@ -30,7 +30,7 @@ function capsToggle() {
   // Only in flight — behind the splash/title/hail/service/landing/dead overlays
   // gameplay keys are swallowed (the splash even advances on any key), so a
   // Caps Lock press there must not silently arm 2× for when you enter the game.
-  if (gameOver || hailOpen || introUp() || landedAt || activeView) return;
+  if (S.gameOver || hailOpen || introUp() || S.landedAt || activeView) return;
   const t = performance.now();
   if (t - capsLatch < 200) return; // absorb the keydown/keyup pair into one flip
   capsLatch = t; capsFF = !capsFF; applyFF();
@@ -66,26 +66,26 @@ addEventListener('keydown', e => {
   }
   keys[e.key.toLowerCase()] = true;
   if (k === 'l') tryLand();
-  if (k === 'm') { mapOpen = !mapOpen; }
-  if (k === 'j') { if (mapOpen) mapOpen = false; beginJump(); }
-  if (k === 'n' && gameOver) { newPilot(); return; }
-  if (k === 'n' && !landedAt) cyclePlanetTarget();
-  if (k === 'y' && !landedAt && !hailOpen) hail();
-  if (k === 'b' && !landedAt) boardTarget();
-  if (k === 'i' && !landedAt) showMissionBriefing();
-  if (k === 'r' && gameOver) { // restart: reload straight back into the game, not the title
+  if (k === 'm') { S.mapOpen = !S.mapOpen; }
+  if (k === 'j') { if (S.mapOpen) S.mapOpen = false; beginJump(); }
+  if (k === 'n' && S.gameOver) { newPilot(); return; }
+  if (k === 'n' && !S.landedAt) cyclePlanetTarget();
+  if (k === 'y' && !S.landedAt && !hailOpen) hail();
+  if (k === 'b' && !S.landedAt) boardTarget();
+  if (k === 'i' && !S.landedAt) showMissionBriefing();
+  if (k === 'r' && S.gameOver) { // restart: reload straight back into the game, not the title
     try { sessionStorage.setItem('ve_resume', '1'); } catch {}
     location.reload();
   }
   if (k === 'v') {
-    soundOn = !soundOn;
-    if (!soundOn) stopAllLoops();
-    showMsg(soundOn ? 'Sound on.' : 'Sound off.');
+    S.soundOn = !S.soundOn;
+    if (!S.soundOn) stopAllLoops();
+    showMsg(S.soundOn ? 'Sound on.' : 'Sound off.');
   }
   if (k === '[') setVolume(-0.1);
   if (k === ']') setVolume(+0.1);
-  if (k === 'k' && !landedAt) recallFighters(); // dock deployed fighters
-  if (k === 'q' && !landedAt) { // cycle secondary weapon
+  if (k === 'k' && !S.landedAt) recallFighters(); // dock deployed fighters
+  if (k === 'q' && !S.landedAt) { // cycle secondary weapon
     const secs = player.weapons.filter(w => w.rec.MiscFlags & 2);
     if (!secs.length) { showMsg('No secondary weapons fitted.'); }
     else {
@@ -94,15 +94,15 @@ addEventListener('keydown', e => {
       showMsg(`Secondary: ${player.selSecondary.rec.name ?? 'weapon ' + player.selSecondary.id}`);
     }
   }
-  if (e.key === 'Tab') { e.preventDefault(); if (!landedAt) cycleShipTarget(); }
+  if (e.key === 'Tab') { e.preventDefault(); if (!S.landedAt) cycleShipTarget(); }
   if (e.key === 'Escape') {
     if (hailOpen) closeHail();
     else if (activeView) closeService();
-    else if (mapOpen) mapOpen = false;
-    else if (jump && jump.phase === 'engage') abortJump();
-    else if (landedAt) takeOff();
-    else if (shipTarget) { shipTarget = null; showMsg('Target cleared.'); }
-    else if (navTarget) { navTarget = null; showMsg('Navigation target cleared.'); }
+    else if (S.mapOpen) S.mapOpen = false;
+    else if (S.jump && S.jump.phase === 'engage') abortJump();
+    else if (S.landedAt) takeOff();
+    else if (S.shipTarget) { S.shipTarget = null; showMsg('Target cleared.'); }
+    else if (S.navTarget) { S.navTarget = null; showMsg('Navigation target cleared.'); }
   }
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
 });
@@ -146,14 +146,14 @@ function touchAction(act) {
     case 'land': tryLand(); break;
     case 'board': boardTarget(); break;
     case 'hail': hail(); break;
-    case 'map': mapOpen = !mapOpen; break;
-    case 'jump': if (mapOpen) mapOpen = false; beginJump(); break;
+    case 'map': S.mapOpen = !S.mapOpen; break;
+    case 'jump': if (S.mapOpen) S.mapOpen = false; beginJump(); break;
     case 'missions': showMissionBriefing(); break;
     case 'ff': toggleFastForward(); break;
     case 'sound':
-      soundOn = !soundOn;
-      if (!soundOn) stopAllLoops();
-      showMsg(soundOn ? 'Sound on.' : 'Sound off.');
+      S.soundOn = !S.soundOn;
+      if (!S.soundOn) stopAllLoops();
+      showMsg(S.soundOn ? 'Sound on.' : 'Sound off.');
       break;
   }
 }
@@ -165,12 +165,12 @@ function updateOrientation() {
 function updateTouchUI() {
   // `no-fly` gates flight-only chrome on both desktop (the 2× pill) and touch
   // (the joystick/action bar), so it is toggled before the touch-only guard.
-  const flying = !splashShown && !titleShown && !landedAt && !gameOver &&
+  const flying = !splashShown && !titleShown && !S.landedAt && !S.gameOver &&
                  !hailOpen && !activeView;
   document.body.classList.toggle('no-fly', !flying);
   if (!TOUCH) return;
-  touchEl.classList.toggle('map', flying && mapOpen);
-  if (!flying || mapOpen) { // joystick/thrust/fire unusable → release everything
+  touchEl.classList.toggle('map', flying && S.mapOpen);
+  if (!flying || S.mapOpen) { // joystick/thrust/fire unusable → release everything
     if (joyId !== null) releaseJoy();
     if (touchCtl.fire) { touchCtl.fire = false; document.getElementById('touchFire').classList.remove('press'); }
     if (touchCtl.thrust) { touchCtl.thrust = false; document.getElementById('touchThrust').classList.remove('press'); }

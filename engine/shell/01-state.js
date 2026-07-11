@@ -10,6 +10,14 @@
 
 const params = new URLSearchParams(location.search);
 
+/* S — the single bag of cross-module mutable game state (credits, fuel, targets,
+ * shots, jump, …). ES-module imports are read-only bindings, so state reassigned
+ * from more than one module lives here on a shared object instead of as free
+ * `let`s; every read/write is S.x. (Module-local mutable state stays a plain
+ * `let` in its module.) This is the groundwork for splitting the shell into
+ * real ES modules. */
+const S = {};
+
 // Escape untrusted game-data strings interpolated into innerHTML by the html``
 // tag. Escapes quotes as well as &<> because the tag is also used inside quoted
 // HTML attributes (onclick, style, …), where an unescaped quote would break out
@@ -55,10 +63,10 @@ const Save = {
   KEY: 've_pilot',
   capture(spobId) {
     return {
-      v: 1, syst: SYSTEM_ID, spob: spobId, ship: playerShipId,
-      credits, cargo, outfits, explored: [...explored],
+      v: 1, syst: SYSTEM_ID, spob: spobId, ship: S.playerShipId,
+      credits: S.credits, cargo, outfits, explored: [...explored],
       bits: [...missionBits.keys()].filter(b => missionBits[b]),
-      day: gameDay, born: pilotBorn, rep: reputation, kills, missions: activeMissions,
+      day: S.gameDay, born: pilotBorn, rep: reputation, kills: S.kills, missions: S.activeMissions,
       dominated: [...dominated], name: pilotName, shipName, strict: strictPlay,
       escorts, persDone: [...persDone], persGrudge: [...persGrudge],
     };
@@ -87,12 +95,12 @@ const Save = {
 const SAVED = TEST_MODE ? null : Save.load();
 
 let SYSTEM_ID = SAVED ? SAVED.syst : +(params.get('syst') || 128); // Levo — the classic start
-let playerShipId = SAVED ? SAVED.ship : +(params.get('ship') || 128); // Shuttlecraft
+S.playerShipId = SAVED ? SAVED.ship : +(params.get('ship') || 128); // Shuttlecraft
 
 /* player economy state (spec: "Trading") — the pilot file's contents */
 const COMMODITIES = ['food', 'industrial', 'medical', 'luxury', 'metal', 'equipment'];
 const PRICE_MULT = { low: 0.80, medium: 1.00, high: 1.25 };
-let credits = SAVED ? SAVED.credits : 10000;
+S.credits = SAVED ? SAVED.credits : 10000;
 const cargo = Object.fromEntries(COMMODITIES.map(c => [c, (SAVED && SAVED.cargo[c]) || 0]));
 const explored = new Set(SAVED ? SAVED.explored : []);
 
@@ -101,7 +109,7 @@ const explored = new Set(SAVED ? SAVED.explored : []);
  * MissionBit likewise ranges 0–511, so the store must span the full range. */
 const missionBits = new Uint8Array(512);
 if (SAVED && SAVED.bits) for (const b of SAVED.bits) missionBits[b] = 1;
-let gameDay = SAVED ? (SAVED.day || 0) : 0;
+S.gameDay = SAVED ? (SAVED.day || 0) : 0;
 // Real-world epoch the pilot was created, so the displayed in-game date is
 // stable across sessions (legacy saves without it fall back to now).
 let pilotBorn = SAVED && SAVED.born ? SAVED.born : Date.now();
@@ -112,7 +120,7 @@ let strictPlay = SAVED ? !!SAVED.strict : false;
 /* legal record per govt (spec: "Legal record") — negative = evil, positive
  * = good; defaults to each govt's InitialRec. Missions and combat move it. */
 const reputation = SAVED && SAVED.rep ? { ...SAVED.rep } : {}; // govtId -> record
-let kills = SAVED ? (SAVED.kills || 0) : 0; // total crew destroyed → combat rating
+S.kills = SAVED ? (SAVED.kills || 0) : 0; // total crew destroyed → combat rating
 const dominated = new Set(SAVED ? SAVED.dominated : []); // spob ids subdued for tribute
 // përs (named characters) that have been "spent" — a one-shot character whose
 // mission you accepted (deactivateAfterLinkMission) won't reappear.
@@ -120,7 +128,7 @@ const persDone = new Set(SAVED && SAVED.persDone ? SAVED.persDone : []);
 // përs who hold a grudge (you attacked them): they won't offer you work again.
 const persGrudge = new Set(SAVED && SAVED.persGrudge ? SAVED.persGrudge : []);
 /* active missions: resolved, live copies (not the raw records) */
-let activeMissions = SAVED && SAVED.missions ? SAVED.missions.map(m => ({ ...m })) : [];
+S.activeMissions = SAVED && SAVED.missions ? SAVED.missions.map(m => ({ ...m })) : [];
 /* player-owned escorts (spec: "Escorts") — allied ships that follow the
  * player, fight the player's enemies, and persist across jumps/landings.
  * Saved as {id, shipId, name}; the live AI entity is respawned each system. */
@@ -129,7 +137,7 @@ let activeMissions = SAVED && SAVED.missions ? SAVED.missions.map(m => ({ ...m }
 // `ships` is a const declared later in this module — reading it here would hit
 // the temporal dead zone and throw when loading a saved pilot that has escorts.
 let escorts = SAVED && SAVED.escorts ? SAVED.escorts.map(e => ({ ...e })) : [];
-let escNextId = escorts.reduce((m, e) => Math.max(m, e.id || 0), 0) + 1;
+S.escNextId = escorts.reduce((m, e) => Math.max(m, e.id || 0), 0) + 1;
 
 let storageWarned = false;
 function savePilot(spobId) {
@@ -149,8 +157,8 @@ const nameSuggest = kind => { // a random default, from the app's STR# 128 or a 
   if (list && list.length) return list[Math.floor(Math.random() * list.length)];
   return kind === 'pilots' ? 'New Pilot' : 'Star Voyager';
 };
-const shipLongName = () => (DATA.strings[5002] && DATA.strings[5002].list[playerShipId - 128])
-  || (ships[playerShipId] && ships[playerShipId].name) || 'ship';
+const shipLongName = () => (DATA.strings[5002] && DATA.strings[5002].list[S.playerShipId - 128])
+  || (ships[S.playerShipId] && ships[S.playerShipId].name) || 'ship';
 /* Two-step New Pilot flow, echoing the original: name yourself (with the
  * Strict Play permadeath option), then christen the starting Shuttlecraft. */
 function startNewPilot() {
@@ -179,7 +187,7 @@ function openNameDialog(cfg) {
     : '';
   el.querySelector('.card').innerHTML =
     html`<div class="nprow">
-       <img class="npicon" src="evassets/graphics/PICT_${5000 + (playerShipId - 128)}.png" onerror="this.style.display='none'">
+       <img class="npicon" src="evassets/graphics/PICT_${5000 + (S.playerShipId - 128)}.png" onerror="this.style.display='none'">
        <div class="npmsg">${cfg.prompt}</div>
      </div>
      <input type="text" id="npName" maxlength="63" spellcheck="false" autocomplete="off">
@@ -258,11 +266,11 @@ function drawGfxFit(ctx, pictId, cx, cy, maxW, maxH) {
 
 /* ---------------- world (per-system state) ---------------- */
 
-let syst, spobs, aiShips, systEpoch = 0;
+let syst, spobs, systEpoch = 0;
 
 function spinsNeededFor(systId) {
   const s = systs[systId];
-  const need = new Set([spinOfShip(playerShipId)]);
+  const need = new Set([spinOfShip(S.playerShipId)]);
   for (const [id, p] of Object.entries(DATA.types.spob))
     if (p.System === +systId) need.add(spinOfSpob(p));
   for (let i = 1; i <= 4; i++) {
@@ -281,10 +289,10 @@ function loadSystem(systId) {
   spobs = Object.entries(DATA.types.spob)
     .filter(([, p]) => p.System === SYSTEM_ID)
     .map(([id, p]) => ({ id: +id, x: p.xPos, y: p.yPos, ...p }));
-  aiShips = [];
-  shots = []; beams = []; explosions = [];
-  navTarget = null; shipTarget = null;
-  alertGrace = 45; prevHostiles = 0; // don't red-alert the ambient population
+  S.aiShips = [];
+  S.shots = []; S.beams = []; S.explosions = [];
+  S.navTarget = null; S.shipTarget = null;
+  S.alertGrace = 45; S.prevHostiles = 0; // don't red-alert the ambient population
   preloadSprites(spinsNeededFor(SYSTEM_ID));
   // Landscapes for this system's spobs (default 10000+Type and custom),
   // so the planet screen never shows without its picture.
@@ -305,9 +313,9 @@ function loadSystem(systId) {
   // would use the player's stale pre-arrival coordinates.
   // missions: AvailRandom rerolls per arrival; place this system's ships;
   // mark observe goals satisfied when we arrive in the right system.
-  availRandom = {};
-  resolvedOffers = {}; // fresh mission destinations/cargo/deadlines per system
-  for (const A of activeMissions) {
+  S.availRandom = {};
+  S.resolvedOffers = {}; // fresh mission destinations/cargo/deadlines per system
+  for (const A of S.activeMissions) {
     maybeSpawnMissionShips(A);
     if (A.shipGoal === 4 && !A.observed) {
       const sys = A.shipSyst;
