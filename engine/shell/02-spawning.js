@@ -152,7 +152,7 @@ function hireEscort(shipId) {
   const esc = addEscort(shipId, r.name);     // landed ⇒ joins the fleet, spawns on takeoff
   esc.upkeep = upkeepOf(r);
   playSnd(150, 0.5);
-  rerenderService();
+  refreshView();
 }
 /* Let an escort go: drop it from the fleet (and remove any live entity). */
 function dismissEscort(id) {
@@ -160,7 +160,7 @@ function dismissEscort(id) {
   escorts.splice(i, 1);
   const s = aiShips.find(x => x.escId === id);
   if (s) { const j = aiShips.indexOf(s); if (j >= 0) aiShips.splice(j, 1); }
-  rerenderService();
+  refreshView();
 }
 /* Pay the fleet's salaries at each hyperspace jump. Deducted in fleet order
  * (earliest-enlisted first); any escort whose salary you can't cover when its

@@ -25,29 +25,45 @@ function trade(i, qty) {
   else qty = Math.max(qty, -cargo[COMMODITIES[i]]);
   cargo[COMMODITIES[i]] += qty;
   credits -= qty * price;
-  rerenderService();
+  refreshView();
 }
 
 /* ---- service dialogs: exchange / outfitter / shipyard ---- */
 
-let serviceOpen = null; // 'exchange' | 'outfitter' | 'shipyard' | 'bar' | 'missioncomputer' | null
-const SERVICE_RENDER = {};
+/* A modal dialog View: a pure render() → SafeHtml, plus the DOM plumbing to
+ * mount it in a panel/card, refresh it in place when an action changes state,
+ * and hide it. `activeView` is whichever View is showing (null = none); the
+ * shell reads it to know a dialog is up (pause the sim, swallow keys). */
+let activeView = null;
+class View {
+  constructor(panelId, cardId, render) { this.panelId = panelId; this.cardId = cardId; this.render = render; }
+  refresh() { document.getElementById(this.cardId).innerHTML = this.render(); }
+  open() { activeView = this; this.refresh(); document.getElementById(this.panelId).style.display = 'flex'; }
+  close() { if (activeView === this) activeView = null; document.getElementById(this.panelId).style.display = 'none'; }
+}
+const refreshView = () => { if (activeView) activeView.refresh(); };
+
+// The five landing-screen services share the one 'service' panel; each is a View
+// over a pure render function (renderExchange/… below and in 08-missions.js).
+const SERVICE_VIEWS = {
+  exchange: new View('service', 'serviceCard', renderExchange),
+  outfitter: new View('service', 'serviceCard', renderOutfitter),
+  shipyard: new View('service', 'serviceCard', renderShipyard),
+  bar: new View('service', 'serviceCard', renderBar),
+  missioncomputer: new View('service', 'serviceCard', renderComputer),
+};
 function openService(kind) {
   const gate = { exchange: 'commodityExchange', outfitter: 'outfitter', shipyard: 'shipyard',
     bar: 'bar', missioncomputer: 'canLand' }[kind];
   if (!landedAt || !(landedAt.$sem && landedAt.$sem[gate])) return;
   if (kind === 'outfitter' && !outfitterStock(landedAt).length) return;
   if (kind === 'shipyard' && !shipyardStock(landedAt).length) return;
-  serviceOpen = kind;
-  SERVICE_RENDER[kind]();
-  document.getElementById('service').style.display = 'flex';
+  SERVICE_VIEWS[kind].open();
 }
 function closeService() {
-  serviceOpen = null;
-  document.getElementById('service').style.display = 'none';
+  if (activeView) activeView.close();
   renderPlanetScreen(); // refresh wallet line
 }
-function rerenderService() { if (serviceOpen) SERVICE_RENDER[serviceOpen](); }
 const walletHtml = () => {
   const fm = effectiveShip().freeMass;
   return html`<div class="wallet"><b>${credits.toLocaleString('en-US')}</b> credits ·
@@ -61,7 +77,7 @@ function techAvailable(itemTech, p) {
   return [p.SpecialTech1, p.SpecialTech2, p.SpecialTech3].includes(itemTech);
 }
 
-SERVICE_RENDER.exchange = function () {
+function renderExchange() {
   const p = landedAt, m = p.$sem || {};
   const rows = [];
   for (let i = 0; i < 6; i++) {
@@ -77,11 +93,11 @@ SERVICE_RENDER.exchange = function () {
         <button onclick="trade(${i},1)"   ${cargoUsed() >= holds || credits < price ? 'disabled' : ''}>+1</button>
         <button onclick="trade(${i},10)"  ${cargoUsed() >= holds || credits < price ? 'disabled' : ''}>+10</button>` : ''}</td></tr>`);
   }
-  document.getElementById('serviceCard').innerHTML = html`<h2>Commodity Exchange</h2>
+  return html`<h2>Commodity Exchange</h2>
     <div class="meta">${p.name} · prices per ton</div>
     <table><tr><th>Commodity</th><th style="text-align:right">Price</th>
     <th style="text-align:right">Held</th><th></th></tr>${rows}</table>${walletHtml()}`;
-};
+}
 
 /* ---- outfitter ---- */
 
@@ -111,7 +127,7 @@ function buyOutfit(id, qty) {
     if (!c) break;
     cargo[c]--;
   }
-  rerenderService();
+  refreshView();
 }
 
 /* Classic shop layout. Menu-sheet thumbnails: outfit i (id−128) lives at
@@ -144,10 +160,10 @@ function shipyardStock(p) {
     r.MissionBit < 0 && techAvailable(r.TechLevel, p));
 }
 
-function selectOutfit(id) { selOutfitId = id; rerenderService(); }
-function selectShip(id) { selShipId = id; rerenderService(); }
+function selectOutfit(id) { selOutfitId = id; refreshView(); }
+function selectShip(id) { selShipId = id; refreshView(); }
 
-SERVICE_RENDER.outfitter = function () {
+function renderOutfitter() {
   const p = landedAt;
   const s = effectiveShip();
   const items = outfitterStock(p).map(([id]) => ({ id: +id }));
@@ -173,10 +189,9 @@ SERVICE_RENDER.outfitter = function () {
         <button class="svc" onclick="buyOutfit(${selOutfitId},-1)" ${own < 1 ? 'disabled' : ''}>Sell</button>
       </div></div>`;
   }
-  document.getElementById('serviceCard').innerHTML =
-    html`<h2>Outfitter</h2><div class="meta">${p.name} · tech ${p.TechLevel}</div>
+  return html`<h2>Outfitter</h2><div class="meta">${p.name} · tech ${p.TechLevel}</div>
      <div class="shop">${shopGrid('PICT_6100.png', items, selOutfitId, 'selectOutfit')}${pane}</div>${walletHtml()}`;
-};
+}
 
 /* ---- shipyard ---- */
 
@@ -206,10 +221,10 @@ function buyShip(id) {
   fuel = fuelMax;
   preloadSprites(new Set([spinOfShip(id)]));
   showMsg(`${shipyardName(id)} purchased. Old hull and outfits traded in.`);
-  rerenderService();
+  refreshView();
 }
 
-SERVICE_RENDER.shipyard = function () {
+function renderShipyard() {
   const p = landedAt;
   const refund = tradeInValue();
   const items = shipyardStock(p).map(([id]) => ({ id: +id }));
@@ -234,9 +249,8 @@ SERVICE_RENDER.shipyard = function () {
         <button class="svc" onclick="buyShip(${selShipId})" ${own || credits < net ? 'disabled' : ''}>Buy</button>
       </div></div>`;
   }
-  document.getElementById('serviceCard').innerHTML =
-    html`<h2>Shipyard</h2><div class="meta">${p.name} · tech ${p.TechLevel} ·
+  return html`<h2>Shipyard</h2><div class="meta">${p.name} · tech ${p.TechLevel} ·
        trade-in: 25% of hull + upgrades (${refund.toLocaleString('en-US')} cr)</div>
      <div class="shop">${shopGrid('PICT_5100.png', items, selShipId, 'selectShip')}${pane}</div>${walletHtml()}`;
-};
+}
 

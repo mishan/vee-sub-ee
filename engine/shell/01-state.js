@@ -45,13 +45,46 @@ function html(strings, ...values) {
 const TEST_MODE = ['new', 'syst', 'ship', 'x', 'y', 'heading', 'ff', 'land',
   'exchange', 'outfitter', 'shipyard', 'map', 'dest', 'jump', 'tab', 'nav',
   'fire', 'bar', 'computer', 'allmissions'].some(k => params.has(k));
-const SAVED = (() => {
-  if (TEST_MODE) return null;
-  try {
-    const p = JSON.parse(localStorage.getItem('ve_pilot'));
-    return p && p.v === 1 ? p : null;
-  } catch { return null; }
-})();
+/* Single source of truth for the pilot save (localStorage 've_pilot').
+ * capture() snapshots the live game state into the save schema; fresh() builds a
+ * brand-new pilot; load/write/clear own the storage + v-tag handshake. The field
+ * list living in one place is why savePilot/createPilot no longer each hand-roll
+ * the blob. (Method bodies read state declared below — they only run later, at
+ * save/create time, so forward references are fine.) */
+const Save = {
+  KEY: 've_pilot',
+  capture(spobId) {
+    return {
+      v: 1, syst: SYSTEM_ID, spob: spobId, ship: playerShipId,
+      credits, cargo, outfits, explored: [...explored],
+      bits: [...missionBits.keys()].filter(b => missionBits[b]),
+      day: gameDay, born: pilotBorn, rep: reputation, kills, missions: activeMissions,
+      dominated: [...dominated], name: pilotName, shipName, strict: strictPlay,
+      escorts, persDone: [...persDone], persGrudge: [...persGrudge],
+    };
+  },
+  fresh(name, ship, strict) {
+    return {
+      v: 1, syst: 128, spob: null, ship: 128, credits: 10000,
+      cargo: Object.fromEntries(COMMODITIES.map(c => [c, 0])), outfits: {},
+      explored: [128], bits: [], day: 0, born: Date.now(),
+      rep: {}, kills: 0, missions: [], dominated: [], escorts: [],
+      name, shipName: ship, strict: !!strict,
+    };
+  },
+  write(obj) {
+    const blob = JSON.stringify(obj);
+    try { localStorage.setItem(this.KEY, blob); return localStorage.getItem(this.KEY) === blob; }
+    catch { return false; }   // trust nothing on file://
+  },
+  load() {
+    try { const p = JSON.parse(localStorage.getItem(this.KEY)); return p && p.v === 1 ? p : null; }
+    catch { return null; }
+  },
+  clear() { try { localStorage.removeItem(this.KEY); } catch {} },
+};
+
+const SAVED = TEST_MODE ? null : Save.load();
 
 let SYSTEM_ID = SAVED ? SAVED.syst : +(params.get('syst') || 128); // Levo — the classic start
 let playerShipId = SAVED ? SAVED.ship : +(params.get('ship') || 128); // Shuttlecraft
@@ -101,26 +134,13 @@ let escNextId = escorts.reduce((m, e) => Math.max(m, e.id || 0), 0) + 1;
 let storageWarned = false;
 function savePilot(spobId) {
   if (TEST_MODE) return;
-  const blob = JSON.stringify({
-    v: 1, syst: SYSTEM_ID, spob: spobId, ship: playerShipId,
-    credits, cargo, outfits, explored: [...explored],
-    bits: [...missionBits.keys()].filter(b => missionBits[b]),
-    day: gameDay, born: pilotBorn, rep: reputation, kills, missions: activeMissions,
-    dominated: [...dominated], name: pilotName, shipName, strict: strictPlay,
-    escorts, persDone: [...persDone], persGrudge: [...persGrudge],
-  });
-  let ok = false;
-  try {
-    localStorage.setItem('ve_pilot', blob);
-    ok = localStorage.getItem('ve_pilot') === blob; // trust nothing on file://
-  } catch {}
-  if (!ok && !storageWarned) {
+  if (!Save.write(Save.capture(spobId)) && !storageWarned) {
     storageWarned = true;
     showMsg('Warning: browser storage unavailable — your pilot will not be saved.');
   }
 }
 function newPilot() { // abandon the current pilot → back to the title
-  try { localStorage.removeItem('ve_pilot'); } catch {}
+  Save.clear();
   location.href = location.pathname;
 }
 /* ---- New Pilot creation (spec: "New pilot") ---- */
@@ -145,16 +165,9 @@ function startNewPilot() {
   });
 }
 function createPilot(name, ship, strict) {
-  const blob = JSON.stringify({
-    v: 1, syst: 128, spob: null, ship: 128, credits: 10000,
-    cargo: Object.fromEntries(COMMODITIES.map(c => [c, 0])), outfits: {},
-    explored: [128], bits: [], day: 0, born: Date.now(),
-    rep: {}, kills: 0, missions: [], dominated: [], escorts: [],
-    name, shipName: ship, strict: !!strict,
-  });
-  let saved = false;
-  try { localStorage.setItem('ve_pilot', blob); saved = localStorage.getItem('ve_pilot') === blob; } catch {}
-  if (!saved) { showMsg('Could not create the pilot — browser storage is unavailable.'); return; }
+  if (!Save.write(Save.fresh(name, ship, strict))) {
+    showMsg('Could not create the pilot — browser storage is unavailable.'); return;
+  }
   try { sessionStorage.setItem('ve_newpilot', '1'); } catch {} // jump past the splash after reload
   location.reload(); // reload restores the new pilot
 }

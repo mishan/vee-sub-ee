@@ -722,7 +722,7 @@ function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
   if (!offers.length) listItems.push(html`<div class="sub">Nothing right now.</div>`);
   for (const o of offers)
     listItems.push(html`<div class="row" style="cursor:pointer;color:${o.id === selMisnId ? '#ffd479' : '#cfd6e4'}"
-      onclick="selMisnId=${o.id};rerenderService()">${misnName(o, getOffer(o.id, p))}</div>`);
+      onclick="selMisnId=${o.id};refreshView()">${misnName(o, getOffer(o.id, p))}</div>`);
   const list = html`<div style="flex:1;min-width:210px;max-height:340px;overflow-y:auto">${listItems}</div>`;
 
   let paneBody;
@@ -756,8 +756,7 @@ function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
   }
   const pane = html`<div style="flex:1.3;min-width:240px">${paneBody}</div>`;
 
-  document.getElementById('serviceCard').innerHTML =
-    html`<h2>${loc === 0 ? 'Mission Computer' : 'Spaceport Bar'}</h2>
+  return html`<h2>${loc === 0 ? 'Mission Computer' : 'Spaceport Bar'}</h2>
      <div class="meta">${p.name}</div>${topHtml}
      <div class="shop">${list}${pane}</div>
      <div class="wallet">${credits.toLocaleString('en-US')} credits · cargo ${cargoUsed()}/${holds} tons · day ${gameDay}</div>
@@ -768,11 +767,11 @@ function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
  * toggled by a pair of tabs (spec: "Escorts for hire"). */
 let barTab = 'missions';
 function barTabs() {
-  const t = (k, label) => html`<button class="svc" onclick="barTab='${k}';rerenderService()"${barTab === k ? ' disabled' : ''}>${label}</button>`;
+  const t = (k, label) => html`<button class="svc" onclick="barTab='${k}';refreshView()"${barTab === k ? ' disabled' : ''}>${label}</button>`;
   return html`<div style="margin:6px 0 2px">${t('missions', 'Missions')} ${t('hire', 'Hire Escorts')}</div>`;
 }
-SERVICE_RENDER.bar = () => barTab === 'hire' ? renderHireBoard() : renderMissionBoard(1, barTabs());
-SERVICE_RENDER.missioncomputer = () => renderMissionBoard(0);
+function renderBar() { return barTab === 'hire' ? renderHireBoard() : renderMissionBoard(1, barTabs()); }
+function renderComputer() { return renderMissionBoard(0); }
 
 function renderHireBoard() {
   const p = landedAt;
@@ -808,8 +807,7 @@ function renderHireBoard() {
   const hire = html`<div style="flex:1.3;min-width:240px;max-height:340px;overflow-y:auto">
     <div class="meta" style="margin:0 0 4px">Pilots for hire</div>${hireItems}</div>`;
 
-  document.getElementById('serviceCard').innerHTML =
-    html`<h2>Spaceport Bar</h2><div class="meta">${p.name}</div>${barTabs()}
+  return html`<h2>Spaceport Bar</h2><div class="meta">${p.name}</div>${barTabs()}
      <div class="shop">${fleet}${hire}</div>
      <div class="wallet">${credits.toLocaleString('en-US')} credits · payroll ${totalUpkeep.toLocaleString('en-US')} cr/jump</div>
      <div style="margin-top:10px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
@@ -822,7 +820,7 @@ function doAcceptMission(id) {
   if (need > holds - cargoUsed()) { showMsg('Not enough cargo space for this mission.'); return; }
   acceptMission(id, landedAt);
   savePilot(landedAt.id);
-  rerenderService();
+  refreshView();
 }
 
 let missionNotes = []; // dialog text queued by the last landing
@@ -899,7 +897,7 @@ function tryLand() {
 }
 function takeOff() {
   if (!landedAt) return;
-  if (serviceOpen) closeService();
+  if (activeView) closeService();
   const spob = landedAt;
   savePilot(spob.id);         // captures docked purchases/trades
   stopAllLoops();
