@@ -106,13 +106,21 @@ function readPilotSummary(file) {
   const path = require('path');
   const { loadFork, parseFork } = require('./evrsrc.js');
   const types = parseFork(loadFork(file).fork);
-  const t = types.find((x) => /p.L$/i.test(x.typeName));
-  if (!t) throw new Error('no NpïL/MpïL pilot resource in ' + file);
+  // MpïL (Classic/Override) or NpïL (Nova): anchor the match so it can't hit an
+  // unrelated 4-char type. The `.` stands in for the MacRoman 'ï' (0x95) so we
+  // don't depend on how the decoder renders that byte.
+  const t = types.find((x) => /^[MN]p.L$/.test(x.typeName));
+  if (!t) throw new Error('no MpïL/NpïL pilot resource in ' + file);
   const r128 = t.resources.find((r) => r.id === 128);
   const r129 = t.resources.find((r) => r.id === 129);
   if (!r128) throw new Error('no pilot-data (id 128) resource');
   const b = Buffer.from(r128.data());
   simpleCrypt(b);
+  // Every field below lives at a fixed offset; bail with a clear message rather
+  // than a low-level RangeError if this isn't a full pilot struct.
+  const MIN_LEN = MP128.kills.off + 2; // kills is the highest fixed offset read
+  if (b.length < MIN_LEN)
+    throw new Error(`pilot-data resource too short (${b.length} < ${MIN_LEN} bytes)`);
   const g = (f) => (f.u32 ? b.readUInt32BE(f.off) : b.readInt16BE(f.off)) + (f.add || 0);
   // legal record: sparse map of systemId -> standing (skip the untouched zeros)
   const legalBySystem = {};
@@ -175,10 +183,17 @@ module.exports = {
 };
 
 /* ------------------------------------------------------------------ */
-/* CLI: node evpilot.js selftest
- *      node evpilot.js inspect <pilot-resource-fork-file> [key-hex]
- *   Lists resources, then decrypts likely pilot resources and shows a
- *   hex/ASCII dump so we can map the struct against a known pilot. */
+/* CLI:
+ *   node evpilot.js selftest
+ *       — round-trip the codec and print the keystream head.
+ *   node evpilot.js summary <pilot-file>
+ *       — decode the mapped fields as JSON.
+ *   node evpilot.js inspect <pilot-file> [keyHex] [dumpBytes]
+ *       — list resources, then decrypt each and show a hex/ASCII dump
+ *         (keyHex defaults to the Classic key; dumpBytes defaults to 512)
+ *         so we can map the struct against a known pilot. */
+const USAGE =
+  'usage: node evpilot.js selftest | summary <pilot-file> | inspect <pilot-file> [keyHex] [dumpBytes]';
 if (require.main === module) {
   const cmd = process.argv[2];
 
@@ -216,14 +231,14 @@ if (require.main === module) {
   }
 
   if (cmd === 'inspect') {
-    const path = process.argv[3];
-    if (!path) {
-      console.error('usage: node evpilot.js inspect <resource-fork-file> [keyHex]');
+    const file = process.argv[3];
+    if (!file) {
+      console.error('usage: node evpilot.js inspect <resource-fork-file> [keyHex] [dumpBytes]');
       process.exit(1);
     }
     const key = process.argv[4] ? parseInt(process.argv[4], 16) : KEY_CLASSIC;
     const { loadFork, parseFork } = require('./evrsrc.js');
-    const { fork } = loadFork(path); // handles MacBinary/AppleDouble/raw
+    const { fork } = loadFork(file); // handles MacBinary/AppleDouble/raw
     const types = parseFork(fork);
     console.log('resource types found:');
     for (const t of types)
@@ -248,5 +263,10 @@ if (require.main === module) {
     for (const t of types)
       for (const r of t.resources)
         dump(`'${t.typeName}' ${r.id}${r.name ? ` "${r.name}"` : ''}`, r.data());
+    process.exit(0);
   }
+
+  // Unknown or missing subcommand: show usage and fail, like the other CLIs.
+  console.error(USAGE);
+  process.exit(1);
 }
