@@ -1,8 +1,8 @@
 # Vₑ (Escape Velocity engine) — project plan
 
 Goal: clean-room engine that plays classic EV from user-supplied original
-data files. Data layer stays engine-agnostic JSON; platform (C++/SDL vs
-browser) deliberately undecided until sprites are on screen.
+data files. Browser-first; the data layer is engine-agnostic JSON and the
+flight core is DOM-free JavaScript.
 
 ## Done
 
@@ -35,7 +35,7 @@ browser) deliberately undecided until sprites are on screen.
   a second homing type (Missiles/Seeker Drones vs Torpedos at 1), though
   Override's bible calls it unused.
 
-- **Milestone: flight demo, browser leg of the platform spike**
+- **Milestone: flight demo**
   (`flight_template.html` → `evexport --flight flight.html`, sprites via
   `evsprites.sh`): one-system flight with 30Hz fixed-step physics from raw
   shïp stats, 36-frame rotation sprites, retrograde autopilot (↓, like the
@@ -44,29 +44,21 @@ browser) deliberately undecided until sprites are on screen.
   Physics conversions (Speed/100 px/frame, Accel/10 px/s², Maneuver as
   °/frame) are approximations — tune against original-engine timings.
 
-- **Milestone: platform spike, both legs.** `cpp/` holds the C++/SDL2 demo
-  (single main.cpp + vendored stb_image/nlohmann-json/font8x8; only dep is
-  libsdl2-dev). Line-for-line port of the browser leg's physics and entity
-  logic; same CLI knobs as the URL params; `make test` renders headless
-  via the dummy video driver. Verified: rotation frames, AI traders,
-  radar, landing prompt all match the browser leg pixel-for-concept.
-  Both legs consume identical artifacts: evdata.json + manifest.json +
-  composited sprite PNGs — the data pipeline is the shared layer.
-
-- **Decision: browser-first**, SDL kept alive as a port (easier sharing won).
-- **Milestone: shared engine spec.** `engine/ENGINE_SPEC.md` is normative;
-  `engine/core.js` (injected into flight.html at build, require-able in
-  node) and `cpp/main.cpp`'s free functions implement it. Golden trace:
-  `engine/scenario.json` + `check_traces.js` — 645 values over 420 frames
-  (controls script + full AI state machine), agreement within 1e-6
-  (measured worst Δ 6.75e-13).
+- **Decision: browser-first.** The DOM-free `engine/core.js` is the flight
+  core, injected into `flight.html` at build and require-able in node. (An
+  early C++/SDL port was kept in lockstep — same logic, a golden-trace check
+  enforcing agreement — for much of development, then dropped to focus on the
+  browser, which is the interesting part. It's preserved on the unmerged
+  `sdl-port` branch, revivable from there or from git history.)
+- **Milestone: engine spec.** `engine/ENGINE_SPEC.md` is the normative
+  description of flight physics and AI behavior; `engine/core.js` implements
+  it. Change behavior in the spec first, then the core.
 - **Milestone: hyperjump + map** (browser leg). M = galaxy map overlay
   (all systems, links, current/destination rings, linked systems
   clickable), J = jump autopilot (align → accelerate → 30-frame streak →
   arrival 1800 px out on the inbound bearing). 100 fuel per jump, landing
   refuels. Headless-verified: map overlay, mid-jump, and post-arrival
-  (Sol → Centauri, fuel 400→300). SDL port of jump/map is pending — the
-  core pieces (stepJumpEngage/placeAtArrival) are spec'd and in core.js.
+  (Sol → Centauri, fuel 400→300).
 
 - **Milestone: landing UI + trading** (browser). Planet screen with
   landscape PICT (CustPicID), landing text, services line, and a working
@@ -86,16 +78,7 @@ browser) deliberately undecided until sprites are on screen.
   don't transfer, cargo must fit. Also: targeting UX round 2 — Esc clears
   ship then nav target in flight; takeoff clears the landing target.
 
-- **Milestone: SDL parity.** cpp/main.cpp rewritten to match the browser
-  shell: Game Panel HUD, targeting/hails/brackets, fog-of-war map with
-  click-to-select destinations, hyperjump, landing screen with landscape,
-  exchange + grid-layout outfitter/shipyard, full economy state. Same
-  test flags as the browser URL params; golden trace still green
-  (worst Δ 6.75e-13). Gotcha for posterity: nlohmann's const operator[]
-  asserts on missing keys ($sem.prices omits untraded commodities) — all
-  lookups go through find()-based helpers now.
-
-- **Milestone: combat** (both legs, spec'd + golden-traced). Bible-exact
+- **Milestone: combat** (spec'd). Bible-exact
   damage model (shields up: Mass/4+Energy; down: Mass+Energy/4; min 1;
   disabled at ⅓ armor, flag 0x10 → 10%), shield regen (1%/ShieldRe
   frames), projectiles with inherited velocity (unguided/turret/quadrant/
@@ -106,12 +89,11 @@ browser) deliberately undecided until sprites are on screen.
   hostility (xenophobic/alwaysAttacksPlayer) + player grudges, player
   death + restart. Panel: real shield bar, target shields %/DISABLED,
   secondary weapon pane (name + ammo available/capacity — classic
-  behavior, replacing an incorrect message mirror). Golden trace now
-  covers shots, damage, kick, and regen: 959 values, worst Δ 6.75e-13.
-  Deferred: fighter bays (g99), BlastRadius area damage,
-  friendly-fire between AI ships, bööm/öops sounds.
+  behavior, replacing an incorrect message mirror).
+  Deferred: BlastRadius area damage, friendly-fire between AI ships,
+  bööm/öops sounds. (Fighter bays landed later — see below.)
 
-- **Milestone: audio, browser leg** (SDL deferred per Misha). Spec'd
+- **Milestone: audio** (browser). Spec'd
   ("Audio"): weapon fire snd 200+Sound per volley w/ distance attenuation
   (1 − d/1200), Warp Up/Out on jump, Med/HeavyExplosion on impacts,
   ShipBreaksUp + ShipExplodes on kills, target beeps, shield-collapse
@@ -209,19 +191,19 @@ browser) deliberately undecided until sprites are on screen.
   `BoardPenalty`. Added the missing oütf ModTypes 23–26 to semantics. Spec:
   "Boarding". Verified via a scripted harness (loot credits/cargo + looted
   flag + unboardable, capture success→ship switch, failure→self-destruct)
-  and a dialog screenshot. SDL leg deferred.
+  and a dialog screenshot.
 
 - **Milestone: mobile / touch support** (browser). Viewport meta + touch
   detection (`?mobile=1/0` to force); landscape-only with a rotate nudge in
   portrait. Floating left-thumb joystick (absolute-heading steer + push-to-
   thrust) that synthesizes the same left/right/thrust booleans as the keyboard
-  — flight core and golden trace untouched. Fire button (clear of the sidebar
+  — flight core untouched. Fire button (clear of the sidebar
   panel) and an always-on top-centre mini bar (Target/Nav/Land/Board/Hail/Map/
   Jump/Missions/sound) wired to the existing handlers; joystick+fire hide on
   the galaxy map so canvas taps pick a destination; keyboard-hint bar hidden on
   touch. Controls show only while flying. Spec: "Touch controls". Verified via
   headless landscape/portrait screenshots + a scripted harness (steer→heading,
-  push→thrust/speed, fire hold, bar actions, map hide). SDL leg unaffected.
+  push→thrust/speed, fire hold, bar actions, map hide).
 
 - **Milestone: escorts, ship-offered missions, fighter bays** (browser; merged
   to main, PRs #24–#27). Player escorts: captured ships kept as companions
@@ -232,7 +214,7 @@ browser) deliberately undecided until sprites are on screen.
   bookkeeping; mission-bit store widened to the full 0–511 range so every
   `MissionBit` can gate a character. Fighter bays (weapon g99): launch and recall
   carried fighters, tracked as per-bay ammo, auto-recalled on jump; HUD bay
-  count. Spec'd + headless-verified in the same branches; SDL leg deferred.
+  count. Spec'd + headless-verified in the same branches.
 
 - **Milestone: browser loader** (`loader/`) — the pure-web distribution path
   from README "Distribution", and better than the planned asset-bundle: the
@@ -268,14 +250,16 @@ browser) deliberately undecided until sprites are on screen.
    loader milestone and `loader/README.md`): PWA install + an "export bundle"
    button, and optional original name suggestions (STR# 128 from the app inside
    the `.sit`).
-2. **Also open**: SDL parity catch-up — the browser leg is now well ahead (audio,
-   combat UI, missions, legal record, escorts, ship-offered missions, fighter
-   bays all browser-only); and real Mac pilot-file read/write via `buildFork`.
+2. **Also open**: real Mac pilot-file read/write via `buildFork` (import/export
+   original EV pilots); BlastRadius area damage and other deferred combat bits.
 
 ## Notes
 
 - `EV_1.0.5/Escape Velocity.rsrc` (the app itself) holds UI resources and
   possibly more TMPLs (dsïg, spït came from EV Data) — mine when needed.
 - `EV Plug-Ins/EV Tuner.rsrc` is a tiny real plugin — good regression input.
+- The old C++/SDL port lives on the unmerged `sdl-port` branch if it's ever
+  wanted again (with its golden-trace harness); dropped to keep focus on the
+  browser build.
 - Legal posture unchanged: engine ships zero Ambrosia data; `galaxy.html`
   and `evdata.json` are local build artifacts, not distributables.

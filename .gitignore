@@ -7,11 +7,6 @@ evassets/
 galaxy.html
 flight.html
 
-# C++ build artifacts
-cpp/evflight
-cpp/evflight_dbg
-cpp/test_frame.png
-
 # Editor/OS noise
 *.swp
 .DS_Store

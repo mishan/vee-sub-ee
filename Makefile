@@ -58,24 +58,17 @@ sprites:
 schemas:
 	node tmpl2schema.js "$(DATA)" -o schemas/
 
-## check         – golden trace: JS core vs C++ port must agree
-check:
-	node engine/check_traces.js
-
 ## selftest      – resource-fork library sanity check
 selftest:
 	node evrsrc.js selftest
 
-## cpp           – build the SDL leg
-cpp:
-	$(MAKE) -C cpp
+## verify        – check the loader's in-browser decoders vs the native pipeline
+##                 (needs local EV_data/ + evassets/; see loader/README.md)
+verify:
+	node loader/verify.js
 
-## cpp-test      – headless render test for the SDL leg
-cpp-test:
-	$(MAKE) -C cpp test
-
-## test          – run the full check suite (selftest + golden trace)
-test: selftest check
+## test          – run the sanity checks
+test: selftest
 
 ## clean         – remove generated HTML/JSON build outputs
 clean:
@@ -86,4 +79,4 @@ help:
 	@echo "Vₑ make targets:"
 	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/^## /  /'
 
-.PHONY: flight galaxy data assets sprites schemas check selftest cpp cpp-test test clean help
+.PHONY: flight galaxy data assets sprites schemas selftest verify test clean help
