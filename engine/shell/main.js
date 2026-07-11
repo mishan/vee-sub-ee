@@ -17,7 +17,8 @@ import * as m11 from './11-title.js';
 import * as m12 from './12-boarding.js';
 import * as m13 from './13-legal.js';
 import * as m14 from './14-landing.js';
-import * as m15 from './15-main.js';
+import * as m15 from './15-pers.js';
+import * as m16 from './16-main.js';
 
 // Inline HTML event handlers (onclick="closeService()", the 2x pill's
 // toggleFastForward(), dialog buttons, …) can only reach GLOBAL names, but the
@@ -26,4 +27,4 @@ import * as m15 from './15-main.js';
 // Inside the shell, modules still use explicit imports; this is only for the
 // inline handlers. (Primitives a handler reassigns live on S, so the handler
 // mutates the same object the module reads.) Runs after all bodies initialize.
-Object.assign(globalThis, m01, m02, m03, m04, m05, m06, m07, m08, m09, m10, m11, m12, m13, m14, m15);
+Object.assign(globalThis, m01, m02, m03, m04, m05, m06, m07, m08, m09, m10, m11, m12, m13, m14, m15, m16);
