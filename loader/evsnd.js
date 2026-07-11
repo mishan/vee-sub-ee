@@ -41,7 +41,7 @@ function decodeSnd(bytes) {
   // SoundHeader at dataOff
   p = dataOff;
   rd32();                                // samplePtr (0 = samples follow inline)
-  let length = rd32();                   // # sample frames
+  const length = rd32();                   // # sample frames
   const rateFixed = rd32();              // sample rate, Fixed 16.16
   rd32(); rd32();                        // loopStart, loopEnd
   const encode = u8[p++];                // 0x00 std, 0xFF ext, 0xFE compressed

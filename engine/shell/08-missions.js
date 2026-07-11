@@ -1,10 +1,7 @@
-import { COMMODITIES, S, cargo, dominated, dudes, escorts, html, missionBits, outfits, params, persDone, persGrudge, preloadSprites, reputation, savePilot, shipName, ships, showMsg, spinOfShip, systs } from './01-state.js';
-import { HIRE_ROSTER, MAX_ESCORTS, addEscort, hireFee, shipClassDesc, spawnEscorts, systemGovt, upkeepOf, weighted } from './02-spawning.js';
-import { loopSnd, playSnd, stopAllLoops } from './03-sound.js';
-import { applyShipStats, armShip, beginDestruction, commitCrime, fuelMax, holds, penaltyOf, player, poolKey, rebuildPlayerWeapons, weaps } from './04-combat.js';
-import { checkDefenseCleared, distTo, hailClick, hailOpen, nearestLandable, openHail, renderHail } from './06-interaction.js';
-import { activeView, cargoNames, cargoUsed, closeService, outfitterStock, refreshView, shipyardStock } from './07-trade.js';
-import { loadSystem } from './09-step.js';
+import { S, dominated, dudes, escorts, html, missionBits, outfits, params, reputation, savePilot, ships, showMsg, systs } from './01-state.js';
+import { HIRE_ROSTER, MAX_ESCORTS, hireFee, shipClassDesc, upkeepOf, weighted } from './02-spawning.js';
+import { applyShipStats, armShip, holds, player } from './04-combat.js';
+import { cargoUsed, refreshView } from './07-trade.js';
 import { adjustRep, legalOf } from './13-legal.js';
 
 /*
@@ -24,7 +21,7 @@ export const MISN_ALL = params.has('allmissions'); // test: ignore AvailRandom r
 export const allSpobs = () => Object.entries(DATA.types.spob).map(([id, p]) => ({ id: +id, ...p }));
 export const spobById = id => DATA.types.spob[id];
 export const systOfSpob = p => p && systs[p.System];
-export const bitReq = (v, want) => { // AvailBitSet-style code check
+export const bitReq = (v) => { // AvailBitSet-style code check
   if (v < 0) return true;
   if (v >= 1000) return !missionBits[v - 1000];
   return !!missionBits[v];
@@ -365,7 +362,6 @@ export function missionLandingEvents(p) {
       notes.push(descText(m.DropCargText, A) || `Delivered ${A.cargoQty}t of ${A.cargoName}.`);
     }
     // completion / failure at ReturnStel
-    const ret = A.returnStel != null ? A.returnStel : (A.travelStel === p.id ? p.id : null);
     const isReturn = (A.returnStel != null && A.returnStel === p.id) ||
                      (A.returnStel == null && A.travelStel === p.id);
     if (isReturn) {

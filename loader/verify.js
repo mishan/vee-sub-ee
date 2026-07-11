@@ -108,7 +108,7 @@ function checkSprites() {
     const comp = compositeSprite(decodePict(sp.data()), picts[rec.MasksID] ? decodePict(picts[rec.MasksID].data()) : null);
     tested++;
     const ref = refRGBA(refp);
-    let ok = ref.length === comp.rgba.length, m = 0, tot = comp.width * comp.height;
+    const tot = comp.width * comp.height; let ok = ref.length === comp.rgba.length, m = 0;
     for (let i = 0; ok && i < comp.rgba.length; i++) if (comp.rgba[i] !== ref[i]) ok = false;
     for (let i = 0; i < tot; i++) { const o = i * 4; if (comp.rgba[o] === ref[o] && comp.rgba[o + 1] === ref[o + 1] && comp.rgba[o + 2] === ref[o + 2] && comp.rgba[o + 3] === ref[o + 3]) m++; }
     if (ok) exact++; else if (100 * m / tot >= 99) near++;
@@ -304,7 +304,7 @@ function checkShellAssembles() {
     const res = require('esbuild').buildSync({
       entryPoints: [entry], bundle: true, write: false, format: 'iife', logLevel: 'silent',
     });
-    new Function(res.outputFiles[0].text);   // eslint-disable-line no-new-func
+    new Function(res.outputFiles[0].text);    
     console.log('shell: ES-module bundle resolves + parses');
   } catch (e) {
     console.log('  ✗ shell bundle failed: ' + (e.message || e));

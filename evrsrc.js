@@ -158,7 +158,7 @@ function unwrapFork(buf) {
 
 function loadFork(file) {
   try { return unwrapFork(fs.readFileSync(file)); }
-  catch (e) { throw new Error(`${file}: ${e.message}`); }
+  catch (e) { throw new Error(`${file}: ${e.message}`, { cause: e }); }
 }
 
 /* ------------------------------------------------------------------ */

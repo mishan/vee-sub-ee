@@ -177,7 +177,7 @@ export function payFuel(full) {
     ` (−${price.toLocaleString('en-US')} cr, refuelled)`);
   playSnd(150, 0.4);
 }
-export function begForMercy(s) {
+export function begForMercy(_s) {
   hailClick();
   if (Math.random() < 0.45) {                     // they'll entertain a bribe
     S.hailTarget.mode = 'mercy';

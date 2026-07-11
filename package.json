@@ -5,9 +5,13 @@
   "license": "MIT",
   "description": "Vₑ — clean-room reimplementation of Escape Velocity (browser flight core).",
   "devDependencies": {
-    "esbuild": "^0.28.1"
+    "@eslint/js": "^10.0.1",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0"
   },
   "scripts": {
-    "build:engine": "esbuild engine/core.js --bundle --format=iife --global-name=EV --banner:js='/* GENERATED from engine/core.js by esbuild — do not edit. Rebuild: make engine/core.bundle.js */' --footer:js='globalThis.EV=EV;' --outfile=engine/core.bundle.js"
+    "build:engine": "esbuild engine/core.js --bundle --format=iife --global-name=EV --banner:js='/* GENERATED from engine/core.js by esbuild — do not edit. Rebuild: make engine/core.bundle.js */' --footer:js='globalThis.EV=EV;' --outfile=engine/core.bundle.js",
+    "lint": "eslint ."
   }
 }

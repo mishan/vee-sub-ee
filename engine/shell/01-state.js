@@ -127,11 +127,11 @@ if (SAVED && SAVED.bits) for (const b of SAVED.bits) missionBits[b] = 1;
 S.gameDay = SAVED ? (SAVED.day || 0) : 0;
 // Real-world epoch the pilot was created, so the displayed in-game date is
 // stable across sessions (legacy saves without it fall back to now).
-export let pilotBorn = SAVED && SAVED.born ? SAVED.born : Date.now();
+export const pilotBorn = SAVED && SAVED.born ? SAVED.born : Date.now();
 // Pilot & ship names (set at New Pilot) and Strict Play (permadeath) flag.
-export let pilotName = SAVED && SAVED.name || '';
-export let shipName = SAVED && SAVED.shipName || '';
-export let strictPlay = SAVED ? !!SAVED.strict : false;
+export const pilotName = SAVED && SAVED.name || '';
+export const shipName = SAVED && SAVED.shipName || '';
+export const strictPlay = SAVED ? !!SAVED.strict : false;
 /* legal record per govt (spec: "Legal record") — negative = evil, positive
  * = good; defaults to each govt's InitialRec. Missions and combat move it. */
 export const reputation = SAVED && SAVED.rep ? { ...SAVED.rep } : {}; // govtId -> record
@@ -286,7 +286,7 @@ S.systEpoch = 0;
 export function spinsNeededFor(systId) {
   const s = systs[systId];
   const need = new Set([spinOfShip(S.playerShipId)]);
-  for (const [id, p] of Object.entries(DATA.types.spob))
+  for (const p of Object.values(DATA.types.spob))
     if (p.System === +systId) need.add(spinOfSpob(p));
   for (let i = 1; i <= 4; i++) {
     const d = dudes[s['DudeTypes' + i]];
