@@ -1,17 +1,29 @@
+import { S, SAVED, TEST_MODE, params, showMsg } from './01-state.js';
+import { spawnEscorts } from './02-spawning.js';
+import { loopSnd } from './03-sound.js';
+import { applyShipStats, beginJump, fuelMax, player } from './04-combat.js';
+import { fastForward, keys } from './05-input.js';
+import { cyclePlanetTarget, cycleShipTarget } from './06-interaction.js';
+import { openService } from './07-trade.js';
+import { renderPlanetScreen, tryLand } from './08-missions.js';
+import { loadSystem, step } from './09-step.js';
+import { render } from './10-render.js';
+import { showSplash, showTitle } from './11-title.js';
+
 /*
  * engine/shell/12-main.js — part of the browser flight shell.
  *
- * The shell modules are concatenated (in order.json order) into one <script>
- * in flight.html by `evexport --flight` and the loader, so they share a single
- * scope — treat them as one file split for readability, not as ES modules.
+ * esbuild bundles the shell modules (entry: main.js) into engine/shell.bundle.js,
+ * injected into flight.html by `evexport --flight` and the loader. 01-state is
+ * the leaf holding the shared state object S; modules import what they use.
  * Normative behavior: engine/ENGINE_SPEC.md.
  */
 /* ---------------- main loop ---------------- */
 
 applyShipStats(); // arm the player (stats + loadout + shield/armor maxes)
-loadSystem(SYSTEM_ID);
+loadSystem(S.SYSTEM_ID);
 if (SAVED && SAVED.spob != null) {
-  const p = spobs.find(sp => sp.id === SAVED.spob);
+  const p = S.spobs.find(sp => sp.id === SAVED.spob);
   if (p) { // resume docked where you last saved, like the original
     player.x = p.x; player.y = p.y;
     S.landedAt = p;
@@ -34,10 +46,10 @@ if (params.has('fire')) keys[' '] = true; // test affordance: hold the trigger
 if (params.has('map')) S.mapOpen = true;
 if (params.has('dest')) S.jumpDest = +params.get('dest');
 if (params.has('jump')) beginJump();
-const FF = +(params.get('ff') || 0);
+export const FF = +(params.get('ff') || 0);
 
-let last = performance.now(), acc = 0;
-function frame(now) {
+export let last = performance.now(), acc = 0;
+export function frame(now) {
   acc += Math.min(now - last, 250); last = now;
   const dt = 1000 / EV.FPS;
   const steps = fastForward ? 2 : 1; // Caps Lock: two sim ticks per real tick

@@ -1,23 +1,30 @@
+import { S, dudes, escorts, preloadSprites, ships, showMsg, spinOfShip } from './01-state.js';
+import { attenuate, playSnd } from './03-sound.js';
+import { armShip, player } from './04-combat.js';
+import { refreshView } from './07-trade.js';
+import { dudeShipPairs, govts, isCriminalWith, legalOf } from './08-missions.js';
+import { introUp } from './11-title.js';
+
 /*
  * engine/shell/02-spawning.js — part of the browser flight shell.
  *
- * The shell modules are concatenated (in order.json order) into one <script>
- * in flight.html by `evexport --flight` and the loader, so they share a single
- * scope — treat them as one file split for readability, not as ES modules.
+ * esbuild bundles the shell modules (entry: main.js) into engine/shell.bundle.js,
+ * injected into flight.html by `evexport --flight` and the loader. 01-state is
+ * the leaf holding the shared state object S; modules import what they use.
  * Normative behavior: engine/ENGINE_SPEC.md.
  */
 /* ---------------- AI spawning (shell; see spec "Spawning") ------------- */
 
-function weighted(pairs) {
+export function weighted(pairs) {
   if (!pairs.length) return null;
   let r = Math.random() * pairs.reduce((n, [, w]) => n + w, 0);
   for (const [v, w] of pairs) { if ((r -= w) <= 0) return v; }
   return pairs[0][0];
 }
-function spawnAI(atEdge) {
+export function spawnAI(atEdge) {
   const pairsD = [];
   for (let i = 1; i <= 4; i++) {
-    const d = syst['DudeTypes' + i], w = syst['Prob' + i];
+    const d = S.syst['DudeTypes' + i], w = S.syst['Prob' + i];
     if (d >= 128 && dudes[d] && w > 0) pairsD.push([d, w]);
   }
   const dudeId = weighted(pairsD);
@@ -36,7 +43,7 @@ function spawnAI(atEdge) {
   e.govt = dudes[dudeId].Govt;
   e.aiType = dudes[dudeId].AIType;
   e.booty = dudes[dudeId].Booty || 0; // what you can plunder when boarding (bible)
-  e.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
+  e.target = S.spobs.length ? S.spobs[Math.floor(Math.random() * S.spobs.length)] : null;
   armShip(e, ships[shipId]);
   // hostility from govt flags (spec: "Hostility")
   const gf = e.govt >= 128 && DATA.types.govt[e.govt] && DATA.types.govt[e.govt].$sem
@@ -55,7 +62,7 @@ function spawnAI(atEdge) {
 /* ---------------- player escorts (spec: "Escorts") ------------------- */
 
 /* Spawn one live escort entity for a saved escort record, near the player. */
-function makeEscort(esc) {
+export function makeEscort(esc) {
   const rec = ships[esc.shipId];
   if (!rec) return null;
   const a = Math.random() * Math.PI * 2, r = 140 + Math.random() * 120;
@@ -71,9 +78,9 @@ function makeEscort(esc) {
   return e;
 }
 /* Re-materialise the player's whole fleet on system entry / takeoff. */
-function spawnEscorts() { for (const esc of escorts) makeEscort(esc); }
+export function spawnEscorts() { for (const esc of escorts) makeEscort(esc); }
 /* Enlist a ship as a persistent escort (and, if in flight, spawn it now). */
-function addEscort(shipId, name) {
+export function addEscort(shipId, name) {
   const rec = ships[shipId];
   if (!rec) return null;                      // unknown hull (data/version mismatch) — skip
   const esc = { id: S.escNextId++, shipId, name: name || rec.name };
@@ -86,7 +93,7 @@ function addEscort(shipId, name) {
  * A Guidance-99 weapon launches a carried ship (AmmoType = its class ID) that
  * fights as a player-allied escort. Reuses the escort AI + friendly-fire
  * immunity; fighters are transient (tied to bay ammo, not the saved fleet). */
-function launchFighter(w) {
+export function launchFighter(w) {
   if (!(w.have > 0)) { showMsg('Fighter bay is empty.'); return false; }
   const rec = ships[w.rec.AmmoType];
   if (!rec) return false;
@@ -103,7 +110,7 @@ function launchFighter(w) {
   return true;
 }
 /* Recall living fighters: each returns to a bay of its type, restoring ammo. */
-function recallFighters() {
+export function recallFighters() {
   let back = 0;
   for (const s of [...S.aiShips]) {
     if (!s.fighter || s.deathT >= 0) continue;
@@ -117,18 +124,18 @@ function recallFighters() {
   if (back) showMsg(`Recalled ${back} fighter${back > 1 ? 's' : ''}.`);
   else showMsg('No fighters deployed.');
 }
-const fightersOut = () => S.aiShips.some(s => s.fighter && s.deathT < 0);
+export const fightersOut = () => S.aiShips.some(s => s.fighter && s.deathT < 0);
 
 /* ---- escort-for-hire economics (spec: "Escorts for hire") ----
  * The bible describes the hire dialog but not the price, so the fee and the
  * per-jump upkeep are conventions (like the commodity multipliers): fractions
  * of the ship's Cost, flagged as approximations. */
-const MAX_ESCORTS = 6;                       // fleet cap (hired + captured)
-const HIRE_FEE_FRAC = 0.5, UPKEEP_FRAC = 0.01;
-const shipHasWeapon = r => [1, 2, 3, 4].some(i => r['WeapType' + i] >= 128);
-const hireFee = r => Math.max(1000, Math.round((r.Cost || 0) * HIRE_FEE_FRAC));
-const upkeepOf = r => Math.max(50, Math.round((r.Cost || 0) * UPKEEP_FRAC));
-const shipClassDesc = id => {
+export const MAX_ESCORTS = 6;                       // fleet cap (hired + captured)
+export const HIRE_FEE_FRAC = 0.5, UPKEEP_FRAC = 0.01;
+export const shipHasWeapon = r => [1, 2, 3, 4].some(i => r['WeapType' + i] >= 128);
+export const hireFee = r => Math.max(1000, Math.round((r.Cost || 0) * HIRE_FEE_FRAC));
+export const upkeepOf = r => Math.max(50, Math.round((r.Cost || 0) * UPKEEP_FRAC));
+export const shipClassDesc = id => {
   const d = DATA.types.desc[2000 + (id - 128)];   // 2000-2063: ship class descriptions
   return d && d.Description ? d.Description : '';
 };
@@ -136,14 +143,14 @@ const shipClassDesc = id => {
  * mission-locked, purchasable hulls make sensible entry-level escorts.
  * Cost > 0 filters out carried-fighter classes (bay ammo, priced at 0),
  * which aren't standalone ships you'd hire. Computed once. */
-const HIRE_ROSTER = Object.entries(ships)
+export const HIRE_ROSTER = Object.entries(ships)
   .filter(([, r]) => r.MissionBit < 0 && r.Cost > 0 && shipHasWeapon(r))
   .sort((a, b) => a[1].Cost - b[1].Cost)
   .slice(0, 4)
   .map(([id]) => +id);
 
 /* Hire a pilot: pay the fee, add a persistent escort carrying its upkeep. */
-function hireEscort(shipId) {
+export function hireEscort(shipId) {
   const r = ships[shipId]; if (!r) return;
   if (escorts.length >= MAX_ESCORTS) { showMsg('Your fleet is already full.'); return; }
   const fee = hireFee(r);
@@ -155,7 +162,7 @@ function hireEscort(shipId) {
   refreshView();
 }
 /* Let an escort go: drop it from the fleet (and remove any live entity). */
-function dismissEscort(id) {
+export function dismissEscort(id) {
   const i = escorts.findIndex(e => e.id === id); if (i < 0) return;
   escorts.splice(i, 1);
   const s = S.aiShips.find(x => x.escId === id);
@@ -165,7 +172,7 @@ function dismissEscort(id) {
 /* Pay the fleet's salaries at each hyperspace jump. Deducted in fleet order
  * (earliest-enlisted first); any escort whose salary you can't cover when its
  * turn comes quits on arrival. */
-function chargeEscortUpkeep() {
+export function chargeEscortUpkeep() {
   let quit = 0;
   for (const e of [...escorts]) {
     if (!e.upkeep) continue;                  // captured ships draw no salary
@@ -182,8 +189,8 @@ function chargeEscortUpkeep() {
 /* Bounty hunters (spec: "Bounty hunters"): when the player is a criminal in
  * the current system, that government sends warships after them. They
  * hyperspace in at the edge, hostile, named from STR# 10008. */
-function systemGovt() { return syst && syst.Govt >= 128 ? syst.Govt : 128; }
-function maybeSpawnBountyHunter() {
+export function systemGovt() { return S.syst && S.syst.Govt >= 128 ? S.syst.Govt : 128; }
+export function maybeSpawnBountyHunter() {
   if (S.landedAt || S.gameOver || player.deathT >= 0) return;
   const g = systemGovt();
   if (!isCriminalWith(g)) return;
@@ -195,11 +202,11 @@ function maybeSpawnBountyHunter() {
   // any spöb's defense düde in-system, then any system düde.
   const warDudes = [];
   for (let i = 1; i <= 4; i++) {
-    const dd = dudes[syst['DudeTypes' + i]];
+    const dd = dudes[S.syst['DudeTypes' + i]];
     if (dd && dd.AIType >= 3) warDudes.push(dd);
   }
-  const defDude = spobs.map(p => dudes[p.DefDude]).find(Boolean);
-  const dude = warDudes[0] || defDude || dudes[syst.DudeTypes1];
+  const defDude = S.spobs.map(p => dudes[p.DefDude]).find(Boolean);
+  const dude = warDudes[0] || defDude || dudes[S.syst.DudeTypes1];
   if (!dude) return;
   const shipId = weighted(dudeShipPairs(dude));
   if (shipId == null) return;
@@ -208,7 +215,7 @@ function maybeSpawnBountyHunter() {
   e.shipId = shipId; e.govt = g; e.aiType = 3;
   e.booty = dude.Booty || 0;
   e.hostile = true; e.bounty = true; e.warpIn = 18;
-  e.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
+  e.target = S.spobs.length ? S.spobs[Math.floor(Math.random() * S.spobs.length)] : null;
   armShip(e, ships[shipId]);
   const names = DATA.strings[10008] && DATA.strings[10008].list;
   e.misnName = names && names.length ? names[Math.floor(Math.random() * names.length)] : 'Bounty Hunter';

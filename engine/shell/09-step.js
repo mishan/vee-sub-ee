@@ -1,14 +1,23 @@
+import { S, TEST_MODE, escorts, explored, preloadSprites, ships, showMsg, spinsNeededFor, strictPlay, systs } from './01-state.js';
+import { maybeSpawnBountyHunter, spawnAI } from './02-spawning.js';
+import { attenuate, playSnd, stopAllLoops } from './03-sound.js';
+import { abortJump, completeJump, fire, hitShip, mapBearingTo, nearestSpobInfo, player, shipHalf, spawnExplosion } from './04-combat.js';
+import { keys, touchCtl } from './05-input.js';
+import { hailOpen, onShipDestroyed } from './06-interaction.js';
+import { maybeSpawnMissionShips, maybeSpawnPers, misnName, misns, onMissionEscortArrived, spobById } from './08-missions.js';
+import { introUp } from './11-title.js';
+
 /*
  * engine/shell/09-step.js — part of the browser flight shell.
  *
- * The shell modules are concatenated (in order.json order) into one <script>
- * in flight.html by `evexport --flight` and the loader, so they share a single
- * scope — treat them as one file split for readability, not as ES modules.
+ * esbuild bundles the shell modules (entry: main.js) into engine/shell.bundle.js,
+ * injected into flight.html by `evexport --flight` and the loader. 01-state is
+ * the leaf holding the shared state object S; modules import what they use.
  * Normative behavior: engine/ENGINE_SPEC.md.
  */
 /* ---------------- logic step (30Hz) ---------------- */
 
-function maxWeaponRange(e) {
+export function maxWeaponRange(e) {
   let r = 0;
   for (const w of e.weapons)
     if (w.rec.Guidance !== 99)
@@ -21,14 +30,14 @@ function maxWeaponRange(e) {
  * grudge, a bounty hunter jumping in, a defense fleet scrambling) — but not
  * for the ambient population when a system first loads (alertGrace). */
 S.prevHostiles = 0; S.alertGrace = 0;
-function checkHostileAlert() {
+export function checkHostileAlert() {
   const n = S.aiShips.filter(s => s.hostile && s.deathT < 0).length;
   if (S.alertGrace > 0) S.alertGrace--;
   else if (n > S.prevHostiles) playSnd(370, 0.7); // Red Alert
   S.prevHostiles = n;
 }
 
-function step() {
+export function step() {
   // dialogs/splash/title pause the sim; landed pauses too — the system is
   // frozen while docked and rebuilt fresh on takeoff.
   if (S.gameOver || hailOpen || introUp() || S.landedAt) return;
@@ -115,8 +124,8 @@ function step() {
           showMsg(`Your escort ${name} was destroyed.`);
           continue;                              // don't spawn an ambient replacement
         }
-        const epoch = systEpoch;
-        setTimeout(() => { if (epoch === systEpoch) spawnAI(true); }, 4000 + Math.random() * 8000);
+        const epoch = S.systEpoch;
+        setTimeout(() => { if (epoch === S.systEpoch) spawnAI(true); }, 4000 + Math.random() * 8000);
       }
       continue;
     }
@@ -154,15 +163,15 @@ function step() {
           // A catch-goal target (board/disable/destroy), or a named character
           // still carrying an unaccepted job, mustn't slip away by landing —
           // loiter near the spob instead of despawning.
-          s.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
+          s.target = S.spobs.length ? S.spobs[Math.floor(Math.random() * S.spobs.length)] : null;
           s.state = 'cruise'; s.fade = 1;
         } else {
           if (s.misnId != null && s.escort) onMissionEscortArrived(s);
           S.aiShips.splice(S.aiShips.indexOf(s), 1);
           if (S.shipTarget === s) S.shipTarget = null;
           if (s.misnId == null) {
-            const epoch = systEpoch;
-            setTimeout(() => { if (epoch === systEpoch) spawnAI(Math.random() < 0.5); },
+            const epoch = S.systEpoch;
+            setTimeout(() => { if (epoch === S.systEpoch) spawnAI(Math.random() < 0.5); },
               2000 + Math.random() * 6000);
           }
         }
@@ -216,3 +225,54 @@ function step() {
   }
 }
 
+
+/* Arrive in / load a system: rebuild the per-system world and spawn ambient
+ * AI plus this system's mission/pers ships. Called on jump arrival,
+ * takeoff, and initial boot. */
+export function loadSystem(systId) {
+  S.SYSTEM_ID = +systId;
+  S.syst = systs[S.SYSTEM_ID];
+  explored.add(S.SYSTEM_ID);
+  S.systEpoch++;
+  S.spobs = Object.entries(DATA.types.spob)
+    .filter(([, p]) => p.System === S.SYSTEM_ID)
+    .map(([id, p]) => ({ id: +id, x: p.xPos, y: p.yPos, ...p }));
+  S.aiShips = [];
+  S.shots = []; S.beams = []; S.explosions = [];
+  S.navTarget = null; S.shipTarget = null;
+  S.alertGrace = 45; S.prevHostiles = 0; // don't red-alert the ambient population
+  preloadSprites(spinsNeededFor(S.SYSTEM_ID));
+  // Landscapes for this system's spobs (default 10000+Type and custom),
+  // so the planet screen never shows without its picture.
+  for (const p of S.spobs)
+    for (const id of [10000 + p.Type, p.CustPicID].filter(v => v >= 0)) {
+      if (document.getElementById('scape' + id)) continue;
+      const img = document.createElement('img');
+      img.id = 'scape' + id;
+      img.src = 'evassets/titles/PICT_' + id + '.png';
+      img.style.display = 'none';
+      img.onerror = () => img.remove();
+      document.body.appendChild(img);
+    }
+  const n = Math.min(Math.max(S.syst.AvgShips, 2), 8);
+  for (let i = 0; i < n; i++) spawnAI(false);
+  // NB: the player's escorts are spawned by the *caller*, after it has placed
+  // the player (arrival edge / launch pad) — see spawnEscorts(). Spawning here
+  // would use the player's stale pre-arrival coordinates.
+  // missions: AvailRandom rerolls per arrival; place this system's ships;
+  // mark observe goals satisfied when we arrive in the right system.
+  S.availRandom = {};
+  S.resolvedOffers = {}; // fresh mission destinations/cargo/deadlines per system
+  for (const A of S.activeMissions) {
+    maybeSpawnMissionShips(A);
+    if (A.shipGoal === 4 && !A.observed) {
+      const sys = A.shipSyst;
+      if ((sys >= 128 && sys === S.SYSTEM_ID) ||
+          (A.travelStel && spobById(A.travelStel) && spobById(A.travelStel).System === S.SYSTEM_ID)) {
+        A.observed = true;
+        showMsg(`${misnName(misns[A.id], A)}: target observed — return for payment.`);
+      }
+    }
+  }
+  maybeSpawnPers(); // a named character may be here with a job (after AvailRandom reset)
+}

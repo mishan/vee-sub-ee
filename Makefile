@@ -20,9 +20,8 @@ ESBUILD ?= node_modules/.bin/esbuild   # from `npm install` (devDependency)
 # file itself is intentionally not a prerequisite: it rarely changes and its
 # name contains a space (which make treats as a prerequisite separator), so
 # it's referenced only inside the recipes. Run `make clean flight` to force.
-FLIGHT_DEPS := flight_template.html engine/core.bundle.js $(wildcard engine/shell/*.js) \
-               engine/shell/order.json evexport.js evrsrc.js \
-               semantics.js $(ASSETS)/manifest.json $(SCHEMAS)
+FLIGHT_DEPS := flight_template.html engine/core.bundle.js engine/shell.bundle.js \
+               evexport.js evrsrc.js semantics.js $(ASSETS)/manifest.json $(SCHEMAS)
 GALAXY_DEPS := galaxy_viewer.html evexport.js evrsrc.js semantics.js $(SCHEMAS)
 
 .DEFAULT_GOAL := flight.html
@@ -34,11 +33,18 @@ flight.html: $(FLIGHT_DEPS)
 	node evexport.js "$(DATA)" --app "$(APP)" --flight $@
 
 ## engine/core.bundle.js – esbuild the ES-module flight core into an IIFE global
-# (EV). Committed so the in-browser loader can inject it without a build step.
+# (EV). Generated (gitignored); the loader/evexport inject it.
 engine/core.bundle.js: engine/core.js package.json
 	$(ESBUILD) $< --bundle --format=iife --global-name=EV \
 	  --banner:js='/* GENERATED from engine/core.js by esbuild — do not edit. Rebuild: make engine/core.bundle.js */' \
 	  --footer:js='globalThis.EV=EV;' --outfile=$@
+
+## engine/shell.bundle.js – esbuild the ES-module flight shell (engine/shell/*.js,
+# entry main.js) into one IIFE. Generated (gitignored); injected at /*__SHELL__*/.
+engine/shell.bundle.js: $(wildcard engine/shell/*.js) package.json
+	$(ESBUILD) engine/shell/main.js --bundle --format=iife \
+	  --banner:js='/* GENERATED from engine/shell/*.js by esbuild — do not edit. Rebuild: make engine/shell.bundle.js */' \
+	  --outfile=$@
 
 ## galaxy.html   – build the galaxy map viewer
 galaxy.html: $(GALAXY_DEPS)

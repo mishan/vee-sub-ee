@@ -1,16 +1,23 @@
+import { COMMODITIES, S, cargo, drawGfxFit, drawSpin, explored, gfxImg, html, preloadSprites, ships, spinOfShip, spinOfSpob, sprites, systs } from './01-state.js';
+import { fuelMax, holds, linkedSystems, player, poolKey } from './04-combat.js';
+import { TOUCH, updateTouchUI } from './05-input.js';
+import { distTo } from './06-interaction.js';
+import { cargoNames } from './07-trade.js';
+import { combatRating, govts, isCriminalWith, legalStatus } from './08-missions.js';
+
 /*
  * engine/shell/10-render.js — part of the browser flight shell.
  *
- * The shell modules are concatenated (in order.json order) into one <script>
- * in flight.html by `evexport --flight` and the loader, so they share a single
- * scope — treat them as one file split for readability, not as ES modules.
+ * esbuild bundles the shell modules (entry: main.js) into engine/shell.bundle.js,
+ * injected into flight.html by `evexport --flight` and the loader. 01-state is
+ * the leaf holding the shared state object S; modules import what they use.
  * Normative behavior: engine/ENGINE_SPEC.md.
  */
 /* ---------------- rendering ---------------- */
 
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
-function resize() {
+export const canvas = document.getElementById('game');
+export const ctx = canvas.getContext('2d');
+export function resize() {
   canvas.width = innerWidth * devicePixelRatio;
   canvas.height = innerHeight * devicePixelRatio;
   canvas.style.width = innerWidth + 'px';
@@ -18,7 +25,7 @@ function resize() {
 }
 addEventListener('resize', resize); resize();
 
-function starsIn(cx, cy, layer) {
+export function starsIn(cx, cy, layer) {
   let h = (cx * 73856093) ^ (cy * 19349663) ^ (layer * 83492791);
   const out = [];
   for (let i = 0; i < 5; i++) {
@@ -29,7 +36,7 @@ function starsIn(cx, cy, layer) {
   }
   return out;
 }
-function drawStars(camX, camY, w, h, streak) {
+export function drawStars(camX, camY, w, h, streak) {
   for (const [layer, par, alpha] of [[1, 0.3, 0.5], [2, 0.6, 0.9]]) {
     const ox = camX * par, oy = camY * par;
     ctx.fillStyle = `rgba(255,255,255,${alpha})`;
@@ -52,13 +59,13 @@ function drawStars(camX, camY, w, h, streak) {
   }
 }
 
-function radarColor(govtId) {
+export function radarColor(govtId) {
   if (govtId == null || govtId < 128) return '#9aa5b8'; // no/independent govt → neutral
   const hues = ['#e5c07b', '#61afef', '#e06c75', '#98c379', '#c678dd', '#56b6c2'];
   return hues[(govtId - 128) % hues.length];
 }
 
-function drawFlame(ship, x, y) {
+export function drawFlame(ship, x, y) {
   if (!ship.thrusting) return;
   const a = EV.rad(ship.heading);
   const meta = (sprites.get(spinOfShip(ship.shipId)) || {}).meta;
@@ -74,7 +81,7 @@ function drawFlame(ship, x, y) {
 }
 
 // Classic-style corner brackets around a target.
-function drawBrackets(x, y, half, color) {
+export function drawBrackets(x, y, half, color) {
   const arm = Math.max(6, half * 0.45);
   ctx.strokeStyle = color;
   ctx.lineWidth = 1.5;
@@ -86,7 +93,7 @@ function drawBrackets(x, y, half, color) {
     ctx.stroke();
   }
 }
-function spriteHalf(spinId, fallback) {
+export function spriteHalf(spinId, fallback) {
   const m = (sprites.get(spinId) || {}).meta;
   return (m ? Math.max(m.frameW, m.frameH) : fallback) / 2 + 6;
 }
@@ -95,7 +102,7 @@ function spriteHalf(spinId, fallback) {
  * Box geometry measured from the asset: radar y3–138, shield/fuel bar
  * slots at x60–134 / y154 & y170, message box y190–227, status strip
  * y235–254, target display y262–378, cargo box y386–476; content x5–138. */
-const panelImg = (() => {
+export const panelImg = (() => {
   const i = document.createElement('img');
   i.src = 'evassets/titles/PICT_128_Game Panel.png';
   i.style.display = 'none';
@@ -129,14 +136,14 @@ const panelImg = (() => {
   preloadSprites(combatSpins);
 }
 
-const GREEN = '#3ce052', DIMGREEN = '#1d7a2e';
-function panelText(x, y, text, color = GREEN, align = 'left', font = '10px Geneva, Verdana, sans-serif') {
+export const GREEN = '#3ce052', DIMGREEN = '#1d7a2e';
+export function panelText(x, y, text, color = GREEN, align = 'left', font = '10px Geneva, Verdana, sans-serif') {
   ctx.fillStyle = color; ctx.font = font; ctx.textAlign = align;
   ctx.fillText(text, x, y);
   ctx.textAlign = 'left';
 }
 
-function drawPanel(w, h) {
+export function drawPanel(w, h) {
   const pw = 144, ph = 480;
   // Shrink the fixed 144×480 sidebar to fit short (mobile landscape) screens;
   // no-op on desktop where the viewport is taller than the panel.
@@ -158,7 +165,7 @@ function drawPanel(w, h) {
     ctx.fillStyle = color; ctx.fillRect(x - sz / 2, y - sz / 2, sz, sz);
     return [x, y];
   };
-  for (const p of spobs) blip(p, '#7fd0ff', 3);
+  for (const p of S.spobs) blip(p, '#7fd0ff', 3);
   for (const s of S.aiShips) {
     const at = blip(s, s.playerEscort ? '#67d967' : radarColor(s.govt), 2);
     if (at && s === S.shipTarget) {
@@ -195,7 +202,7 @@ function drawPanel(w, h) {
   const destName = S.jumpDest != null && systs[S.jumpDest] ? systs[S.jumpDest].name : null;
   panelText(px + 9, py + 248,
     S.jump ? `Hyperspace: ${systs[S.jump.destId].name}` :
-    destName ? `Dest: ${destName} (J)` : syst.name);
+    destName ? `Dest: ${destName} (J)` : S.syst.name);
 
   /* target display */
   const tb = { x: px + 5, y: py + 262, w: 134, h: 117 };
@@ -234,8 +241,8 @@ function drawPanel(w, h) {
 
 /* ---- galaxy map overlay ---- */
 
-let mapHit = []; // clickable {x, y, id} in screen coords
-function drawMap(w, h) {
+export let mapHit = []; // clickable {x, y, id} in screen coords
+export function drawMap(w, h) {
   mapHit = [];
   const mw = Math.min(w * 0.72, 900), mh = Math.min(h * 0.72, 620);
   const mx = (w - mw) / 2, my = (h - mh) / 2;
@@ -266,7 +273,7 @@ function drawMap(w, h) {
     // fog of war (spec: "Map knowledge"): unexplored = dim anonymous dot
     ctx.fillStyle = known ? radarColor(s.Govt) : 'rgba(120,130,150,.35)';
     ctx.beginPath(); ctx.arc(x, y, known ? 3 : 2, 0, 7); ctx.fill();
-    if (+id === SYSTEM_ID) {
+    if (+id === S.SYSTEM_ID) {
       ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.stroke();
     }
     if (+id === S.jumpDest) {
@@ -281,7 +288,7 @@ function drawMap(w, h) {
   }
   // Legal status for the selected system (destination if chosen, else the
   // current one), plus the player's combat rating.
-  const shownId = S.jumpDest >= 128 && systs[S.jumpDest] ? S.jumpDest : SYSTEM_ID;
+  const shownId = S.jumpDest >= 128 && systs[S.jumpDest] ? S.jumpDest : S.SYSTEM_ID;
   const shownSys = systs[shownId];
   const statusG = shownSys.Govt >= 128 ? shownSys.Govt : 128;
   const status = legalStatus(statusG);
@@ -304,7 +311,7 @@ canvas.addEventListener('pointerdown', e => {
     if (Math.hypot(e.clientX - t.x, e.clientY - t.y) < (TOUCH ? 22 : 12)) { S.jumpDest = t.id; return; }
 });
 
-function render() {
+export function render() {
   updateTouchUI();
   const w = innerWidth, h = innerHeight;
   ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
@@ -315,7 +322,7 @@ function render() {
   drawStars(player.x, player.y, w, h, streak);
   const toScreen = (x, y) => [x - player.x + w / 2, y - player.y + h / 2];
 
-  for (const p of spobs) {
+  for (const p of S.spobs) {
     const [x, y] = toScreen(p.x, p.y);
     drawSpin(ctx, spinOfSpob(p), x, y, 0);
     ctx.fillStyle = 'rgba(190,205,230,.55)';
@@ -394,7 +401,7 @@ function render() {
 
   const speed = Math.hypot(player.vx, player.vy);
   document.getElementById('hud').innerHTML = html`
-    <b>${syst.name}</b><br>${ships[S.playerShipId].name}<br>speed ${(speed * EV.FPS).toFixed(0)} px/s`;
+    <b>${S.syst.name}</b><br>${ships[S.playerShipId].name}<br>speed ${(speed * EV.FPS).toFixed(0)} px/s`;
 
   // boardable disabled mission ship in range?
   const boardable = S.landedAt ? null : S.aiShips.find(s => s.misnId != null && s.disabled &&

@@ -1,23 +1,27 @@
+import { COMMODITIES, PRICE_MULT, S, cargo, html, outfits, preloadSprites, ships, showMsg, spinOfShip } from './01-state.js';
+import { applyShipStats, effectiveShip, fuelMax, holds, player } from './04-combat.js';
+import { renderBar, renderComputer, renderPlanetScreen } from './08-missions.js';
+
 /*
  * engine/shell/07-trade.js — part of the browser flight shell.
  *
- * The shell modules are concatenated (in order.json order) into one <script>
- * in flight.html by `evexport --flight` and the loader, so they share a single
- * scope — treat them as one file split for readability, not as ES modules.
+ * esbuild bundles the shell modules (entry: main.js) into engine/shell.bundle.js,
+ * injected into flight.html by `evexport --flight` and the loader. 01-state is
+ * the leaf holding the shared state object S; modules import what they use.
  * Normative behavior: engine/ENGINE_SPEC.md.
  */
 /* ---- trading (spec: "Trading") ---- */
 
-const cargoNames = DATA.strings[4000].list.slice(0, 6);
-const basePrices = DATA.strings[4004].list.slice(0, 6).map(Number);
-const missionCargoUsed = () => S.activeMissions.reduce((n, a) => n + (a.cargoLoaded ? a.cargoQty : 0), 0);
-const cargoUsed = () => COMMODITIES.reduce((n, c) => n + cargo[c], 0) + missionCargoUsed();
+export const cargoNames = DATA.strings[4000].list.slice(0, 6);
+export const basePrices = DATA.strings[4004].list.slice(0, 6).map(Number);
+export const missionCargoUsed = () => S.activeMissions.reduce((n, a) => n + (a.cargoLoaded ? a.cargoQty : 0), 0);
+export const cargoUsed = () => COMMODITIES.reduce((n, c) => n + cargo[c], 0) + missionCargoUsed();
 
-function priceAt(spob, i) {
+export function priceAt(spob, i) {
   const lvl = spob.$sem && spob.$sem.prices[COMMODITIES[i]];
   return lvl && PRICE_MULT[lvl] ? Math.round(basePrices[i] * PRICE_MULT[lvl]) : null;
 }
-function trade(i, qty) {
+export function trade(i, qty) {
   if (!S.landedAt) return;
   const price = priceAt(S.landedAt, i);
   if (price == null) return;
@@ -34,25 +38,25 @@ function trade(i, qty) {
  * mount it in a panel/card, refresh it in place when an action changes state,
  * and hide it. `activeView` is whichever View is showing (null = none); the
  * shell reads it to know a dialog is up (pause the sim, swallow keys). */
-let activeView = null;
-class View {
+export let activeView = null;
+export class View {
   constructor(panelId, cardId, render) { this.panelId = panelId; this.cardId = cardId; this.render = render; }
   refresh() { document.getElementById(this.cardId).innerHTML = this.render(); }
   open() { activeView = this; this.refresh(); document.getElementById(this.panelId).style.display = 'flex'; }
   close() { if (activeView === this) activeView = null; document.getElementById(this.panelId).style.display = 'none'; }
 }
-const refreshView = () => { if (activeView) activeView.refresh(); };
+export const refreshView = () => { if (activeView) activeView.refresh(); };
 
 // The five landing-screen services share the one 'service' panel; each is a View
 // over a pure render function (renderExchange/… below and in 08-missions.js).
-const SERVICE_VIEWS = {
+export const SERVICE_VIEWS = {
   exchange: new View('service', 'serviceCard', renderExchange),
   outfitter: new View('service', 'serviceCard', renderOutfitter),
   shipyard: new View('service', 'serviceCard', renderShipyard),
   bar: new View('service', 'serviceCard', renderBar),
   missioncomputer: new View('service', 'serviceCard', renderComputer),
 };
-function openService(kind) {
+export function openService(kind) {
   const gate = { exchange: 'commodityExchange', outfitter: 'outfitter', shipyard: 'shipyard',
     bar: 'bar', missioncomputer: 'canLand' }[kind];
   if (!S.landedAt || !(S.landedAt.$sem && S.landedAt.$sem[gate])) return;
@@ -60,11 +64,11 @@ function openService(kind) {
   if (kind === 'shipyard' && !shipyardStock(S.landedAt).length) return;
   SERVICE_VIEWS[kind].open();
 }
-function closeService() {
+export function closeService() {
   if (activeView) activeView.close();
   renderPlanetScreen(); // refresh wallet line
 }
-const walletHtml = () => {
+export const walletHtml = () => {
   const fm = effectiveShip().freeMass;
   return html`<div class="wallet"><b>${S.credits.toLocaleString('en-US')}</b> credits ·
     cargo ${cargoUsed()}/${holds} tons · ${fm} tons outfit space</div>
@@ -72,12 +76,12 @@ const walletHtml = () => {
 };
 
 /* tech availability (spec: spöb TechLevel gate + SpecialTech exact match) */
-function techAvailable(itemTech, p) {
+export function techAvailable(itemTech, p) {
   if (itemTech <= p.TechLevel) return true;
   return [p.SpecialTech1, p.SpecialTech2, p.SpecialTech3].includes(itemTech);
 }
 
-function renderExchange() {
+export function renderExchange() {
   const p = S.landedAt, m = p.$sem || {};
   const rows = [];
   for (let i = 0; i < 6; i++) {
@@ -101,10 +105,10 @@ function renderExchange() {
 
 /* ---- outfitter ---- */
 
-const outfitName = id => DATA.strings[5000].list[id - 128] ||
+export const outfitName = id => DATA.strings[5000].list[id - 128] ||
   (DATA.types.outf[id] ? 'outfit ' + id : null);
 
-function buyOutfit(id, qty) {
+export function buyOutfit(id, qty) {
   const o = DATA.types.outf[id];
   if (!o) return;
   const s = effectiveShip();
@@ -133,12 +137,12 @@ function buyOutfit(id, qty) {
 /* Classic shop layout. Menu-sheet thumbnails: outfit i (id−128) lives at
  * cell (i%8, ⌊i/8⌋) of PICT 6100; ships likewise in PICT 5100. Large
  * 100×100 dialog art: outfit → PICT 6000+i, ship → PICT 5000+i. */
-let selOutfitId = null, selShipId = null;
+export let selOutfitId = null, selShipId = null;
 
 /* Only items actually available here are shown — no empty or grayed
  * slots (the grid compacts; each thumbnail is still sliced from the
  * item's fixed cell in the original menu sheet). */
-function shopGrid(sheet, items, selId, clickFn) {
+export function shopGrid(sheet, items, selId, clickFn) {
   const cells = items.map(({ id }) => {
     const i = id - 128;
     return html`<button class="cell${id === selId ? ' sel' : ''}"
@@ -151,19 +155,19 @@ function shopGrid(sheet, items, selId, clickFn) {
 
 /* Would this spob's shop have anything to show? Gates both the dialog
  * and the button on the landing screen. */
-function outfitterStock(p) {
+export function outfitterStock(p) {
   return Object.entries(DATA.types.outf).filter(([id, o]) =>
     o.MissionBit < 0 && (techAvailable(o.TechLevel, p) || (outfits[id] || 0) > 0));
 }
-function shipyardStock(p) {
+export function shipyardStock(p) {
   return Object.entries(ships).filter(([, r]) =>
     r.MissionBit < 0 && techAvailable(r.TechLevel, p));
 }
 
-function selectOutfit(id) { selOutfitId = id; refreshView(); }
-function selectShip(id) { selShipId = id; refreshView(); }
+export function selectOutfit(id) { selOutfitId = id; refreshView(); }
+export function selectShip(id) { selShipId = id; refreshView(); }
 
-function renderOutfitter() {
+export function renderOutfitter() {
   const p = S.landedAt;
   const s = effectiveShip();
   const items = outfitterStock(p).map(([id]) => ({ id: +id }));
@@ -195,18 +199,18 @@ function renderOutfitter() {
 
 /* ---- shipyard ---- */
 
-const shipyardName = id => DATA.strings[5001].list[id - 128] ||
+export const shipyardName = id => DATA.strings[5001].list[id - 128] ||
   (ships[id] ? ships[id].name : null);
 
 /* Trade-in per the resource bible: "the cost of buying a ship is always
  * the cost of the new ship minus 25% of the original cost of your current
  * ship and upgrades." */
-function tradeInValue() {
+export function tradeInValue() {
   return Math.round(0.25 * (ships[S.playerShipId].Cost +
     Object.entries(outfits).reduce((n, [oid, c]) =>
       n + (DATA.types.outf[oid] ? DATA.types.outf[oid].Cost * c : 0), 0)));
 }
-function buyShip(id) {
+export function buyShip(id) {
   const rec = ships[id];
   if (!rec || id === S.playerShipId) return;
   const refund = tradeInValue();
@@ -224,7 +228,7 @@ function buyShip(id) {
   refreshView();
 }
 
-function renderShipyard() {
+export function renderShipyard() {
   const p = S.landedAt;
   const refund = tradeInValue();
   const items = shipyardStock(p).map(([id]) => ({ id: +id }));

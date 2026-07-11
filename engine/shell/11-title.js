@@ -1,9 +1,15 @@
+import { S, SAVED, html, pilotBorn, pilotName, shipName, ships, showMsg, startNewPilot } from './01-state.js';
+import { systemGovt } from './02-spawning.js';
+import { armAudioUnlock, startTitleMusic, stopTitleMusic } from './03-sound.js';
+import { combatRating, legalStatus } from './08-missions.js';
+import { render } from './10-render.js';
+
 /*
  * engine/shell/11-title.js — part of the browser flight shell.
  *
- * The shell modules are concatenated (in order.json order) into one <script>
- * in flight.html by `evexport --flight` and the loader, so they share a single
- * scope — treat them as one file split for readability, not as ES modules.
+ * esbuild bundles the shell modules (entry: main.js) into engine/shell.bundle.js,
+ * injected into flight.html by `evexport --flight` and the loader. 01-state is
+ * the leaf holding the shared state object S; modules import what they use.
  * Normative behavior: engine/ENGINE_SPEC.md.
  */
 /* ---------------- title screen (spec: "Title screen") ----------------
@@ -11,15 +17,15 @@
  * already-initialised game; the sim is paused (titleShown) until the
  * player picks Enter Ship / Open Pilot. Test-param runs skip it so
  * headless screenshots go straight to the game. ?title=1 forces it. */
-let titleShown = false, splashShown = false, splashAdvancing = false;
-const titleEl = document.getElementById('title');
-const splashEl = document.getElementById('splash');
-const introUp = () => splashShown || titleShown; // sim paused, keys swallowed
+export let titleShown = false, splashShown = false, splashAdvancing = false;
+export const titleEl = document.getElementById('title');
+export const splashEl = document.getElementById('splash');
+export const introUp = () => splashShown || titleShown; // sim paused, keys swallowed
 
 /* Loading splash (PICT 131) → "Press any key" → music, brief hold, then the
  * title menu, echoing classic EV's boot. The first key/pointer gesture is
  * what unlocks audio (autoplay policy), so the theme starts here. */
-function showSplash() {
+export function showSplash() {
   splashShown = true;
   splashEl.style.display = 'flex';
   document.getElementById('splashPrompt').textContent = 'Press any key to continue';
@@ -27,7 +33,7 @@ function showSplash() {
   addEventListener('pointerdown', arm, true); // keydown handled in the key listener
   armAudioUnlock();                           // unlock audio on any gesture type
 }
-function advanceSplash() {
+export function advanceSplash() {
   if (!splashShown || splashAdvancing) return;
   splashAdvancing = true;
   startTitleMusic(); // first gesture unlocks + starts the theme
@@ -43,7 +49,7 @@ function advanceSplash() {
   }, 1600);
 }
 
-function showTitle() {
+export function showTitle() {
   titleShown = true;
   titleEl.style.display = 'flex';
   titleEl.classList.add('intro'); // one-shot fade/scale-in, cleared after
@@ -57,7 +63,7 @@ function showTitle() {
   addEventListener('resize', titleSummaryResize);
   armAudioUnlock(); // in case we came straight to the menu (e.g. ?titlemenu=1)
 }
-function enterGame() {
+export function enterGame() {
   if (!titleShown) return;
   titleShown = false;
   titleEl.style.display = 'none';
@@ -65,7 +71,7 @@ function enterGame() {
   if (titleSummaryResize) { removeEventListener('resize', titleSummaryResize); titleSummaryResize = null; }
   render();
 }
-function titleAbout() {
+export function titleAbout() {
   startTitleMusic();
   // STR# 20000 is the intro crawl; show it as flavour + a clean-room note.
   const intro = (DATA.strings[20000] && DATA.strings[20000].list || [])
@@ -79,7 +85,7 @@ function titleAbout() {
     <button onclick="document.getElementById('about').style.display='none'">Close</button>`;
   document.getElementById('about').style.display = 'flex';
 }
-function titlePrefs() {
+export function titlePrefs() {
   S.soundOn = !S.soundOn;
   if (!S.soundOn) stopTitleMusic(); else startTitleMusic();
   showMsg('Sound ' + (S.soundOn ? 'on' : 'off'));
@@ -87,7 +93,7 @@ function titlePrefs() {
 
 /* The title viewscreen shows a summary of the current pilot's game (as the
  * original does), drawn on the canvas so it scales with the framed art. */
-function gameDate() {
+export function gameDate() {
   // Classic EV starts the calendar at the pilot's creation date + 250 years and
   // advances it one day per hyperspace jump (gameDay). Anchored to the stored
   // creation epoch so the date is stable across sessions.
@@ -101,7 +107,7 @@ function gameDate() {
             : (day % 10 === 3 && day !== 13) ? 'rd' : 'th';
   return `${months[d.getMonth()]} ${day}${suf}, ${d.getFullYear()}`;
 }
-function renderTitleSummary() {
+export function renderTitleSummary() {
   const cv = document.getElementById('titleView');
   const w = cv.clientWidth, h = cv.clientHeight;
   if (!w || !h) return;                     // not laid out yet
@@ -155,10 +161,10 @@ function renderTitleSummary() {
   }
 }
 // re-render on resize while the title is up (the canvas is sized from layout)
-let titleSummaryResize = null;
+export let titleSummaryResize = null;
 
 // Enter Ship / Open Pilot need a loaded pilot; otherwise nudge toward New Pilot.
-const needPilot = () => { showMsg('No pilot loaded — choose New Pilot to begin.'); };
+export const needPilot = () => { showMsg('No pilot loaded — choose New Pilot to begin.'); };
 document.getElementById('hotEnter').onclick = () => { if (SAVED) enterGame(); else needPilot(); };
 document.getElementById('hotOpen').onclick  = () => { if (SAVED) enterGame(); else needPilot(); };
 document.getElementById('hotNew').onclick   = () => {

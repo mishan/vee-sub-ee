@@ -23,14 +23,14 @@ branch.)
 ## Commands
 
 Run `npm install` once (dev dependency: esbuild, which bundles the ES-module
-engine core). A top-level `Makefile` wraps the common ones: `make` builds
-flight.html, plus `make galaxy`/`data`/`assets`/`schemas`/`selftest`/`verify`/
-`clean` (`make help` lists targets). The raw commands are below.
+engine core and shell). A top-level `Makefile` wraps the common ones: `make`
+builds flight.html (bundling both `engine/core.bundle.js` and
+`engine/shell.bundle.js` first), plus `make galaxy`/`data`/`assets`/`schemas`/
+`selftest`/`verify`/`clean` (`make help` lists targets). The raw commands are below.
 
 ```sh
 npm install                                              # esbuild devDependency
-node_modules/.bin/esbuild engine/core.js --bundle --format=iife --global-name=EV \
-  --footer:js='globalThis.EV=EV;' --outfile=engine/core.bundle.js   # engine → global EV
+make engine/core.bundle.js engine/shell.bundle.js        # esbuild the ES modules
 node evrsrc.js selftest                                  # resource-fork lib sanity
 node tmpl2schema.js "EV_data/EV Data.rsrc" -o schemas/   # regenerate schemas (rarely needed)
 node evexport.js "EV_data/EV Data.rsrc" -o evdata.json --semantic   # game DB
@@ -62,20 +62,23 @@ Headless UI verification: `firefox --headless --screenshot out.png
 - `engine/ENGINE_SPEC.md` — **normative** flight/AI/game rules, implemented by
   `engine/core.js`, a DOM-free **ES module** (importable in node). Any behavior
   change: spec first, then the core.
-- `engine/core.bundle.js` — GENERATED (gitignored): esbuild bundles core.js into
-  an IIFE that exposes the exports as the browser global `EV`. Built by `make` /
-  `npm run build:engine` and shipped in releases; the in-browser loader fetches
-  it, so a deploy must build it first. Never hand-edited. First step of an
-  in-progress move to esbuild-bundled ES modules for the shell too.
+- `engine/core.bundle.js`, `engine/shell.bundle.js` — GENERATED (gitignored):
+  esbuild bundles the ES modules into IIFEs. core.bundle.js exposes its exports
+  as the browser global `EV`; shell.bundle.js is the shell payload. Built by
+  `make` and shipped in releases; the in-browser loader fetches them, so a deploy
+  must build them first. Never hand-edited.
 - `flight_template.html` — browser shell HTML/CSS + a script with `/*__ENGINE__*/`
-  (core.bundle.js) and `/*__SHELL__*/` placeholders; the built `flight.html`
-  injects the engine bundle, the shell, and the game DATA/MANIFEST into it.
+  (core.bundle.js) and `/*__SHELL__*/` (shell.bundle.js) placeholders; the built
+  `flight.html` injects both bundles and the game DATA/MANIFEST/NAMES into it.
+  The shell bundle reads DATA/MANIFEST/NAMES and the global `EV` from the
+  enclosing template `<script>` (they stay ambient globals, not imports).
 - `engine/shell/*.js` — the flight shell (canvas render, DOM dialogs, game
-  state/UI), split by domain (state, spawning, sound, combat, input, …) for
-  readability. `evexport --flight` and the loader **concatenate them in
-  `engine/shell/order.json` order into one `<script>`**, so they share a single
-  scope — edit them as one file split across files, not as ES modules (order
-  matters: later files may reference earlier top-level declarations).
+  state/UI), **real ES modules** split by domain (state, spawning, sound, combat,
+  …); entry `main.js` lists them in load order and esbuild bundles them. Each
+  module exports what others use and imports what it needs. `01-state.js` is the
+  **leaf** (imports nothing from other shell modules) and holds `S`, the shared
+  mutable-state object — cross-module reassigned state lives on `S` because ES
+  imports are read-only bindings. Keep 01 a leaf so it initializes first.
 - Per-ship PICTs (index = shïp−128): target schematic 3000+i, hail comm
   portrait 5300+i, shipyard detail 5000+i, outfit detail 6000+i.
 - Asset conventions (spec "Sprite ID conventions"): ship spïn = shïp ID,

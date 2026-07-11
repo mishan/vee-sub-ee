@@ -293,27 +293,21 @@ function checkPluginAssets() {
 
 checkPict();
 checkSnd();
-// The assembled flight shell must parse. Concatenate the modules (order.json
-// order) as the build does and compile them as one script — new Function
-// compiles without running, so it catches a syntax error or a cross-module
-// top-level redeclaration before a browser would. No game data needed.
+// The flight shell (ES modules under engine/shell/) must bundle cleanly. Run
+// esbuild on the entry the way the build does: this resolves every cross-module
+// import (esbuild errors on a missing export) and the resulting IIFE is compiled
+// with new Function — catching a syntax error before a browser would. No game
+// data needed (DATA/MANIFEST/NAMES/EV are left as free globals in the bundle).
 function checkShellAssembles() {
-  const shellDir = path.join(ROOT, 'engine', 'shell');
-  let order, shell;
+  const entry = path.join(ROOT, 'engine', 'shell', 'main.js');
   try {
-    order = JSON.parse(fs.readFileSync(path.join(shellDir, 'order.json'), 'utf8'));
-    shell = order.map(f => fs.readFileSync(path.join(shellDir, f), 'utf8')).join('\n');
-  } catch (e) {                          // bad/missing order.json or module file
-    console.log('  ✗ could not read shell sources: ' + e.message);
-    process.exitCode = 1;
-    return;
-  }
-  const preamble = "'use strict';\nconst DATA = null, MANIFEST = null, NAMES = null;\n";
-  try {
-    new Function(preamble + shell);   // eslint-disable-line no-new-func
-    console.log('shell: assembled script parses (' + order.length + ' modules)');
+    const res = require('esbuild').buildSync({
+      entryPoints: [entry], bundle: true, write: false, format: 'iife', logLevel: 'silent',
+    });
+    new Function(res.outputFiles[0].text);   // eslint-disable-line no-new-func
+    console.log('shell: ES-module bundle resolves + parses');
   } catch (e) {
-    console.log('  ✗ assembled shell failed to parse: ' + e.message);
+    console.log('  ✗ shell bundle failed: ' + (e.message || e));
     process.exitCode = 1;
   }
 }
