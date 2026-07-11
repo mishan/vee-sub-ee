@@ -507,7 +507,7 @@ export function payMission(m) {
     const kept = Math.round(wallet.credits * (1 - (-v - 40000) / 100));
     wallet.spend(wallet.credits - kept);
   }
-  // -10128..-10255 clean legal record: reputation reset with that govt
+  // -10128..-10255 clean legal record: clear a criminal record with that govt
   else if (v >= -10255 && v <= -10128) legal.pardon(-v - 10000);
 }
 

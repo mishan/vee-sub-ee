@@ -13,16 +13,19 @@
  */
 export class LegalRecord {
   constructor(records = {}, kills = 0) {
-    this.records = records; // govtId -> stored record; unset ⇒ caller uses the govt's InitialRec
+    // Copy into a null-prototype map so keys from a save file (e.g. __proto__,
+    // constructor) can't reach the prototype chain, and lookups never observe
+    // inherited properties.
+    this.records = Object.assign(Object.create(null), records); // govtId -> stored record
     this.kills = kills; // total crew destroyed → combat rating
   }
 
   // Whether a record has been stored for a govt (vs. still at its default).
   has(govt) {
-    return this.records[govt] != null;
+    return Object.hasOwn(this.records, govt) && this.records[govt] != null;
   }
   raw(govt) {
-    return this.records[govt];
+    return Object.hasOwn(this.records, govt) ? this.records[govt] : undefined;
   }
 
   // Store an absolute record. Callers that adjust the *effective* record (which

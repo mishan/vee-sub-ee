@@ -45,3 +45,15 @@ test('has/raw reflect stored records; the constructor seeds from a pilot file', 
   assert.ok(!l.has(999));
   assert.equal(l.raw(999), undefined);
 });
+
+test('records are a null-prototype map: inherited keys are never observed', () => {
+  const l = new LegalRecord();
+  // a govt id that collides with an Object.prototype member must not read through
+  assert.ok(!l.has('toString'));
+  assert.equal(l.raw('toString'), undefined);
+  // a hostile save key stays an own data property and never pollutes the prototype
+  const seeded = new LegalRecord(JSON.parse('{"__proto__": 5, "128": 3}'));
+  assert.equal(Object.getPrototypeOf(seeded.records), null);
+  assert.equal(seeded.raw(128), 3);
+  assert.equal(Object.getPrototypeOf({}), Object.prototype); // global prototype intact
+});
