@@ -185,11 +185,13 @@ function renderPlugins() {
 
     const grip = document.createElement('span'); grip.className = 'grip'; grip.textContent = '⠿'; grip.title = 'Drag to reorder';
     const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = p.enabled;
-    cb.title = 'Apply this plug-in'; cb.onchange = () => { p.enabled = cb.checked; li.classList.toggle('off', !cb.checked); };
+    cb.title = 'Apply this plug-in'; cb.setAttribute('aria-label', 'Apply plug-in: ' + p.name);
+    cb.onchange = () => { p.enabled = cb.checked; li.classList.toggle('off', !cb.checked); };
     const idx = document.createElement('span'); idx.className = 'idx'; idx.textContent = (i + 1) + '.';
     const name = document.createElement('span'); name.className = 'pname'; name.textContent = p.name;   // textContent: file name is untrusted
     const sum = document.createElement('span'); sum.className = 'drop'; sum.textContent = pluginSummary(p.fork);
-    const rm = document.createElement('button'); rm.title = 'Remove'; rm.textContent = '×';
+    const rm = document.createElement('button'); rm.type = 'button'; rm.title = 'Remove'; rm.textContent = '×';
+    rm.setAttribute('aria-label', 'Remove plug-in: ' + p.name);
     rm.onclick = () => { window.__plugins.splice(i, 1); renderPlugins(); };
 
     if (!p.enabled) li.classList.add('off');

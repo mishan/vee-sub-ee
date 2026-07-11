@@ -254,8 +254,12 @@ function checkPluginAssets() {
   if (!fs.existsSync(gF) || !fs.existsSync(tF)) return;
   const gfx = loadFork(gF).fork, titles = loadFork(tF).fork;
   const sounds = fs.existsSync(sF) ? loadFork(sF).fork : null;
-  const realSpin = parseFork(gfx).find(t => t.typeName === 'spïn').resources[0];  // valid record bytes
-  const titlePictId = parseFork(titles).find(t => t.typeName === 'PICT').resources[0].id;
+  // Bail cleanly (like the other checks) if the base forks lack the types we need.
+  const spinT = parseFork(gfx).find(t => t.typeName === 'spïn');
+  const titleT = parseFork(titles).find(t => t.typeName === 'PICT');
+  if (!spinT || !spinT.resources.length || !titleT || !titleT.resources.length) return;
+  const realSpin = spinT.resources[0];               // valid record bytes
+  const titlePictId = titleT.resources[0].id;
 
   const plugin = buildFork([
     { type: resolveType('spin'), id: 9500, data: Buffer.from(realSpin.data()) },   // new sprite → graphics
@@ -269,7 +273,8 @@ function checkPluginAssets() {
     const t = routed[bucket].find(x => x.typeName === typeName);
     return !!t && t.resources.some(r => r.id === id);
   };
-  const titlePict = routed.titles.find(x => x.typeName === 'PICT').resources.find(r => r.id === titlePictId);
+  const routedTitlePict = routed.titles.find(x => x.typeName === 'PICT');
+  const titlePict = routedTitlePict && routedTitlePict.resources.find(r => r.id === titlePictId);
 
   let pass = 0, fail = 0;
   const ok = (n, c) => { c ? pass++ : (fail++, console.log('  ✗ ' + n)); };
@@ -277,7 +282,7 @@ function checkPluginAssets() {
   ok('new plugin PICT → graphics', inBucket('graphics', 'PICT', 9600));
   ok('new plugin PICT not in titles', !inBucket('titles', 'PICT', 9600));
   ok('title-override PICT → titles', inBucket('titles', 'PICT', titlePictId));
-  ok('title-override replaced the bytes', Buffer.from(titlePict.data()).equals(Buffer.from([3, 4])));
+  ok('title-override replaced the bytes', !!titlePict && Buffer.from(titlePict.data()).equals(Buffer.from([3, 4])));
   ok('plugin snd → sounds', inBucket('sounds', 'snd ', 9700));
   // the plugin's spïn 9500 reaches the sprite manifest (so a new ship gets a frame grid)
   const m = buildManifest(gfx, JSON.parse(fs.readFileSync(path.join(ROOT, 'schemas', 'spin.json'), 'utf8')), [plugin]);
