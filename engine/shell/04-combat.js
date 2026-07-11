@@ -1,7 +1,8 @@
 import { S, outfits, params, persGrudge, reputation, ships, showMsg, spinOfShip, systs } from './01-state.js';
 import { chargeEscortUpkeep, fightersOut, launchFighter, recallFighters, spawnEscorts, systemGovt } from './02-spawning.js';
 import { attenuate, masterVol, playSnd, sndEl, stopSnd } from './03-sound.js';
-import { PF, checkExpiredMissions, govtAllies, govts, onMissionShipDisabled } from './08-missions.js';
+import { checkExpiredMissions, govtAllies, govts, onMissionShipDisabled } from './08-missions.js';
+import { PF } from './15-pers.js';
 import { legalOf } from './13-legal.js';
 import { loadSystem } from './09-step.js';
 

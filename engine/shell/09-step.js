@@ -4,7 +4,8 @@ import { attenuate, playSnd, stopAllLoops } from './03-sound.js';
 import { abortJump, completeJump, fire, hitShip, mapBearingTo, nearestSpobInfo, player, shipHalf, spawnExplosion } from './04-combat.js';
 import { keys, touchCtl } from './05-input.js';
 import { hailOpen, onShipDestroyed } from './06-interaction.js';
-import { maybeSpawnMissionShips, maybeSpawnPers, misnName, misns, onMissionEscortArrived, spobById } from './08-missions.js';
+import { maybeSpawnMissionShips, misnName, misns, onMissionEscortArrived, spobById } from './08-missions.js';
+import { maybeSpawnPers } from './15-pers.js';
 import { introUp } from './11-title.js';
 
 /*
