@@ -118,9 +118,10 @@ long as they use the record types and fields the engine already implements.
    in the browser. A basic add-plugin file picker + list is wired in the loader.
    Tests in `verify.js`: `plugin-assets: 7/7` routing + manifest, and the
    no-plugin build is still byte-identical.
-3. **Loader UX** — drag-to-reorder plugin list (currently add-order), per-plugin
-   remove (done) + toggle, and a clearer summary of what each plugin
-   overrides/adds and which of its types are unsupported.
+3. **Loader UX** — ✅ **done.** Drag-to-reorder plugin list (HTML5 DnD; order =
+   load order), per-plugin enable/disable checkbox + remove, and a per-row
+   summary computed against the loaded base ("shïp 1 changed, 2 new · PICT 3
+   new · crön 1 new — not supported yet"). Only enabled plug-ins are built.
 4. **Polish** — larger real-plugin testing, `chär` starting-scenario support if
    we want new-start plugins, and a note in loader/README. *(as needed)*
 

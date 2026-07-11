@@ -47,8 +47,13 @@
     border: 1px solid #1c2740; border-radius: 8px; padding: 7px 12px; margin-bottom: 6px; }
   #pluginList .idx { color: #6f86a6; font: 12px ui-monospace, monospace; min-width: 1.4em; }
   #pluginList .pname { color: #cfe3ff; }
-  #pluginList .drop { color: #8aa0bf; font-size: 12px; margin-left: auto; }
+  #pluginList .drop { color: #8aa0bf; font-size: 12px; margin-left: auto; text-align: right; }
   #pluginList button { background: none; border: 0; color: #ff6b6b; cursor: pointer; font-size: 16px; padding: 0 4px; }
+  #pluginList .grip { color: #4a5c78; cursor: grab; user-select: none; }
+  #pluginList input[type=checkbox] { accent-color: #2f9c57; cursor: pointer; }
+  #pluginList li.dragging { opacity: .5; }
+  #pluginList li.off { opacity: .5; }
+  #pluginList li.off .pname { text-decoration: line-through; }
 </style>
 </head>
 <body>
@@ -136,8 +141,14 @@ fileInput.onchange = e => { if (e.target.files[0]) load(e.target.files[0]); };
 drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) load(f); });
 
 /* ---- plug-ins (optional): each is a resource fork whose records override/add
-   by (type, ID), applied top to bottom; graphics/sounds fold into the build ---- */
-window.__plugins = [];
+   by (type, ID), applied top to bottom (drag to reorder); graphics/sounds fold
+   into the build. Disabled plug-ins stay in the list but aren't applied. ---- */
+window.__plugins = [];   // [{ name, fork, enabled }]
+// Resource types the engine models (schema record types + graphics/sound/strings);
+// anything else in a plug-in is flagged "not supported yet".
+const SUPPORTED_TYPES = new Set(['dësc', 'dsïg', 'düde', 'flët', 'gövt', 'jünk', 'mïsn',
+  'nëbu', 'öops', 'oütf', 'përs', 'shïp', 'spïn', 'spït', 'spöb', 'sÿst', 'wëap',
+  'PICT', 'snd ', 'STR#']);
 const pluginFile = $('#pluginFile');
 $('#addPlugin').onclick = () => pluginFile.click();
 pluginFile.onchange = e => { for (const f of e.target.files) addPlugin(f); pluginFile.value = ''; };
@@ -154,31 +165,73 @@ async function addPlugin(file) {
       fork = new Uint8Array(EVRSRC.unwrapFork(Buffer.from(bytes)).fork);   // MacBinary/AppleDouble/raw
     }
     EVRSRC.parseFork(Buffer.from(fork));   // validate it's a readable resource fork
-    window.__plugins.push({ name: file.name, fork });
+    window.__plugins.push({ name: file.name, fork, enabled: true });
     renderPlugins();
   } catch (err) { log('Plug-in "' + file.name + '": ' + err.message, 'err'); }
 }
 
+let dragFrom = null;
 function renderPlugins() {
   const ul = $('#pluginList'); ul.innerHTML = '';
   window.__plugins.forEach((p, i) => {
     const li = document.createElement('li');
+    li.draggable = true;
+    li.ondragstart = e => { dragFrom = i; li.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; };
+    li.ondragend = () => { dragFrom = null; li.classList.remove('dragging'); };
+    li.ondragover = e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+    li.ondrop = e => { e.preventDefault(); reorderPlugin(dragFrom, i); };
+
+    const grip = document.createElement('span'); grip.className = 'grip'; grip.textContent = '⠿'; grip.title = 'Drag to reorder';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = p.enabled;
+    cb.title = 'Apply this plug-in'; cb.onchange = () => { p.enabled = cb.checked; li.classList.toggle('off', !cb.checked); };
     const idx = document.createElement('span'); idx.className = 'idx'; idx.textContent = (i + 1) + '.';
     const name = document.createElement('span'); name.className = 'pname'; name.textContent = p.name;   // textContent: file name is untrusted
-    const drop = document.createElement('span'); drop.className = 'drop'; drop.textContent = summarizePlugin(p.fork);
+    const sum = document.createElement('span'); sum.className = 'drop'; sum.textContent = pluginSummary(p.fork);
     const rm = document.createElement('button'); rm.title = 'Remove'; rm.textContent = '×';
     rm.onclick = () => { window.__plugins.splice(i, 1); renderPlugins(); };
-    li.append(idx, name, drop, rm); ul.append(li);
+
+    if (!p.enabled) li.classList.add('off');
+    li.append(grip, cb, idx, name, sum, rm); ul.append(li);
   });
 }
 
-// A short "what does this plug-in touch" summary from its resource types.
-function summarizePlugin(fork) {
-  try {
-    const counts = EVRSRC.parseFork(Buffer.from(fork))
-      .map(t => t.typeName.replace(/[^\x20-\x7e]/g, '') + '×' + t.resources.length);
-    return counts.length ? counts.join(' ') : '(empty)';
-  } catch { return ''; }
+function reorderPlugin(from, to) {
+  if (from == null || from === to) return;
+  const arr = window.__plugins;
+  const [moved] = arr.splice(from, 1);
+  arr.splice(to, 0, moved);
+  renderPlugins();
+}
+
+// Describe what a plug-in changes: per type, how many resources override an
+// existing base ID vs add a new one, flagging types the engine doesn't model.
+function pluginSummary(fork) {
+  const base = window.__baseIndex || {};
+  let types; try { types = EVRSRC.parseFork(Buffer.from(fork)); } catch { return '(unreadable)'; }
+  const parts = [];
+  for (const t of types) {
+    if (t.typeName === 'vers') continue;                 // version metadata
+    const baseIds = base[t.typeName];
+    let changed = 0, added = 0;
+    for (const r of t.resources) (baseIds && baseIds.has(r.id)) ? changed++ : added++;
+    const bits = [];
+    if (changed) bits.push(changed + ' changed');
+    if (added) bits.push(added + ' new');
+    let s = t.typeName + ' ' + bits.join(', ');
+    if (!SUPPORTED_TYPES.has(t.typeName)) s += ' — not supported yet';
+    parts.push(s);
+  }
+  return parts.length ? parts.join(' · ') : '(no resources)';
+}
+
+// Index of base resource IDs per type, for the override-vs-add summary above.
+function buildBaseIndex(forks) {
+  const idx = {};
+  for (const key of Object.keys(forks)) {
+    let types; try { types = EVRSRC.parseFork(Buffer.from(forks[key])); } catch { continue; }
+    for (const t of types) { (idx[t.typeName] || (idx[t.typeName] = new Set())); for (const r of t.resources) idx[t.typeName].add(r.id); }
+  }
+  return idx;
 }
 
 const T = (types, name) => EVRSRC.findType(types, name);
@@ -284,6 +337,8 @@ async function load(file) {
     }
 
     window.__forks = forks; window.__spinSchema = spinSchema;   // for launch
+    window.__baseIndex = buildBaseIndex(forks);                 // for plug-in summaries
+    renderPlugins();                                            // refresh summaries against this base
     $('#launch').onclick = launchGame;
     $('#gallery').style.display = 'block';
     log('Done — your game data is ready, all decoded locally. Press ▶ to play.', 'ok');
@@ -318,7 +373,8 @@ async function load(file) {
 async function launchGame() {
   const btn = $('#launch'); btn.disabled = true; $('#launchNote').textContent = '';
   try {
-    const url = await VELAUNCH.buildAndCache(window.__forks, window.__spinSchema, window.__plugins.map(p => p.fork), (m, cls) => log(m, cls));
+    const activePlugins = window.__plugins.filter(p => p.enabled).map(p => p.fork);
+    const url = await VELAUNCH.buildAndCache(window.__forks, window.__spinSchema, activePlugins, (m, cls) => log(m, cls));
     log('Launching — enjoy!', 'ok');
     setTimeout(() => { location.href = url; }, 200);
   } catch (e) { log('Launch failed: ' + e.message, 'err'); console.error(e); btn.disabled = false; }
