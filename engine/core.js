@@ -5,9 +5,8 @@
  * An ES module: esbuild bundles it (npm run build:engine) into
  * engine/core.bundle.js — an IIFE that exposes the exports as the browser global
  * `EV`, which the flight shell reads and evexport.js / the loader inject at build
- * time. (The repo defaults to CommonJS, so Node can't `require` this directly;
- * for a Node-side engine test import it via a `.mjs` shim or
- * `node --input-type=module`.)
+ * time. Node can `import` it directly (engine/package.json marks engine/*.js as
+ * ES modules) — see test/core.test.mjs, run by `npm test`.
  */
 
 const FPS = 30;

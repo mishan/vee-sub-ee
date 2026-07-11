@@ -70,6 +70,13 @@ module.exports = [
     rules: correctness,
   },
 
+  // Node test suite (node:test / node:assert, ES modules)
+  {
+    files: ['test/**/*.mjs'],
+    languageOptions: { ecmaVersion: 'latest', sourceType: 'module', globals: { ...globals.node } },
+    rules: correctness,
+  },
+
   // In-browser loader entry + service worker
   {
     files: ['loader/launch.js', 'loader/sw.js'],

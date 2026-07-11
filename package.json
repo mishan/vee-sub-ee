@@ -12,6 +12,7 @@
   },
   "scripts": {
     "build:engine": "esbuild engine/core.js --bundle --format=iife --global-name=EV --banner:js='/* GENERATED from engine/core.js by esbuild — do not edit. Rebuild: make engine/core.bundle.js */' --footer:js='globalThis.EV=EV;' --outfile=engine/core.bundle.js",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "node --test"
   }
 }

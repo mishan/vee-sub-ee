@@ -1,0 +1,4 @@
+{
+  "//": "Marks engine/*.js as ES modules for Node (core.js uses export syntax), so `node --test` and `import` can load the flight core directly. esbuild and the browser are unaffected (they detect ESM by syntax).",
+  "type": "module"
+}
