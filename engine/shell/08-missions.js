@@ -108,9 +108,9 @@ export function missionAvailable(m, p, loc) {
   if (m.AvailBitClr >= 0 && missionLog.bit(m.AvailBitClr)) return false;
   // combat rating gate: -1 ignore, else kills must be at least AvailRating
   if (m.AvailRating >= 0 && legal.kills < m.AvailRating) return false;
-  // legal-record gate (record with this spöb's govt): 0 ignore, positive =
-  // at least this good, negative = at least this criminal, -32000 = must
-  // have dominated this spöb.
+  // legal-record gate (AvailRecord is "record in THIS system"): 0 ignore,
+  // positive = at least this good, negative = at least this criminal, -32000 =
+  // must have dominated this spöb.
   if (m.AvailRecord === -32000) {
     if (!dominated.has(p.id)) return false;
   } else if (m.AvailRecord > 0) {

@@ -106,7 +106,10 @@ export function applyGovtDelta(govt, delta, rng = Math.random) {
   bump(here, relation(govtOf(here), govt) * delta); // current system: full hit
   const scatter = Math.round(delta * SPREAD_FRAC);
   if (!scatter) return;
-  for (const id of Object.keys(DATA.types.syst)) {
+  // for..in over the syst table (no fresh key array) — this runs on every
+  // kill/disable/mission event, so keep it allocation-free.
+  for (const id in DATA.types.syst) {
+    if (!Object.hasOwn(DATA.types.syst, id)) continue;
     const sys = +id;
     if (sys === here) continue;
     const rel = relation(govtOf(sys), govt);
@@ -116,7 +119,8 @@ export function applyGovtDelta(govt, delta, rng = Math.random) {
 // "Clean legal record with govt G": clear a criminal (negative) record in every
 // system that govt controls.
 export function pardonGovt(govt) {
-  for (const id of Object.keys(DATA.types.syst)) {
+  for (const id in DATA.types.syst) {
+    if (!Object.hasOwn(DATA.types.syst, id)) continue;
     const systId = +id;
     if (govtOf(systId) === govt) legal.pardon(systId);
   }
