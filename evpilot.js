@@ -54,14 +54,19 @@ function simpleCrypt(buf, key = KEY_CLASSIC) {
  *
  *   0x0000  i16   docked spöb  (stored −128; gives current location + system)
  *   0x0002  i16   ship type    (stored −128)
+ *   0x0004  i16[6] cargo: tons held per commodity, in the standard EV order
+ *                 (Food, Industrial, Medical, Luxury Goods, Metal, Equipment)
  *   0x0014  i16   date: month
  *   0x0016  i16   date: day
  *   0x0018  i16   date: year
- *   0x251a  i16[] escorts: 72 slots, −1 = empty, else ship type (stored −128)
- *   0x25ac  i16   kills (crew destroyed) → combat rating (bible App. I / STR#138)
  *   0x08ea  i16[] legal record, 108 slots indexed by system (stored −128); the
  *                 per-system standing that drives the legal-status label
  *   0x11ba  u32   credits
+ *   0x124e  misn[] active-mission slots (see MISN): 382 bytes each; slot 0's
+ *                 destSpöb is at 0x124e. Inactive slots keep stale data, so read
+ *                 the +0x36 active flag, not slot occupancy.
+ *   0x251a  i16[] escorts: 72 slots, −1 = empty, else ship type (stored −128)
+ *   0x25ac  i16   kills (crew destroyed) → combat rating (bible App. I / STR#138)
  *
  * The legal record is stored PER SYSTEM (108 int16), not per government — two
  * systems under the same govt can show different standings (e.g. Rebel is a
@@ -87,6 +92,14 @@ const MP128 = {
 // Variable-length arrays (int16, decoded separately from the scalar fields).
 const LEGAL = { off: 0x08ea, count: 108 };   // record per system, index = systId−128
 const ESCORTS = { off: 0x251a, count: 72 };   // −1 empty, else ship type stored −128
+const CARGO = { off: 0x0004, count: 6 };      // tons per commodity (order below)
+const COMMODITIES = ['Food', 'Industrial', 'Medical', 'Luxury Goods', 'Metal', 'Equipment'];
+// Active-mission slots. `off` is slot 0's destSpöb; slots are `size` apart. A
+// slot is live only when its `active` byte is 1 (inactive slots keep stale
+// data). `reward`/`active`/`desc` are byte offsets from the slot's destSpöb.
+// The rest of the 382-byte misn struct (cargo, time limit, misn id, waypoint
+// route) is not mapped yet.
+const MISN = { off: 0x124e, size: 0x17e, max: 6, dest: 0, reward: 0x26, active: 0x36, desc: 0x7e };
 
 /* Decode the confirmed summary fields of a pilot file (resource fork). */
 function readPilotSummary(file) {
@@ -112,6 +125,24 @@ function readPilotSummary(file) {
     const v = b.readInt16BE(ESCORTS.off + 2 * i);
     if (v >= 0) escorts.push(v + 128);
   }
+  // cargo: tons per commodity (skip empty holds)
+  const cargo = {};
+  for (let i = 0; i < CARGO.count; i++) {
+    const v = b.readInt16BE(CARGO.off + 2 * i);
+    if (v) cargo[COMMODITIES[i]] = v;
+  }
+  // active missions: the live slots, with destination and reward
+  const missions = [];
+  for (let i = 0; i < MISN.max; i++) {
+    const slot = MISN.off + i * MISN.size;
+    if (b[slot + MISN.active] !== 1) continue; // inactive slots hold stale data
+    const dlen = b[slot + MISN.desc];
+    missions.push({
+      destSpob: b.readInt16BE(slot + MISN.dest) + 128,
+      reward: b.readInt16BE(slot + MISN.reward),
+      desc: b.slice(slot + MISN.desc + 1, slot + MISN.desc + 1 + dlen).toString('latin1'),
+    });
+  }
   return {
     pilotName: path.basename(file).replace(/^\._/, '').replace(/\.rsrc$/i, ''),
     shipName: r129 ? r129.name : null,
@@ -120,12 +151,24 @@ function readPilotSummary(file) {
     date: { year: g(MP128.year), month: g(MP128.month), day: g(MP128.day) },
     credits: g(MP128.credits),
     kills: g(MP128.kills),
+    cargo,
     escorts,
+    missions,
     legalBySystem,
   };
 }
 
-module.exports = { simpleCrypt, readPilotSummary, MP128, LEGAL, ESCORTS, KEY_CLASSIC, KEY_NOVA };
+module.exports = {
+  simpleCrypt,
+  readPilotSummary,
+  MP128,
+  LEGAL,
+  ESCORTS,
+  CARGO,
+  MISN,
+  KEY_CLASSIC,
+  KEY_NOVA,
+};
 
 /* ------------------------------------------------------------------ */
 /* CLI: node evpilot.js selftest
