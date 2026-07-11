@@ -71,8 +71,8 @@ export function maxWeaponRange(e) {
  * for the ambient population when a system first loads (alertGrace). */
 S.prevHostiles = 0;
 S.alertGrace = 0;
-export function checkHostileAlert() {
-  const n = S.aiShips.filter((s) => s.hostile && s.deathT < 0).length;
+export function checkHostileAlert(aiShips = S.aiShips) {
+  const n = aiShips.filter((s) => s.hostile && s.deathT < 0).length;
   if (S.alertGrace > 0) S.alertGrace--;
   else if (n > S.prevHostiles) playSnd(370, 0.7); // Red Alert
   S.prevHostiles = n;
@@ -103,7 +103,7 @@ export class World {
     // frozen while docked and rebuilt fresh on takeoff.
     if (S.gameOver || hailOpen || introUp() || S.landedAt) return;
     maybeSpawnBountyHunter();
-    checkHostileAlert();
+    checkHostileAlert(this.ships);
     if (!S.landedAt) {
       if (S.jump && this.player.deathT >= 0) abortJump(); // no jumping out of a fireball
       if (S.jump && S.jump.phase === 'engage') {
