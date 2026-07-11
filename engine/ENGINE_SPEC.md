@@ -406,11 +406,14 @@ until there's a title screen.
 The **legal record is per system** (persisted; a system with no stored value
 defaults to its controlling gövt's `InitialRec`), negative = criminal — like
 classic EV, two systems of one government can differ. The status label
-(STR# 134) scales a system's record by *that system's* gövt `CrimeTol`, on the
-bible's Appendix II ladder: evil at |record| ≥ 1·/4·/16·/64·/256·/1024·/4096·
-CrimeTol → Offender…Galactic Scourge; good at ≥ 4·/16·/…·4096·CrimeTol →
-Decent Individual…Honored Leader; else Clean. Independent systems use
-gövt 128. **Combat rating** (STR# 138 / Appendix I) is separate — it comes from
+(STR# 134) scores a system's record ÷ *that system's* gövt `CrimeTol`; the
+bible's Appendix II ladder numbers are the **upper bound** of each tier, so any
+positive score is already off Clean — (0,4) Decent Individual, [4,16) Good Egg,
+[16,64) Upstanding Citizen, [64,256) Role Model, [256,1024) Pillar of Society,
+≥1024 Honored Leader, and the mirror for negatives ((0,1) Offender, [1,4)
+Criminal, … ≥4096 Galactic Scourge). Only a record of exactly 0 is Clean. (The
+bible prints the numbers as if floors, but real pilots show a record of 9 at
+CrimeTol 50 reads "Decent Individual".) Independent systems use gövt 128. **Combat rating** (STR# 138 / Appendix I) is separate — it comes from
 total crew of destroyed ships: 0/1/100/200/400/800/1600/3200/6400/12800/25600 →
 Harmless…Ultimate.
 

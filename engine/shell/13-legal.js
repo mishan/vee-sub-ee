@@ -26,31 +26,39 @@ export function legalOf(systId) {
   const g = govtOf(systId);
   return govts[g] ? govts[g].InitialRec : 0;
 }
-// STR# 134 status label, scaled by the govt's crime tolerance (bible App. II:
-// enough good/evil to equal CrimeTol counts as 1 unit).
-export const EVIL_STEPS = [
-  [4096, 'Galactic Scourge'],
-  [1024, 'Prime Evil'],
-  [256, 'Public Enemy'],
-  [64, 'Fugitive'],
-  [16, 'Felon'],
-  [4, 'Criminal'],
-  [1, 'Offender'],
-];
+// STR# 134 status label (bible App. II). The score is record ÷ that govt's
+// CrimeTol; the ladder numbers are the UPPER bound of each tier, so a score
+// anywhere in (0,4) reads "Decent Individual", [4,16) "Good Egg", and so on —
+// any non-zero record already moves you off Clean. (The Bible lists these as if
+// they were floors, but real pilots show otherwise: Confed record 9 / CrimeTol
+// 50 = 0.18 is a "Decent Individual", Rebel record 365 / 75 = 4.87 a "Good Egg".)
 export const GOOD_STEPS = [
-  [4096, 'Honored Leader'],
-  [1024, 'Pillar of Society'],
-  [256, 'Role Model'],
-  [64, 'Upstanding Citizen'],
-  [16, 'Good Egg'],
   [4, 'Decent Individual'],
+  [16, 'Good Egg'],
+  [64, 'Upstanding Citizen'],
+  [256, 'Role Model'],
+  [1024, 'Pillar of Society'],
+  [4096, 'Honored Leader'],
+];
+export const EVIL_STEPS = [
+  [1, 'Offender'],
+  [4, 'Criminal'],
+  [16, 'Felon'],
+  [64, 'Fugitive'],
+  [256, 'Public Enemy'],
+  [1024, 'Prime Evil'],
+  [4096, 'Galactic Scourge'],
 ];
 export function legalStatus(systId) {
   const rec = govts[govtOf(systId)];
   if (!rec) return 'Clean';
   const v = legalOf(systId) / Math.max(rec.CrimeTol, 1);
-  if (v <= -1) for (const [t, label] of EVIL_STEPS) if (-v >= t) return label;
-  if (v >= 4) for (const [t, label] of GOOD_STEPS) if (v >= t) return label;
+  const tier = (steps, m) => {
+    for (const [t, label] of steps) if (m < t) return label;
+    return steps[steps.length - 1][1]; // off the top of the ladder
+  };
+  if (v > 0) return tier(GOOD_STEPS, v);
+  if (v < 0) return tier(EVIL_STEPS, -v);
   return 'Clean';
 }
 export function isCriminalWith(systId) {
