@@ -64,11 +64,12 @@ zero-dependency toolchain lifts it into plain JSON that the engine consumes:
 The flight rules live once, normatively, in
 [`engine/ENGINE_SPEC.md`](engine/ENGINE_SPEC.md), implemented by the DOM-free
 `engine/core.js`. The browser UI around it — canvas rendering, dialogs, input,
-game state — is the *shell*, split by domain across `engine/shell/*.js`. The
-build concatenates those modules (in `engine/shell/order.json` order) and injects
-them, with `core.js` and the game data, into `flight_template.html`; because they
-share one scope, treat them as a single file split for readability rather than as
-ES modules.
+game state — is the *shell*: real ES modules under `engine/shell/*.js`, split by
+domain, with `main.js` as the entry point. [esbuild](https://esbuild.github.io)
+bundles `core.js` into `engine/core.bundle.js` and the shell into
+`engine/shell.bundle.js`; the build injects both bundles, with the game data,
+into `flight_template.html`. (The bundles are generated and gitignored; a
+release ships them, and the browser loader builds them on demand.)
 
 The **browser loader** in `loader/` is a second, dependency-free
 implementation of that whole pipeline (StuffIt decompression, PICT/`snd `/sprite
@@ -88,9 +89,11 @@ make verify     # check the loader's decoders against the native tools
 make help       # list all targets
 ```
 
-The build is driven by placeholder injection: `evexport.js` slots the game
-database, sprite manifest, `engine/core.js`, and the concatenated
-`engine/shell/*.js` modules into `flight_template.html`.
+The build is driven by placeholder injection: esbuild bundles `engine/core.js`
+and the `engine/shell/*.js` modules (entry `main.js`) into
+`engine/core.bundle.js` and `engine/shell.bundle.js`, then `evexport.js` slots
+those two bundles, the game database, and the sprite manifest into
+`flight_template.html`.
 Dev/test hooks are URL params on `flight.html` — e.g. `?syst=`, `?ship=`,
 `?x=&y=&heading=`, `?map=1`, `?land=1` — handy for jumping straight into a
 scenario.
