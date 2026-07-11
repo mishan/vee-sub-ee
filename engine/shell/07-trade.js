@@ -50,7 +50,7 @@ function closeService() {
 function rerenderService() { if (serviceOpen) SERVICE_RENDER[serviceOpen](); }
 const walletHtml = () => {
   const fm = effectiveShip().freeMass;
-  return `<div class="wallet"><b>${credits.toLocaleString('en-US')}</b> credits ·
+  return html`<div class="wallet"><b>${credits.toLocaleString('en-US')}</b> credits ·
     cargo ${cargoUsed()}/${holds} tons · ${fm} tons outfit space</div>
     <div style="margin-top:12px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
 };
@@ -63,27 +63,24 @@ function techAvailable(itemTech, p) {
 
 SERVICE_RENDER.exchange = function () {
   const p = landedAt, m = p.$sem || {};
-  let html = `<h2>Commodity Exchange</h2>
-    <div class="meta">${escapeHtml(p.name)} · prices per ton</div>
-    <table><tr><th>Commodity</th><th style="text-align:right">Price</th>
-    <th style="text-align:right">Held</th><th></th></tr>`;
+  let rows = '';
   for (let i = 0; i < 6; i++) {
     const price = priceAt(p, i);
     const held = cargo[COMMODITIES[i]];
     if (price == null && !held) continue;
     const lvl = m.prices[COMMODITIES[i]];
-    html += `<tr><td>${escapeHtml(cargoNames[i])}${lvl ? ` <span class="meta" style="margin:0">(${lvl})</span>` : ''}</td>
+    rows += html`<tr><td>${cargoNames[i]}${lvl ? html` <span class="meta" style="margin:0">(${lvl})</span>` : ''}</td>
       <td class="num">${price != null ? price + ' cr' : '—'}</td>
-      <td class="num">${held}</td><td style="text-align:right">` +
-      (price != null ? `
+      <td class="num">${held}</td><td style="text-align:right">${price != null ? html`
         <button onclick="trade(${i},-10)" ${held < 1 ? 'disabled' : ''}>-10</button>
         <button onclick="trade(${i},-1)"  ${held < 1 ? 'disabled' : ''}>-1</button>
         <button onclick="trade(${i},1)"   ${cargoUsed() >= holds || credits < price ? 'disabled' : ''}>+1</button>
-        <button onclick="trade(${i},10)"  ${cargoUsed() >= holds || credits < price ? 'disabled' : ''}>+10</button>`
-      : '') + `</td></tr>`;
+        <button onclick="trade(${i},10)"  ${cargoUsed() >= holds || credits < price ? 'disabled' : ''}>+10</button>` : ''}</td></tr>`;
   }
-  html += `</table>` + walletHtml();
-  document.getElementById('serviceCard').innerHTML = html;
+  document.getElementById('serviceCard').innerHTML = html`<h2>Commodity Exchange</h2>
+    <div class="meta">${p.name} · prices per ton</div>
+    <table><tr><th>Commodity</th><th style="text-align:right">Price</th>
+    <th style="text-align:right">Held</th><th></th></tr>${raw(rows)}</table>${walletHtml()}`;
 };
 
 /* ---- outfitter ---- */

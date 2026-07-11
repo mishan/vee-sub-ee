@@ -705,15 +705,15 @@ let selOutfitId = null, selShipId = null;
  * slots (the grid compacts; each thumbnail is still sliced from the
  * item's fixed cell in the original menu sheet). */
 function shopGrid(sheet, items, selId, clickFn) {
-  let html = `<div class="shopgrid">`;
+  let out = '';
   for (const { id } of items) {
     const i = id - 128;
-    html += `<button class="cell${id === selId ? ' sel' : ''}"
+    out += html`<button class="cell${id === selId ? ' sel' : ''}"
       style="background-image:url(evassets/graphics/${sheet});
              background-position:-${(i % 8) * 32}px -${Math.floor(i / 8) * 32}px"
       onclick="${clickFn}(${id})"></button>`;
   }
-  return html + `</div>`;
+  return html`<div class="shopgrid">${raw(out)}</div>`;
 }
 
 /* Would this spob's shop have anything to show? Gates both the dialog
@@ -744,9 +744,9 @@ SERVICE_RENDER.outfitter = function () {
     const canBuy = techAvailable(o.TechLevel, p) &&
       credits >= o.Cost && (o.Max <= 0 || own < o.Max) &&
       (o.Mass <= 0 || s.freeMass >= o.Mass);
-    pane = `<div class="shoppane">
+    pane = html`<div class="shoppane">
       <img src="evassets/graphics/PICT_${6000 + (selOutfitId - 128)}.png" onerror="this.style.visibility='hidden'">
-      <h3>${escapeHtml(outfitName(selOutfitId))}</h3>
+      <h3>${outfitName(selOutfitId)}</h3>
       <div class="row">${o.$sem ? o.$sem.modType : ''}${o.Max > 0 ? ` · max ${o.Max}` : ''}</div>
       <div class="row">Cost: <b>${o.Cost.toLocaleString('en-US')}</b> cr</div>
       <div class="row">Mass: <b>${o.Mass}</b> tons</div>
@@ -757,9 +757,8 @@ SERVICE_RENDER.outfitter = function () {
       </div></div>`;
   }
   document.getElementById('serviceCard').innerHTML =
-    `<h2>Outfitter</h2><div class="meta">${escapeHtml(p.name)} · tech ${p.TechLevel}</div>
-     <div class="shop">${shopGrid('PICT_6100.png', items, selOutfitId, 'selectOutfit')}${pane}</div>` +
-    walletHtml();
+    html`<h2>Outfitter</h2><div class="meta">${p.name} · tech ${p.TechLevel}</div>
+     <div class="shop">${shopGrid('PICT_6100.png', items, selOutfitId, 'selectOutfit')}${pane}</div>${walletHtml()}`;
 };
 
 /* ---- shipyard ---- */
@@ -805,11 +804,10 @@ SERVICE_RENDER.shipyard = function () {
     const r = ships[selShipId];
     const own = selShipId === playerShipId;
     const net = r.Cost - refund;
-    pane = `<div class="shoppane">
+    pane = html`<div class="shoppane">
       <img src="evassets/graphics/PICT_${5000 + (selShipId - 128)}.png" onerror="this.style.visibility='hidden'">
-      <h3>${escapeHtml(shipyardName(selShipId))}${own ? ' <span class="meta" style="margin:0">(current)</span>' : ''}</h3>
-      <div class="row">Cost: <b>${r.Cost.toLocaleString('en-US')}</b> cr` +
-      (own ? '' : ` · net <b>${net.toLocaleString('en-US')}</b>`) + `</div>
+      <h3>${shipyardName(selShipId)}${own ? html` <span class="meta" style="margin:0">(current)</span>` : ''}</h3>
+      <div class="row">Cost: <b>${r.Cost.toLocaleString('en-US')}</b> cr${own ? '' : html` · net <b>${net.toLocaleString('en-US')}</b>`}</div>
       <div class="row">Shield <b>${r.Shield}</b> · Armor <b>${r.Armor}</b></div>
       <div class="row">Speed <b>${r.Speed}</b> · Accel <b>${r.Accel}</b> · Turn <b>${r.Maneuver}</b></div>
       <div class="row">Cargo <b>${r.Holds}</b>t · Outfit space <b>${r.FreeMass}</b>t</div>
@@ -820,10 +818,9 @@ SERVICE_RENDER.shipyard = function () {
       </div></div>`;
   }
   document.getElementById('serviceCard').innerHTML =
-    `<h2>Shipyard</h2><div class="meta">${escapeHtml(p.name)} · tech ${p.TechLevel} ·
+    html`<h2>Shipyard</h2><div class="meta">${p.name} · tech ${p.TechLevel} ·
        trade-in: 25% of hull + upgrades (${refund.toLocaleString('en-US')} cr)</div>
-     <div class="shop">${shopGrid('PICT_5100.png', items, selShipId, 'selectShip')}${pane}</div>` +
-    walletHtml();
+     <div class="shop">${shopGrid('PICT_5100.png', items, selShipId, 'selectShip')}${pane}</div>${walletHtml()}`;
 };
 
 /* ---- mission bar / computer dialog ---- */
@@ -841,18 +838,18 @@ function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
 
   let list = '<div style="flex:1;min-width:210px;max-height:340px;overflow-y:auto">';
   if (active.length) {
-    list += `<div class="meta" style="margin:0 0 4px">Active missions</div>`;
+    list += html`<div class="meta" style="margin:0 0 4px">Active missions</div>`;
     for (const a of active) {
-      const days = a.timeLimit > 0 ? ` <span class="sub">(${Math.max(0, a.timeLimit - (gameDay - a.accepted))}d left)</span>` : '';
-      list += `<div class="row" style="color:#98c379">${escapeHtml(misnName(misns[a.id], a))}${days}</div>`;
+      const days = a.timeLimit > 0 ? html` <span class="sub">(${Math.max(0, a.timeLimit - (gameDay - a.accepted))}d left)</span>` : '';
+      list += html`<div class="row" style="color:#98c379">${misnName(misns[a.id], a)}${days}</div>`;
     }
-    list += `<hr style="border-color:#26304a;margin:8px 0">`;
+    list += html`<hr style="border-color:#26304a;margin:8px 0">`;
   }
-  list += `<div class="meta" style="margin:0 0 4px">Available here (${offers.length})</div>`;
-  if (!offers.length) list += `<div class="sub">Nothing right now.</div>`;
+  list += html`<div class="meta" style="margin:0 0 4px">Available here (${offers.length})</div>`;
+  if (!offers.length) list += html`<div class="sub">Nothing right now.</div>`;
   for (const o of offers)
-    list += `<div class="row" style="cursor:pointer;color:${o.id === selMisnId ? '#ffd479' : '#cfd6e4'}"
-      onclick="selMisnId=${o.id};rerenderService()">${escapeHtml(misnName(o, getOffer(o.id, p)))}</div>`;
+    list += html`<div class="row" style="cursor:pointer;color:${o.id === selMisnId ? '#ffd479' : '#cfd6e4'}"
+      onclick="selMisnId=${o.id};rerenderService()">${misnName(o, getOffer(o.id, p))}</div>`;
   list += '</div>';
 
   let pane = '<div style="flex:1.3;min-width:240px">';
@@ -869,27 +866,27 @@ function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
       ? `${stelName(destId)}${systOfSpob(spobById(destId)) ? ' (' + systOfSpob(spobById(destId)).name + ')' : ''}`
         + (destId === p.id ? ' — return here' : '')
       : 'no fixed destination';
-    pane += `<h3>${escapeHtml(misnName(sel, offer))}</h3>
-      <div class="desc" style="max-height:150px;overflow-y:auto">${escapeHtml(brief)}</div>
-      <div class="row">Destination: <b>${escapeHtml(destShown)}</b></div>` +
-      (offer.cargoName && offer.cargoQty ? `<div class="row">Cargo: <b>${offer.cargoQty}t ${escapeHtml(offer.cargoName)}</b></div>` : '') +
-      (sel.ShipCount > 0 && goalTxt ? `<div class="row">Objective: <b>${goalTxt}</b> (${sel.ShipCount})</div>` : '') +
-      (offer.deadline != null ? `<div class="row">Deliver by: <b>${formatDate(offer.deadline)}</b> <span class="sub">(${sel.TimeLimit} days)</span></div>` : '') +
-      `<div class="row">Pay: <b>${pay}</b></div>
+    pane += html`<h3>${misnName(sel, offer)}</h3>
+      <div class="desc" style="max-height:150px;overflow-y:auto">${brief}</div>
+      <div class="row">Destination: <b>${destShown}</b></div>
+      ${offer.cargoName && offer.cargoQty ? html`<div class="row">Cargo: <b>${offer.cargoQty}t ${offer.cargoName}</b></div>` : ''}
+      ${sel.ShipCount > 0 && goalTxt ? html`<div class="row">Objective: <b>${goalTxt}</b> (${sel.ShipCount})</div>` : ''}
+      ${offer.deadline != null ? html`<div class="row">Deliver by: <b>${formatDate(offer.deadline)}</b> <span class="sub">(${sel.TimeLimit} days)</span></div>` : ''}
+      <div class="row">Pay: <b>${pay}</b></div>
       <div style="margin-top:10px">
         <button class="svc" onclick="doAcceptMission(${selMisnId})">Accept</button>
       </div>`;
   } else if (active.length) {
-    pane += `<div class="sub">Select an available mission, or check your active missions (press I in flight for the briefing).</div>`;
+    pane += html`<div class="sub">Select an available mission, or check your active missions (press I in flight for the briefing).</div>`;
   } else {
-    pane += `<div class="sub">No missions are available here right now. Try the ${loc === 0 ? 'bar' : 'mission computer'}, or another world.</div>`;
+    pane += html`<div class="sub">No missions are available here right now. Try the ${loc === 0 ? 'bar' : 'mission computer'}, or another world.</div>`;
   }
   pane += '</div>';
 
   document.getElementById('serviceCard').innerHTML =
-    `<h2>${loc === 0 ? 'Mission Computer' : 'Spaceport Bar'}</h2>
-     <div class="meta">${escapeHtml(p.name)}</div>${topHtml}
-     <div class="shop">${list}${pane}</div>
+    html`<h2>${loc === 0 ? 'Mission Computer' : 'Spaceport Bar'}</h2>
+     <div class="meta">${p.name}</div>${topHtml}
+     <div class="shop">${raw(list)}${raw(pane)}</div>
      <div class="wallet">${credits.toLocaleString('en-US')} credits · cargo ${cargoUsed()}/${holds} tons · day ${gameDay}</div>
      <div style="margin-top:10px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
 }
@@ -898,8 +895,8 @@ function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
  * toggled by a pair of tabs (spec: "Escorts for hire"). */
 let barTab = 'missions';
 function barTabs() {
-  const t = k => `<button class="svc" onclick="barTab='${k}';rerenderService()"${barTab === k ? ' disabled' : ''}>`;
-  return `<div style="margin:6px 0 2px">${t('missions')}Missions</button> ${t('hire')}Hire Escorts</button></div>`;
+  const t = k => html`<button class="svc" onclick="barTab='${k}';rerenderService()"${barTab === k ? ' disabled' : ''}>`;
+  return html`<div style="margin:6px 0 2px">${t('missions')}Missions</button> ${t('hire')}Hire Escorts</button></div>`;
 }
 SERVICE_RENDER.bar = () => barTab === 'hire' ? renderHireBoard() : renderMissionBoard(1, barTabs());
 SERVICE_RENDER.missioncomputer = () => renderMissionBoard(0);
@@ -910,14 +907,14 @@ function renderHireBoard() {
 
   let fleet = `<div style="flex:1;min-width:210px;max-height:340px;overflow-y:auto">
     <div class="meta" style="margin:0 0 4px">Your fleet (${escorts.length}/${MAX_ESCORTS})</div>`;
-  if (!escorts.length) fleet += `<div class="sub">You have no escorts yet.</div>`;
+  if (!escorts.length) fleet += html`<div class="sub">You have no escorts yet.</div>`;
   for (const e of escorts) {
     const r = ships[e.shipId], kind = e.upkeep ? `~${e.upkeep.toLocaleString('en-US')} cr/jump` : 'captured';
-    fleet += `<div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-      <span>${escapeHtml(e.name)} <span class="sub">${r ? escapeHtml(r.name) : ''} · ${kind}</span></span>
+    fleet += html`<div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <span>${e.name} <span class="sub">${r ? r.name : ''} · ${kind}</span></span>
       <button class="svc" style="padding:2px 8px" onclick="dismissEscort(${e.id})">Dismiss</button></div>`;
   }
-  if (totalUpkeep) fleet += `<div class="row sub" style="margin-top:6px">Payroll: ~${totalUpkeep.toLocaleString('en-US')} cr / jump</div>`;
+  if (totalUpkeep) fleet += html`<div class="row sub" style="margin-top:6px">Payroll: ~${totalUpkeep.toLocaleString('en-US')} cr / jump</div>`;
   fleet += '</div>';
 
   let hire = `<div style="flex:1.3;min-width:240px;max-height:340px;overflow-y:auto">
@@ -927,20 +924,20 @@ function renderHireBoard() {
     const fee = hireFee(r), up = upkeepOf(r);
     const full = escorts.length >= MAX_ESCORTS, afford = credits >= fee;
     const desc = shipClassDesc(id);
-    hire += `<div class="row" style="border-bottom:1px solid #26304a;padding:6px 0">
+    hire += html`<div class="row" style="border-bottom:1px solid #26304a;padding:6px 0">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-        <b>${escapeHtml(r.name)}</b>
+        <b>${r.name}</b>
         <button class="svc" style="padding:2px 10px" onclick="hireEscort(${id})"${full || !afford ? ' disabled' : ''}>Hire</button>
       </div>
       <div class="sub">Fee ~${fee.toLocaleString('en-US')} cr · ~${up.toLocaleString('en-US')} cr/jump${
         full ? ' · fleet full' : !afford ? ' · can’t afford' : ''}</div>${
-        desc ? `<div class="sub" style="margin-top:3px;max-height:64px;overflow-y:auto">${escapeHtml(desc)}</div>` : ''}</div>`;
+        desc ? html`<div class="sub" style="margin-top:3px;max-height:64px;overflow-y:auto">${desc}</div>` : ''}</div>`;
   }
   hire += '</div>';
 
   document.getElementById('serviceCard').innerHTML =
-    `<h2>Spaceport Bar</h2><div class="meta">${escapeHtml(p.name)}</div>${barTabs()}
-     <div class="shop">${fleet}${hire}</div>
+    html`<h2>Spaceport Bar</h2><div class="meta">${p.name}</div>${barTabs()}
+     <div class="shop">${raw(fleet)}${raw(hire)}</div>
      <div class="wallet">${credits.toLocaleString('en-US')} credits · payroll ${totalUpkeep.toLocaleString('en-US')} cr/jump</div>
      <div style="margin-top:10px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
 }
@@ -973,30 +970,27 @@ function renderPlanetScreen() {
   // is missing from the data (e.g. Darkstar's 11001 in 1.0.5), fall back
   // to the standard, then give up.
   const scape = p.CustPicID >= 0 ? p.CustPicID : 10000 + p.Type;
-  let html = `<img class="scape" src="evassets/titles/PICT_${scape}.png"
+  let out = '' + html`<img class="scape" src="evassets/titles/PICT_${scape}.png"
     data-fb="${10000 + p.Type}" onerror="
       if (this.dataset.fb && !this.src.endsWith('PICT_' + this.dataset.fb + '.png'))
         this.src = 'evassets/titles/PICT_' + this.dataset.fb + '.png';
       else this.remove()">`;
-  html += `<h2>${escapeHtml(p.name)}</h2>
-    <div class="meta">${escapeHtml((m.stellarType || '').replace(/[()]/g, ''))}` +
-    `${m.govt ? ' · ' + escapeHtml(m.govt) : ''}${svc ? ' · ' + svc : ''} · fuel topped up</div>
-    <div class="desc">${desc && desc.Description ? escapeHtml(desc.Description) : ''}</div>`;
+  out += html`<h2>${p.name}</h2>
+    <div class="meta">${(m.stellarType || '').replace(/[()]/g, '')}${m.govt ? ' · ' + m.govt : ''}${svc ? ' · ' + svc : ''} · fuel topped up</div>
+    <div class="desc">${desc && desc.Description ? desc.Description : ''}</div>`;
   // mission events from this landing (deliveries, completions) shown up top
   for (const note of missionNotes)
-    html += `<div class="desc" style="color:#98c379;border-left:2px solid #98c379;padding-left:8px">${escapeHtml(note)}</div>`;
+    out += html`<div class="desc" style="color:#98c379;border-left:2px solid #98c379;padding-left:8px">${note}</div>`;
   // services row — a shop with nothing to show doesn't get a button
-  html += `<div>` +
-    (m.commodityExchange ? `<button class="svc" onclick="openService('exchange')">Commodity Exchange</button>` : '') +
-    (m.outfitter && outfitterStock(p).length ? `<button class="svc" onclick="openService('outfitter')">Outfitter</button>` : '') +
-    (m.shipyard && shipyardStock(p).length ? `<button class="svc" onclick="openService('shipyard')">Shipyard</button>` : '') +
-    (m.bar ? `<button class="svc" onclick="openService('bar')">Spaceport Bar${barOffers ? ` (${barOffers})` : ''}</button>` : '') +
-    (m.canLand && compOffers ? `<button class="svc" onclick="openService('missioncomputer')">Mission BBS (${compOffers})</button>` : '') +
-    `</div>`;
-  html += `<div class="wallet"><b>${credits.toLocaleString('en-US')}</b> credits ·
+  out += html`<div>${m.commodityExchange ? html`<button class="svc" onclick="openService('exchange')">Commodity Exchange</button>` : ''}${
+    m.outfitter && outfitterStock(p).length ? html`<button class="svc" onclick="openService('outfitter')">Outfitter</button>` : ''}${
+    m.shipyard && shipyardStock(p).length ? html`<button class="svc" onclick="openService('shipyard')">Shipyard</button>` : ''}${
+    m.bar ? html`<button class="svc" onclick="openService('bar')">Spaceport Bar${barOffers ? ` (${barOffers})` : ''}</button>` : ''}${
+    m.canLand && compOffers ? html`<button class="svc" onclick="openService('missioncomputer')">Mission BBS (${compOffers})</button>` : ''}</div>`;
+  out += html`<div class="wallet"><b>${credits.toLocaleString('en-US')}</b> credits ·
     cargo ${cargoUsed()}/${holds} tons${activeMissions.length ? ` · ${activeMissions.length} active mission${activeMissions.length > 1 ? 's' : ''}` : ''}</div>
     <div class="hint">Take Off ▲ (top-right) — or press Esc</div>`;
-  document.getElementById('landedCard').innerHTML = html;
+  document.getElementById('landedCard').innerHTML = out;
 }
 
 /* L: select the nearest landable planet (brackets show it), or — if it's

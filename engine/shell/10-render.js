@@ -393,9 +393,8 @@ function render() {
   if (mapOpen) drawMap(w, h);
 
   const speed = Math.hypot(player.vx, player.vy);
-  document.getElementById('hud').innerHTML =
-    `<b>${escapeHtml(syst.name)}</b><br>${escapeHtml(ships[playerShipId].name)}<br>` +
-    `speed ${(speed * EV.FPS).toFixed(0)} px/s`;
+  document.getElementById('hud').innerHTML = html`
+    <b>${syst.name}</b><br>${ships[playerShipId].name}<br>speed ${(speed * EV.FPS).toFixed(0)} px/s`;
 
   // boardable disabled mission ship in range?
   const boardable = landedAt ? null : aiShips.find(s => s.misnId != null && s.disabled &&

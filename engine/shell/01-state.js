@@ -11,11 +11,24 @@
 const params = new URLSearchParams(location.search);
 
 // Escape untrusted game-data strings before putting them in element text via
-// innerHTML. Lives here (an early module) because later modules call it — the
-// dependency direction the shell's concatenation order guarantees. Text-context
-// only (&<>); values placed in HTML attributes would also need quote-escaping.
+// innerHTML. Text-context only (&<>); values in HTML attributes would also need
+// quote-escaping. Lives here (an early module) so later modules can call it.
 function escapeHtml(s) {
   return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+// Auto-escaping HTML template tag. `html`...`` escapes every ${interpolation}
+// unless it is trusted markup — the result of another html`` (below) or wrapped
+// in raw(). Since data values default to escaped, dialogs can't be XSS'd by a
+// modified data fork, and nested html`` fragments compose without re-escaping.
+class SafeHtml { constructor(s) { this.value = s; } toString() { return this.value; } }
+function raw(s) { return new SafeHtml(s == null ? '' : String(s)); }   // opt out: trust this markup
+function html(strings, ...values) {
+  let out = strings[0];
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    out += (v instanceof SafeHtml ? v.value : escapeHtml(v == null ? '' : v)) + strings[i + 1];
+  }
+  return new SafeHtml(out);
 }
 
 /* ---- persistence (spec: "Persistence") ----
@@ -146,12 +159,12 @@ function openNameDialog(cfg) {
        <div class="npnote">Permadeath: if this pilot dies, it's gone for good — no restoring from a save.</div>`
     : '';
   el.querySelector('.card').innerHTML =
-    `<div class="nprow">
+    html`<div class="nprow">
        <img class="npicon" src="evassets/graphics/PICT_${5000 + (playerShipId - 128)}.png" onerror="this.style.display='none'">
-       <div class="npmsg">${escapeHtml(cfg.prompt)}</div>
+       <div class="npmsg">${cfg.prompt}</div>
      </div>
      <input type="text" id="npName" maxlength="63" spellcheck="false" autocomplete="off">
-     ${strictHtml}
+     ${raw(strictHtml)}
      <div class="npbtns"><button id="npCancel">Cancel</button><button id="npOk" class="primary">OK</button></div>`;
   el.style.display = 'flex';
   const input = document.getElementById('npName');
