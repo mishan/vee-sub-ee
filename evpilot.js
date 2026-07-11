@@ -71,15 +71,16 @@ function simpleCrypt(buf, key = KEY_CLASSIC) {
  * The legal record is stored PER SYSTEM (108 int16), not per government — two
  * systems under the same govt can show different standings (e.g. Rebel is a
  * "Good Egg" in Nemesis but only "Decent Individual" in Orion, both Rebellion).
- * Vₑ's own model is per-govt, so an importer collapses this array.
+ * Vₑ's engine is now per-system too, so `toVeSave` imports this array losslessly.
  *
- * Confirmed against two real pilots cross-checked with the game's title readout
+ * Confirmed against real pilots cross-checked with the game's title readout
  * (Rebel: 268 kills/"Average", two Clipper escorts, NGC-6564 negative/"Offender";
- * Confed: 112 kills/"Fair", no escorts).
+ * Confed: 112 kills/"Fair", no escorts, three missions, 10 tons each of five
+ * commodities).
  *
- * Still mapping: cargo hold, installed outfits, active missions + mission (plot)
- * bits — see notes; a sample pilot that HAS active missions/cargo is needed to
- * locate those, since both current samples are empty there. */
+ * Still unmapped (so they import empty): installed outfits, and the rest of the
+ * 382-byte mission struct beyond dest/reward/desc — plus the mission (plot) bit
+ * array. */
 const MP128 = {
   spob: { off: 0x0000, u32: false, add: 128 },
   ship: { off: 0x0002, u32: false, add: 128 },
@@ -170,9 +171,66 @@ function readPilotSummary(file) {
   };
 }
 
+// Vₑ's own commodity keys (engine/shell/01-state.js COMMODITIES), same order as
+// the pilot file's cargo array, so the two line up by index.
+const VE_COMMODITIES = ['food', 'industrial', 'medical', 'luxury', 'metal', 'equipment'];
+
+/* Convert an original pilot file into a Vₑ pilot save (the v2 localStorage blob
+ * that engine/shell/01-state.js Save.load() expects). `DATA` is the game DB
+ * (require('./evdata.json')) — needed to resolve the docked spöb to its system.
+ *
+ * The per-system legal record imports losslessly now that Vₑ's model is
+ * per-system too: `legalBySystem` maps straight onto the save's `rep`. Outfits,
+ * active missions and mission (plot) bits aren't in the mapped struct yet, so
+ * they import empty — the pilot arrives with its stock hull, cargo, credits,
+ * standing, combat record and escorts, docked where it was saved. */
+function toVeSave(file, DATA) {
+  const s = readPilotSummary(file);
+  const spob = DATA.types.spob[s.dockedSpob];
+  const syst = spob && spob.System >= 128 ? spob.System : 128;
+  // cargo: the file's index-keyed tons → Vₑ's named commodity holds
+  const cargo = Object.fromEntries(VE_COMMODITIES.map((k) => [k, 0]));
+  COMMODITIES.forEach((name, i) => {
+    if (s.cargo[name]) cargo[VE_COMMODITIES[i]] = s.cargo[name];
+  });
+  // per-system legal record maps directly (keys are system ids in both)
+  const rep = { ...s.legalBySystem };
+  // escorts: Vₑ stores live objects; the minimum a save needs is id + shipId
+  const escorts = s.escorts.map((shipId, i) => ({ id: i + 1, shipId }));
+  // Back-date the creation epoch so the in-game date (born + 250y at gameDay 0)
+  // reads as the pilot's saved date.
+  const born = new Date(s.date.year - 250, s.date.month - 1, s.date.day).getTime();
+  // treat every system we hold a legal record in as visited, plus the current one
+  const explored = [...new Set([syst, ...Object.keys(rep).map(Number)])];
+  return {
+    v: 2,
+    syst,
+    spob: s.dockedSpob,
+    ship: s.shipType,
+    credits: s.credits,
+    cargo,
+    outfits: {},
+    explored,
+    bits: [],
+    day: 0,
+    born,
+    rep,
+    kills: s.kills,
+    missions: [],
+    dominated: [],
+    name: s.pilotName,
+    shipName: s.shipName,
+    strict: false,
+    escorts,
+    persDone: [],
+    persGrudge: [],
+  };
+}
+
 module.exports = {
   simpleCrypt,
   readPilotSummary,
+  toVeSave,
   MP128,
   LEGAL,
   ESCORTS,
@@ -191,9 +249,13 @@ module.exports = {
  *   node evpilot.js inspect <pilot-file> [keyHex] [dumpBytes]
  *       — list resources, then decrypt each and show a hex/ASCII dump
  *         (keyHex defaults to the Classic key; dumpBytes defaults to 512)
- *         so we can map the struct against a known pilot. */
+ *         so we can map the struct against a known pilot.
+ *   node evpilot.js import <pilot-file> [out.json]
+ *       — convert the pilot into a Vₑ save (writes out.json, or prints it).
+ *         Load it into the browser with:
+ *           localStorage.setItem('ve_pilot', <contents>)  then reload flight.html */
 const USAGE =
-  'usage: node evpilot.js selftest | summary <pilot-file> | inspect <pilot-file> [keyHex] [dumpBytes]';
+  'usage: node evpilot.js selftest | summary <pilot-file> | inspect <pilot-file> [keyHex] [dumpBytes] | import <pilot-file> [out.json]';
 if (require.main === module) {
   const cmd = process.argv[2];
 
@@ -227,6 +289,24 @@ if (require.main === module) {
       process.exit(1);
     }
     console.log(JSON.stringify(readPilotSummary(file), null, 2));
+    process.exit(0);
+  }
+
+  if (cmd === 'import') {
+    const file = process.argv[3];
+    if (!file) {
+      console.error('usage: node evpilot.js import <pilot-file> [out.json]');
+      process.exit(1);
+    }
+    const DATA = require('./evdata.json'); // game DB: resolve spöb → system
+    const save = JSON.stringify(toVeSave(file, DATA));
+    const out = process.argv[4];
+    if (out) {
+      require('fs').writeFileSync(out, save);
+      console.error(`wrote ${out} — load it with: localStorage.setItem('ve_pilot', <contents>)`);
+    } else {
+      console.log(save);
+    }
     process.exit(0);
   }
 
