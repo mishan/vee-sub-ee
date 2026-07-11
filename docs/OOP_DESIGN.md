@@ -178,11 +178,12 @@ tests. It's small, it's fully covered by `npm test`, it proves the "methods hold
 the exact same math" claim, and it sets the pattern for everything else — with
 zero shell or DOM risk. If it feels right, we proceed to `World`.
 
-## Open questions
+## Decisions & open questions
 
-- How far do we want to go? (Phases 1–2 are cheap structure; 3–5 are a genuine
-  architectural shift.)
-- Keep the old `EV.thrust(ship)` function exports as a compatibility layer
-  long-term, or delete them once callers move to methods?
-- `GameState` as one class, or a few focused ones (Wallet, LegalRecord,
-  MissionLog) composed together? (I lean toward a few focused ones.)
+- **Timing (decided):** stay a proposal for now — no implementation yet.
+  Revisit when we're ready to start Phase 1.
+- **Compatibility layer (decided):** do **not** keep the old `EV.thrust(ship)`
+  function exports long-term. Migrate call sites to methods and delete the free
+  functions, so there's one way to do each thing and no dead API.
+- **Open — `GameState` shape:** one class, or a few focused ones (Wallet,
+  LegalRecord, MissionLog) composed together? (I lean toward a few focused ones.)
