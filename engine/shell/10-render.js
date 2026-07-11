@@ -3,7 +3,8 @@ import { fuelMax, holds, linkedSystems, player, poolKey } from './04-combat.js';
 import { TOUCH, updateTouchUI } from './05-input.js';
 import { distTo } from './06-interaction.js';
 import { cargoNames } from './07-trade.js';
-import { combatRating, govts, isCriminalWith, legalStatus } from './08-missions.js';
+import { govts } from './08-missions.js';
+import { combatRating, isCriminalWith, legalStatus } from './13-legal.js';
 
 /*
  * engine/shell/10-render.js — part of the browser flight shell.

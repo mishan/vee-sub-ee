@@ -1,7 +1,7 @@
 import { S, SAVED, html, pilotBorn, pilotName, shipName, ships, showMsg, startNewPilot } from './01-state.js';
 import { systemGovt } from './02-spawning.js';
 import { armAudioUnlock, startTitleMusic, stopTitleMusic } from './03-sound.js';
-import { combatRating, legalStatus } from './08-missions.js';
+import { combatRating, legalStatus } from './13-legal.js';
 import { render } from './10-render.js';
 
 /*

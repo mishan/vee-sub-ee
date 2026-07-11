@@ -5,6 +5,7 @@ import { applyShipStats, armShip, beginDestruction, commitCrime, fuelMax, holds,
 import { checkDefenseCleared, distTo, hailClick, hailOpen, nearestLandable, openHail, renderHail } from './06-interaction.js';
 import { activeView, cargoNames, cargoUsed, closeService, outfitterStock, refreshView, shipyardStock } from './07-trade.js';
 import { loadSystem } from './09-step.js';
+import { adjustRep, legalOf } from './13-legal.js';
 
 /*
  * engine/shell/08-missions.js — part of the browser flight shell.
@@ -37,41 +38,6 @@ export const field = (m, k, dflt = -1) => (m[k] == null ? dflt : m[k]); // class
 // govt relations (from $sem flags we don't have allies as data; use gövt Ally/Enemy)
 export function govtAllies(g) { const r = govts[g]; return r ? [r.Ally].filter(a => a >= 128) : []; }
 export function govtEnemies(g) { const r = govts[g]; return r ? [r.Enemy].filter(a => a >= 128) : []; }
-
-/* ---- legal record & combat rating (spec: "Legal record") ---- */
-// Player's legal record with a govt, defaulting to the govt's InitialRec.
-export function legalOf(g) {
-  if (g < 128) g = 128;                       // independent systems use govt 128
-  if (reputation[g] != null) return reputation[g];
-  return govts[g] ? govts[g].InitialRec : 0;
-}
-// STR# 134 status label, scaled by the govt's crime tolerance (bible App. II:
-// enough good/evil to equal CrimeTol counts as 1 unit).
-export const EVIL_STEPS = [[4096, 'Galactic Scourge'], [1024, 'Prime Evil'], [256, 'Public Enemy'],
-  [64, 'Fugitive'], [16, 'Felon'], [4, 'Criminal'], [1, 'Offender']];
-export const GOOD_STEPS = [[4096, 'Honored Leader'], [1024, 'Pillar of Society'], [256, 'Role Model'],
-  [64, 'Upstanding Citizen'], [16, 'Good Egg'], [4, 'Decent Individual']];
-export function legalStatus(g) {
-  if (g < 128) g = 128;
-  const rec = govts[g]; if (!rec) return 'Clean';
-  const v = legalOf(g) / Math.max(rec.CrimeTol, 1);
-  if (v <= -1) for (const [t, label] of EVIL_STEPS) if (-v >= t) return label;
-  if (v >= 4)  for (const [t, label] of GOOD_STEPS) if (v >= t) return label;
-  return 'Clean';
-}
-export function isCriminalWith(g) { // over the crime-tolerance threshold → warships attack
-  if (g < 128) g = 128;
-  const rec = govts[g]; if (!rec) return false;
-  return legalOf(g) <= -Math.max(rec.CrimeTol, 1);
-}
-// Combat rating from total crew destroyed (bible App. I / STR# 138).
-export const RATING_STEPS = [[25600, 10], [12800, 9], [6400, 8], [3200, 7], [1600, 6],
-  [800, 5], [400, 4], [200, 3], [100, 2], [1, 1], [0, 0]];
-export function combatRating() {
-  for (const [t, idx] of RATING_STEPS) if (S.kills >= t)
-    return DATA.strings[138].list[idx] || 'Harmless';
-  return 'Harmless';
-}
 
 /* Resolve an AvailStel/TravelStel/ReturnStel code to a concrete spob id.
  * `here` is the spob the mission is being offered/accepted at. Returns a
@@ -368,11 +334,6 @@ export function abortMission(id) {
   // clear its mission ships from the system
   S.aiShips = S.aiShips.filter(s => s.misnId !== id);
   showMsg(`Mission abandoned: ${misnName(m, A)}`);
-}
-
-export function adjustRep(govt, amt) {
-  if (govt < 0 || !amt) return;
-  reputation[govt] = (reputation[govt] || 0) + amt;
 }
 
 /* Spawn a mission's special ships if their target system is the one we're
@@ -778,4 +739,3 @@ export function takeOff() {
   EV.placeAtTakeoff(player, spob); // then place on the pad (loadSystem doesn't move you)
   spawnEscorts();                  // launch the fleet alongside the player
 }
-
