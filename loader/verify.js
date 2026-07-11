@@ -13,7 +13,7 @@
 const fs = require('fs');
 const cp = require('child_process');
 const path = require('path');
-const { loadFork, parseFork, decodeRecord } = require('../evrsrc.js');
+const { loadFork, parseFork, decodeRecord, mergeTypes, buildFork, resolveType } = require('../evrsrc.js');
 const { decodePict } = require('./evpict.js');
 const { decodeSnd } = require('./evsnd.js');
 const { compositeSprite } = require('./evsprite.js');
@@ -202,9 +202,53 @@ function checkHardening() {
   console.log(`guard: ${pass}/${pass + fail} hardening assertions pass`);
 }
 
+// Plugin merge: a plugin resource overrides the base resource at the same
+// (type, ID) and a new ID is added. Synthesized with buildFork from the real
+// base ship 128's bytes (nothing copyrighted is written to disk).
+function checkPluginMerge() {
+  const dataFile = D('EV Data.rsrc');
+  if (!fs.existsSync(dataFile)) return;
+  const dataFork = loadFork(dataFile).fork;
+  const shipType = parseFork(dataFork).find(t => t.typeName === 'shïp');
+  const base128 = shipType && shipType.resources.find(r => r.id === 128);
+  if (!base128) return;
+
+  const orig = Buffer.from(base128.data());
+  const tuned = Buffer.from(orig); tuned[2] ^= 0xff; tuned[3] ^= 0xff;   // perturb one field
+  const T = resolveType('ship');
+  const plugin = buildFork([
+    { type: T, id: 128, name: 'Tuned', data: tuned },              // override existing
+    { type: T, id: 200, name: 'Clone', data: Buffer.from(orig) },  // add new (copy of orig)
+  ]);
+
+  const schemaDir = path.join(ROOT, 'schemas'); const schemasByType = {};
+  for (const f of fs.readdirSync(schemaDir)) {
+    if (!f.endsWith('.json')) continue;
+    const s = JSON.parse(fs.readFileSync(path.join(schemaDir, f), 'utf8'));
+    schemasByType[s.name] = { alias: path.basename(f, '.json'), schema: s };
+  }
+  const base = buildData(dataFork, schemasByType);
+  const plug = buildData(dataFork, schemasByType, [plugin]);
+
+  let pass = 0, fail = 0;
+  const ok = (n, c) => { c ? pass++ : (fail++, console.log('  ✗ ' + n)); };
+  ok('override changes ship 128', JSON.stringify(plug.types.ship[128]) !== JSON.stringify(base.types.ship[128]));
+  ok('new ship 200 added', !!plug.types.ship[200] && !base.types.ship[200]);
+  ok('ship count grew by exactly 1', Object.keys(plug.types.ship).length === Object.keys(base.types.ship).length + 1);
+  // ship 200's bytes are a copy of the *original* 128, so it decodes identically (bar the name).
+  const a = { ...plug.types.ship[200] }, b = { ...base.types.ship[128] }; delete a.name; delete b.name;
+  ok('added ship decodes like the original', JSON.stringify(a) === JSON.stringify(b));
+  // an empty plugin list is a no-op (normalize the volatile `generated` stamp).
+  const norm = d => JSON.stringify({ ...d, generated: '' });
+  ok('empty plugin list is a no-op', norm(buildData(dataFork, schemasByType)) === norm(buildData(dataFork, schemasByType, [])));
+  console.log(`plugin: ${pass}/${pass + fail} merge assertions pass`);
+  if (fail) process.exitCode = 1;
+}
+
 checkPict();
 checkSnd();
 checkSprites();
 checkSit();
 checkBuildData();
 checkHardening();
+checkPluginMerge();

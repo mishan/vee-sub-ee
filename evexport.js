@@ -22,7 +22,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadFork, parseFork, decodeRecord, decodeStrList } = require('./evrsrc.js');
+const { loadFork, parseFork, mergeTypes, decodeRecord, decodeStrList } = require('./evrsrc.js');
 
 function loadSchemas(dir) {
   const byTypeName = new Map(); // MacRoman type name -> {alias, schema}
@@ -34,9 +34,14 @@ function loadSchemas(dir) {
   return byTypeName;
 }
 
-function exportAll(file, schemaDir) {
-  const src = loadFork(file);
-  const types = parseFork(src.fork);
+function exportAll(file, schemaDir, pluginFiles = []) {
+  const baseTypes = parseFork(loadFork(file).fork);
+  // Plugins override/add resources by (type, ID), applied in load order (base
+  // first). Merges game records + STR#; plugin graphics/sounds are handled by
+  // the asset pipeline (not this record export).
+  const types = pluginFiles.length
+    ? mergeTypes(baseTypes, ...pluginFiles.map(f => parseFork(loadFork(f).fork)))
+    : baseTypes;
   const schemas = loadSchemas(schemaDir);
   const out = {
     source: path.basename(file),
@@ -70,6 +75,9 @@ function exportAll(file, schemaDir) {
 function main() {
   const args = process.argv.slice(2);
   const opt = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args.splice(i, 2)[1] : null; };
+  // Repeatable: --plugin A.rsrc --plugin B.rsrc (in load order; later wins).
+  const opts = (flag) => { const v = []; let i; while ((i = args.indexOf(flag)) >= 0) v.push(args.splice(i, 2)[1]); return v; };
+  const pluginFiles = opts('--plugin');
   const outPath = opt('-o');
   const mapPath = opt('--map');
   const flightPath = opt('--flight');
@@ -80,11 +88,12 @@ function main() {
   const semantic = (semanticIdx >= 0 && !!args.splice(semanticIdx, 1)) || !!flightPath;
   const file = args[0];
   if (!file || (!outPath && !mapPath && !flightPath)) {
-    console.error('usage: evexport.js <datafile> [-o evdata.json] [--map galaxy.html] [--flight flight.html]');
+    console.error('usage: evexport.js <datafile> [--plugin file]… [-o evdata.json] [--map galaxy.html] [--flight flight.html]');
     process.exit(1);
   }
 
-  const { out, warnings } = exportAll(file, schemaDir);
+  const { out, warnings } = exportAll(file, schemaDir, pluginFiles);
+  if (pluginFiles.length) console.error(`merged ${pluginFiles.length} plugin(s): ${pluginFiles.map(f => path.basename(f)).join(', ')}`);
   if (semantic) require('./semantics.js').decorate(out);
   for (const w of warnings) console.error('⚠ ' + w);
   const counts = Object.entries(out.types)

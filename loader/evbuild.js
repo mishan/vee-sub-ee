@@ -10,9 +10,14 @@
   const B = (typeof Buffer !== 'undefined') ? Buffer : require('buffer').Buffer;
 
   /* Build the full game database from the EV Data resource fork.
-   * schemasByType: { <MacRoman type name>: { alias, schema } }. */
-  function buildData(dataFork, schemasByType) {
-    const types = EV.parseFork(B.from(dataFork));
+   * schemasByType: { <MacRoman type name>: { alias, schema } }.
+   * pluginForks: optional resource forks whose records override/add by
+   * (type, ID) in load order (base first) — EV's plugin rule. */
+  function buildData(dataFork, schemasByType, pluginForks = []) {
+    const base = EV.parseFork(B.from(dataFork));
+    const types = pluginForks.length
+      ? EV.mergeTypes(base, ...pluginForks.map(f => EV.parseFork(B.from(f))))
+      : base;
     const out = { source: 'EV Data.rsrc', generated: new Date().toISOString(), types: {}, strings: {} };
     for (const t of types) {
       if (t.typeHex === '53545223') { // STR#
