@@ -122,7 +122,7 @@ function main() {
     // The flight demo needs the sprite manifest too (evatlas.js). It loads
     // sprite PNGs relative to itself, so it must live next to evassets/.
     const manifest = fs.readFileSync(path.join(assetDir, 'manifest.json'), 'utf8');
-    const engine = fs.readFileSync(path.join(__dirname, 'engine', 'core.js'), 'utf8');
+    const engine = fs.readFileSync(path.join(__dirname, 'engine', 'core.bundle.js'), 'utf8');
     const tpl = fs.readFileSync(path.join(__dirname, 'flight_template.html'), 'utf8');
     // Every placeholder must be present, or the matching .replace() below turns
     // into a silent no-op and ships a subtly broken flight.html. (loader/launch.js

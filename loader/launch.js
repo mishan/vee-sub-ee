@@ -20,7 +20,7 @@
   // by the decoders (which import evsit for decompression). Fetched once so
   // flight.html and its recorded hash come from the *same* strings (no mid-build
   // server change slips through). The extra parallel fetches come from HTTP cache.
-  const ENGINE_FILES = ['../flight_template.html', '../engine/core.js',
+  const ENGINE_FILES = ['../flight_template.html', '../engine/core.bundle.js',
     '../evrsrc.js', '../semantics.js', 'nodeshim.js',
     'evsit.js', 'evpict.js', 'evsnd.js', 'evsprite.js', 'evbuild.js',
     ...SCHEMA_NAMES.map(n => '../schemas/' + n + '.json')];

@@ -22,11 +22,15 @@ branch.)
 
 ## Commands
 
-A top-level `Makefile` wraps the common ones: `make` builds flight.html,
-plus `make galaxy`/`data`/`assets`/`schemas`/`selftest`/`verify`/`clean`
-(`make help` lists targets). The raw commands are below.
+Run `npm install` once (dev dependency: esbuild, which bundles the ES-module
+engine core). A top-level `Makefile` wraps the common ones: `make` builds
+flight.html, plus `make galaxy`/`data`/`assets`/`schemas`/`selftest`/`verify`/
+`clean` (`make help` lists targets). The raw commands are below.
 
 ```sh
+npm install                                              # esbuild devDependency
+node_modules/.bin/esbuild engine/core.js --bundle --format=iife --global-name=EV \
+  --footer:js='globalThis.EV=EV;' --outfile=engine/core.bundle.js   # engine → global EV
 node evrsrc.js selftest                                  # resource-fork lib sanity
 node tmpl2schema.js "EV_data/EV Data.rsrc" -o schemas/   # regenerate schemas (rarely needed)
 node evexport.js "EV_data/EV Data.rsrc" -o evdata.json --semantic   # game DB
@@ -56,11 +60,16 @@ Headless UI verification: `firefox --headless --screenshot out.png
   annotations); also builds galaxy.html / flight.html by placeholder
   injection into the *_template.html files.
 - `engine/ENGINE_SPEC.md` — **normative** flight/AI/game rules, implemented by
-  `engine/core.js` (injected into flight.html at build; require-able in node).
-  Any behavior change: spec first, then the core.
+  `engine/core.js`, a DOM-free **ES module** (importable in node). Any behavior
+  change: spec first, then the core.
+- `engine/core.bundle.js` — GENERATED: esbuild bundles core.js into an IIFE that
+  exposes the exports as the browser global `EV`. Committed (so the in-browser
+  loader can inject it without a build step) but never hand-edited; `make`
+  rebuilds it from core.js. This is the first step of an in-progress move to
+  esbuild-bundled ES modules for the shell too.
 - `flight_template.html` — browser shell HTML/CSS + a script with `/*__ENGINE__*/`
-  (core.js) and `/*__SHELL__*/` placeholders; the built `flight.html` injects
-  core.js, the shell, and the game DATA/MANIFEST into it.
+  (core.bundle.js) and `/*__SHELL__*/` placeholders; the built `flight.html`
+  injects the engine bundle, the shell, and the game DATA/MANIFEST into it.
 - `engine/shell/*.js` — the flight shell (canvas render, DOM dialogs, game
   state/UI), split by domain (state, spawning, sound, combat, input, …) for
   readability. `evexport --flight` and the loader **concatenate them in

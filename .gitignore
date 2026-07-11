@@ -10,3 +10,4 @@ flight.html
 # Editor/OS noise
 *.swp
 .DS_Store
+node_modules/
