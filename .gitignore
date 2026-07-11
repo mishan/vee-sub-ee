@@ -7,6 +7,11 @@ evassets/
 galaxy.html
 flight.html
 
+# Player pilot save files (real EV data) — used to reverse-engineer the pilot
+# format, never committed. Keep local samples out of the repo.
+*.rsrc
+*.sit
+
 # Editor/OS noise
 *.swp
 .DS_Store
