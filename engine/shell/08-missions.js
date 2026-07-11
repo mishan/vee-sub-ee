@@ -137,7 +137,10 @@ export function offeredMissions(p, loc) {
   const out = [];
   for (const [id, m] of Object.entries(misns)) {
     if (missionLog.has(+id)) continue; // already accepted (raw records have no id)
-    if (missionAvailable(m, p, loc)) out.push({ id: +id, ...m });
+    // Attach the id before the check: missionAvailable keys its AvailRandom roll
+    // on m.id, so a raw (id-less) record would collide all missions into one slot.
+    const offer = { id: +id, ...m };
+    if (missionAvailable(offer, p, loc)) out.push(offer);
   }
   // critical missions (Flags 0x1000) first, else by id
   out.sort((a, b) => (b.Flags & 0x1000) - (a.Flags & 0x1000) || a.id - b.id);
