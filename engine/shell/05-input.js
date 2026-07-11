@@ -4,7 +4,8 @@ import { setVolume, stopAllLoops } from './03-sound.js';
 import { abortJump, beginJump, player } from './04-combat.js';
 import { closeHail, cyclePlanetTarget, cycleShipTarget, hail, hailOpen } from './06-interaction.js';
 import { activeView, closeService } from './07-trade.js';
-import { boardTarget, showMissionBriefing, takeOff, tryLand } from './08-missions.js';
+import { showMissionBriefing, takeOff, tryLand } from './08-missions.js';
+import { boardTarget } from './12-boarding.js';
 import { advanceSplash, introUp, splashShown, titleShown } from './11-title.js';
 
 /*
