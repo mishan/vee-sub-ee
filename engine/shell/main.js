@@ -18,7 +18,8 @@ import * as m12 from './12-boarding.js';
 import * as m13 from './13-legal.js';
 import * as m14 from './14-landing.js';
 import * as m15 from './15-pers.js';
-import * as m16 from './16-main.js';
+import * as m16 from './16-missionboard.js';
+import * as m17 from './17-main.js';
 
 // Inline HTML event handlers (onclick="closeService()", the 2x pill's
 // toggleFastForward(), dialog buttons, …) can only reach GLOBAL names, but the
@@ -45,4 +46,5 @@ Object.assign(
   m14,
   m15,
   m16,
+  m17,
 );

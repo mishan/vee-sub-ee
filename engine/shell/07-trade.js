@@ -11,7 +11,7 @@ import {
   spinOfShip,
 } from './01-state.js';
 import { applyShipStats, effectiveShip, fuelMax, holds, player } from './04-combat.js';
-import { renderBar, renderComputer } from './08-missions.js';
+import { renderBar, renderComputer } from './16-missionboard.js';
 import { renderPlanetScreen } from './14-landing.js';
 
 /*
