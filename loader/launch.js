@@ -28,6 +28,17 @@
     // The flight shell is split into engine/shell/*.js, concatenated (in
     // order.json order) into flight.html's script. Fetch those too, in order.
     const order = await fetch('../engine/shell/order.json').then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ' for shell order.json'); return r.json(); });
+    // order.json builds fetch paths and is concatenated as-is, so validate it the
+    // way `evexport --flight` does before trusting it: plain .js filenames only —
+    // no path separators or `..` that could fetch resources outside the shell dir
+    // — and each listed once, since a duplicate would concatenate a module twice
+    // and redeclare its top-level bindings.
+    if (!Array.isArray(order)) throw new Error('shell order.json must be an array');
+    for (const f of order)
+      if (typeof f !== 'string' || f.includes('..') || !/^[\w.-]+\.js$/.test(f))
+        throw new Error('shell order.json has an unsafe entry: ' + JSON.stringify(f));
+    const dupes = [...new Set(order.filter((f, i) => order.indexOf(f) !== i))];
+    if (dupes.length) throw new Error('shell order.json lists duplicate(s): ' + dupes.join(', '));
     const paths = [...ENGINE_FILES, ...order.map(f => '../engine/shell/' + f)];
     const texts = await Promise.all(paths.map(f => fetch(f).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + f); return r.text(); })));
     return {
