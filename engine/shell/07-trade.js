@@ -1,6 +1,7 @@
 import { COMMODITIES, PRICE_MULT, S, cargo, html, outfits, preloadSprites, ships, showMsg, spinOfShip } from './01-state.js';
 import { applyShipStats, effectiveShip, fuelMax, holds, player } from './04-combat.js';
-import { renderBar, renderComputer, renderPlanetScreen } from './08-missions.js';
+import { renderBar, renderComputer } from './08-missions.js';
+import { renderPlanetScreen } from './14-landing.js';
 
 /*
  * engine/shell/07-trade.js — part of the browser flight shell.
