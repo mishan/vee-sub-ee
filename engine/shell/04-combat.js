@@ -1,9 +1,15 @@
+import { S, outfits, params, persGrudge, reputation, ships, showMsg, spinOfShip, systs } from './01-state.js';
+import { chargeEscortUpkeep, fightersOut, launchFighter, recallFighters, spawnEscorts, systemGovt } from './02-spawning.js';
+import { attenuate, masterVol, playSnd, sndEl, stopSnd } from './03-sound.js';
+import { PF, checkExpiredMissions, govtAllies, govts, legalOf, onMissionShipDisabled } from './08-missions.js';
+import { loadSystem } from './09-step.js';
+
 /*
  * engine/shell/04-combat.js — part of the browser flight shell.
  *
- * The shell modules are concatenated (in order.json order) into one <script>
- * in flight.html by `evexport --flight` and the loader, so they share a single
- * scope — treat them as one file split for readability, not as ES modules.
+ * esbuild bundles the shell modules (entry: main.js) into engine/shell.bundle.js,
+ * injected into flight.html by `evexport --flight` and the loader. 01-state is
+ * the leaf holding the shared state object S; modules import what they use.
  * Normative behavior: engine/ENGINE_SPEC.md.
  */
 /* ---------------- player ----------------
@@ -13,24 +19,24 @@
  * into its own module moved it here. It's referenced lazily everywhere else, so
  * the position is safe; it's grouped with combat only by adjacency. */
 
-const player = EV.makeShip(ships[playerShipId],
+export const player = EV.makeShip(ships[S.playerShipId],
   +(params.get('x') || 0), +(params.get('y') || 300), +(params.get('heading') || 0));
-player.shipId = playerShipId;
-let fuel = ships[playerShipId].Fuel;
-let fuelMax = ships[playerShipId].Fuel;
-let holds = ships[playerShipId].Holds;
-let landedAt = null;
+player.shipId = S.playerShipId;
+S.fuel = ships[S.playerShipId].Fuel;
+export let fuelMax = ships[S.playerShipId].Fuel;
+export let holds = ships[S.playerShipId].Holds;
+S.landedAt = null;
 
 /* ---- combat state (spec: "Combat") ---- */
-const weaps = DATA.types.weap;
-let shots = [], beams = [], explosions = [];
-let gameOver = false;
+export const weaps = DATA.types.weap;
+S.shots = []; S.beams = []; S.explosions = [];
+S.gameOver = false;
 
 // ammo pool key for a weapon record (AmmoType 0-63 -> weapon 128+n's pool)
-const poolKey = rec => rec.AmmoType >= 0 && rec.AmmoType <= 63 ? 128 + rec.AmmoType : null;
+export const poolKey = rec => rec.AmmoType >= 0 && rec.AmmoType <= 63 ? 128 + rec.AmmoType : null;
 
 /* Give an entity combat stats + stock loadout from its shïp record. */
-function armShip(e, rec) {
+export function armShip(e, rec) {
   e.shieldMax = rec.Shield; e.shields = rec.Shield;
   e.armorMax = rec.Armor; e.armor = rec.Armor;
   e.shieldRe = rec.ShieldRe; e.mass = Math.max(rec.Mass, 1);
@@ -57,7 +63,7 @@ function armShip(e, rec) {
 }
 
 /* Player loadout = stock + outfitter weapons/ammo (rebuilt on refit). */
-function rebuildPlayerWeapons() {
+export function rebuildPlayerWeapons() {
   armShipKeepingCondition(player, effectiveShip());
   for (const [oid, n] of Object.entries(outfits)) {
     const o = DATA.types.outf[oid];
@@ -78,26 +84,26 @@ function rebuildPlayerWeapons() {
   if (!player.weapons.some(w => w === player.selSecondary))
     player.selSecondary = player.weapons.find(w => w.rec.MiscFlags & 2) || null;
 }
-function armShipKeepingCondition(e, s) {
+export function armShipKeepingCondition(e, s) {
   const frac = e.shieldMax ? e.shields / e.shieldMax : 1;
   const afrac = e.armorMax ? e.armor / e.armorMax : 1;
-  armShip(e, { ...ships[playerShipId], Shield: s.rec.Shield, Armor: s.rec.Armor });
+  armShip(e, { ...ships[S.playerShipId], Shield: s.rec.Shield, Armor: s.rec.Armor });
   e.shields = e.shieldMax * frac;
   e.armor = e.armorMax * afrac;
 }
 
-const clampArc = (aim, base, arc) => {
+export const clampArc = (aim, base, arc) => {
   let d = EV.norm(aim - base);
   if (d > 180) d -= 360;
   return EV.norm(base + Math.max(-arc, Math.min(arc, d)));
 };
-function leadAim(e, t, shotSpeed) {
+export function leadAim(e, t, shotSpeed) {
   const dist = Math.hypot(t.x - e.x, t.y - e.y);
   const dt = shotSpeed > 0 ? dist / shotSpeed : 0;
   return EV.bearing(t.x + t.vx * dt - e.x, t.y + t.vy * dt - e.y);
 }
 
-function fire(e, target, primary) {
+export function fire(e, target, primary) {
   for (const w of e.weapons) {
     const sec = (w.rec.MiscFlags & 2) !== 0;
     if (primary ? sec : w !== e.selSecondary) continue;
@@ -114,7 +120,7 @@ function fire(e, target, primary) {
     if (g === 0 || g === 3) { // beam
       if (pk && !((e.pools[pk] || 0) > 0)) continue;
       if (pk) e.pools[pk]--;
-      beams.push({ owner: e, rec: w.rec, life: w.rec.Count, turreted: g === 3, target });
+      S.beams.push({ owner: e, rec: w.rec, life: w.rec.Count, turreted: g === 3, target });
       w.cool = w.rec.Reload + w.rec.Count;
       if (w.rec.Sound >= 0) playSnd(200 + w.rec.Sound, attenuate(e.x, e.y));
       continue;
@@ -132,7 +138,7 @@ function fire(e, target, primary) {
       const shot = EV.makeShot(w.rec, e, aim);
       shot.owner = e;
       shot.homing = (g === 1 || g === 2) ? target : null;
-      shots.push(shot);
+      S.shots.push(shot);
       fired = true;
     }
     if (fired) {
@@ -142,36 +148,36 @@ function fire(e, target, primary) {
   }
 }
 
-function spawnExplosion(x, y, type) {
+export function spawnExplosion(x, y, type) {
   const spin = 400 + Math.max(0, Math.min(type, 2));
   const meta = MANIFEST.spins[spin];
-  if (meta) explosions.push({ x, y, spin, f: 0, frames: meta.frames, tick: 0 });
+  if (meta) S.explosions.push({ x, y, spin, f: 0, frames: meta.frames, tick: 0 });
 }
 /* Begin a ship's destruction: the fireball plays immediately over the ship
  * as it breaks up (was flash-then-boom, which looked backwards). The ship
  * then fades out over deathDelay frames; big ships get a final blast. */
-function beginDestruction(v) {
+export function beginDestruction(v) {
   v.deathT = Math.max(v.deathDelay, 1);
   v.thrusting = false; // no engine flame on a hull that's breaking up
   spawnExplosion(v.x, v.y, v.deathDelay >= 60 ? 1 : 0);
   playSnd(302, attenuate(v.x, v.y)); // breaking up
 }
 
-function grudge(victim, attacker) {
+export function grudge(victim, attacker) {
   if (attacker !== player || !victim.aiType) return;
   const react = s => {
     if (s.aiType >= 3 || s.aiType === 2) s.hostile = true;
     else s.fleeing = true;
   };
   react(victim);
-  for (const s of aiShips) if (s.govt === victim.govt && s.govt >= 128) react(s);
+  for (const s of S.aiShips) if (s.govt === victim.govt && s.govt >= 128) react(s);
   if (victim.isPers) {                        // a character you fired on won't deal with you
     victim.offered = true;
     if (victim.persFlags & PF.GRUDGE) persGrudge.add(victim.persId); // and remembers it
   }
 }
 
-function hitShip(victim, rec, heading, attacker) {
+export function hitShip(victim, rec, heading, attacker) {
   const result = EV.applyDamage(victim, rec);
   const kick = rec.Impact / (10 * victim.mass);
   victim.vx += Math.sin(EV.rad(heading)) * kick;
@@ -190,9 +196,9 @@ function hitShip(victim, rec, heading, attacker) {
 }
 
 /* ---- legal consequences of combat (spec: "Legal record") ---- */
-const penaltyOf = (g, field) => (g >= 128 && govts[g] ? govts[g][field] : 0);
+export const penaltyOf = (g, field) => (g >= 128 && govts[g] ? govts[g][field] : 0);
 // A crime against govt g costs record with g and (halved) its allies.
-function commitCrime(victimGovt, penalty) {
+export function commitCrime(victimGovt, penalty) {
   if (victimGovt < 128 || !penalty) return;
   reputation[victimGovt] = legalOf(victimGovt) - penalty;
   for (const ally of govtAllies(victimGovt))
@@ -200,8 +206,8 @@ function commitCrime(victimGovt, penalty) {
 }
 // A kill: adds to combat rating, penalizes the victim's govt, and rewards
 // every govt that considers the victim's govt an enemy (bounty for the deed).
-function creditKill(victim) {
-  kills += Math.max(1, (ships[victim.shipId] && ships[victim.shipId].Crew) || 1);
+export function creditKill(victim) {
+  S.kills += Math.max(1, (ships[victim.shipId] && ships[victim.shipId].Crew) || 1);
   const g = victim.govt;
   if (g < 128) return;
   const kp = penaltyOf(g, 'KillPenalty');
@@ -218,7 +224,7 @@ function creditKill(victim) {
   }
 }
 
-function shipHalf(e) {
+export function shipHalf(e) {
   const m = MANIFEST.spins[spinOfShip(e.shipId)];
   return m ? Math.max(m.frameW, m.frameH) / 2 : 16;
 }
@@ -226,10 +232,8 @@ function shipHalf(e) {
 /* ---- outfits (spec-adjacent; oütf ModType effects from semantics.js) ----
  * outfits: outf id -> count. Effective ship stats = base shïp record plus
  * every owned outfit's effect; outfit Mass consumes the hull's FreeMass. */
-const outfits = {};
-if (SAVED && SAVED.outfits) Object.assign(outfits, SAVED.outfits);
-function effectiveShip() {
-  const rec = { ...ships[playerShipId] };
+export function effectiveShip() {
+  const rec = { ...ships[S.playerShipId] };
   let h = rec.Holds, fm = rec.Fuel, massUsed = 0;
   for (const [id, n] of Object.entries(outfits)) {
     const o = DATA.types.outf[id];
@@ -246,9 +250,9 @@ function effectiveShip() {
     }
   }
   return { rec, holds: h, fuelMax: fm, massUsed,
-           freeMass: ships[playerShipId].FreeMass - massUsed };
+           freeMass: ships[S.playerShipId].FreeMass - massUsed };
 }
-function applyShipStats() {
+export function applyShipStats() {
   const s = effectiveShip();
   player.rec = s.rec;
   player.maxSpeed = EV.maxSpeedOf(s.rec);
@@ -256,72 +260,72 @@ function applyShipStats() {
   player.turn = EV.turnOf(s.rec);
   holds = s.holds;
   fuelMax = s.fuelMax;
-  fuel = Math.min(fuel, fuelMax);
+  S.fuel = Math.min(S.fuel, fuelMax);
   rebuildPlayerWeapons(); // loadout + shield/armor maxes follow the refit
 }
 
 /* jump state: null | {destId, phase:'engage'|'streak', t} */
-let jump = null;
-let mapOpen = false;
-let jumpDest = null; // selected destination system id
+S.jump = null;
+S.mapOpen = false;
+S.jumpDest = null; // selected destination system id
 
-function linkedSystems() {
+export function linkedSystems() {
   const out = [];
   for (let i = 1; i <= 16; i++) {
-    const c = syst['Con' + i];
+    const c = S.syst['Con' + i];
     if (c >= 128 && systs[c]) out.push(c);
   }
   return out;
 }
 
-function mapBearingTo(destId) {
-  const a = systs[SYSTEM_ID], b = systs[destId];
+export function mapBearingTo(destId) {
+  const a = systs[S.SYSTEM_ID], b = systs[destId];
   return EV.bearing(b.xPos - a.xPos, b.yPos - a.yPos);
 }
 
-function nearestSpobInfo() {
+export function nearestSpobInfo() {
   let best = null, bd = Infinity;
-  for (const p of spobs) {
+  for (const p of S.spobs) {
     const d = Math.hypot(p.x - player.x, p.y - player.y);
     if (d < bd) { bd = d; best = p; }
   }
   return { spob: best, dist: bd };
 }
-let warpSnd = null;
-function beginJump() {
-  if (jump || landedAt) return;
-  if (jumpDest == null || !linkedSystems().includes(jumpDest)) return;
-  if (fuel < EV.JUMP_FUEL) { showMsg('Not enough fuel to jump.'); return; }
+export let warpSnd = null;
+export function beginJump() {
+  if (S.jump || S.landedAt) return;
+  if (S.jumpDest == null || !linkedSystems().includes(S.jumpDest)) return;
+  if (S.fuel < EV.JUMP_FUEL) { showMsg('Not enough fuel to jump.'); return; }
   const near = nearestSpobInfo();
   if (near.spob && near.dist < EV.JUMP_MIN_DIST) {
     showMsg(`You are too close to ${near.spob.name} to engage your hyperdrive.`);
     return;
   }
-  jump = { destId: jumpDest, phase: 'engage', t: 0 };
+  S.jump = { destId: S.jumpDest, phase: 'engage', t: 0 };
   // Warp Up (8.3s spin-up) — kept as a handle so it can be cut on abort;
   // routed through masterVol like every other sound, and adjustable live.
-  if (soundOn && masterVol > 0) {
+  if (S.soundOn && masterVol > 0) {
     warpSnd = sndEl(128).cloneNode();
     warpSnd._baseVol = 1;
     warpSnd.volume = Math.min(masterVol, 1);
     warpSnd.play().catch(() => {});
   } else warpSnd = null;
 }
-function abortJump() {
-  jump = null;
+export function abortJump() {
+  S.jump = null;
   stopSnd(warpSnd); warpSnd = null;
 }
-function completeJump() {
-  const from = SYSTEM_ID;
-  gameDay++;                    // a day passes each hyperspace jump (spec)
+export function completeJump() {
+  const from = S.SYSTEM_ID;
+  S.gameDay++;                    // a day passes each hyperspace jump (spec)
   if (fightersOut()) recallFighters(); // fighters dock before the carrier jumps out
-  loadSystem(jump.destId);
+  loadSystem(S.jump.destId);
   // placeAtArrival wants the inbound bearing (origin → dest); from the
   // destination, mapBearingTo(origin) is the reverse bearing, so flip it.
   EV.placeAtArrival(player, EV.norm(mapBearingTo(from) + 180));
   spawnEscorts();               // fleet jumps in around the now-placed player
-  fuel -= EV.JUMP_FUEL;
-  jump = null; jumpDest = null;
+  S.fuel -= EV.JUMP_FUEL;
+  S.jump = null; S.jumpDest = null;
   checkExpiredMissions();
   chargeEscortUpkeep();          // pay the fleet's salaries; the unpaid quit here
   warpSnd = null; // Warp Up ends naturally as the streak completes

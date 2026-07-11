@@ -10,3 +10,9 @@ flight.html
 # Editor/OS noise
 *.swp
 .DS_Store
+node_modules/
+
+# Generated build artifacts (our engine code, no data): esbuild bundles the ES
+# modules into these. Built by `make`; shipped in releases.
+engine/core.bundle.js
+engine/shell.bundle.js

@@ -122,7 +122,7 @@ function main() {
     // The flight demo needs the sprite manifest too (evatlas.js). It loads
     // sprite PNGs relative to itself, so it must live next to evassets/.
     const manifest = fs.readFileSync(path.join(assetDir, 'manifest.json'), 'utf8');
-    const engine = fs.readFileSync(path.join(__dirname, 'engine', 'core.js'), 'utf8');
+    const engine = fs.readFileSync(path.join(__dirname, 'engine', 'core.bundle.js'), 'utf8');
     const tpl = fs.readFileSync(path.join(__dirname, 'flight_template.html'), 'utf8');
     // Every placeholder must be present, or the matching .replace() below turns
     // into a silent no-op and ships a subtly broken flight.html. (loader/launch.js
@@ -130,26 +130,11 @@ function main() {
     for (const ph of ['/*__ENGINE__*/', '/*__SHELL__*/', '/*__EVDATA__*/null',
                       '/*__MANIFEST__*/null', '/*__NAMES__*/null'])
       if (!tpl.includes(ph)) throw new Error(`flight template missing ${ph} placeholder`);
-    // The browser flight shell is split into engine/shell/*.js for readability;
-    // concatenate them (in order.json order) into the one template <script>.
-    const shellDir = path.join(__dirname, 'engine', 'shell');
-    const shellOrder = JSON.parse(fs.readFileSync(path.join(shellDir, 'order.json'), 'utf8'));
-    // order.json must list exactly the shell modules on disk, once each — a new
-    // file that isn't listed is silently dropped from the build (removing
-    // whatever it did), and a duplicate would concatenate a module twice
-    // (redeclaring its top-level bindings).
-    const dupes = [...new Set(shellOrder.filter((f, i) => shellOrder.indexOf(f) !== i))];
-    if (dupes.length) throw new Error('engine/shell/order.json lists duplicate(s): ' + dupes.join(', '));
-    const onDisk = fs.readdirSync(shellDir).filter(f => f.endsWith('.js')).sort();
-    const listed = [...shellOrder].sort();
-    if (onDisk.join() !== listed.join()) {
-      const missing = onDisk.filter(f => !listed.includes(f));
-      const extra = listed.filter(f => !onDisk.includes(f));
-      throw new Error('engine/shell/order.json out of sync with the directory' +
-        (missing.length ? ` — not listed: ${missing.join(', ')}` : '') +
-        (extra.length ? ` — listed but missing: ${extra.join(', ')}` : ''));
-    }
-    const shell = shellOrder.map(f => fs.readFileSync(path.join(shellDir, f), 'utf8')).join('\n');
+    // The flight shell is authored as ES modules under engine/shell/ and bundled
+    // by esbuild into engine/shell.bundle.js (an IIFE, built by `make`); inject
+    // that one artifact. It reads DATA/MANIFEST/NAMES and the global EV from the
+    // enclosing template <script>.
+    const shell = fs.readFileSync(path.join(__dirname, 'engine', 'shell.bundle.js'), 'utf8');
     // Name suggestions (STR# 128 "Default Names") live in the EV application's
     // resource fork, not the game data. If the app rsrc is supplied, split the
     // list in half — pilot names, then ship names — and inject it. Otherwise

@@ -2,12 +2,13 @@
  * engine/core.js — DOM-free EV flight core. Normative behavior lives in
  * engine/ENGINE_SPEC.md; this file implements it.
  *
- * Works as a node module (require) and as a browser global (EV) — the
- * flight shell gets this file injected at build time by evexport.js.
+ * An ES module: esbuild bundles it (npm run build:engine) into
+ * engine/core.bundle.js — an IIFE that exposes the exports as the browser global
+ * `EV`, which the flight shell reads and evexport.js / the loader inject at build
+ * time. (The repo defaults to CommonJS, so Node can't `require` this directly;
+ * for a Node-side engine test import it via a `.mjs` shim or
+ * `node --input-type=module`.)
  */
-
-(function (global) {
-'use strict';
 
 const FPS = 30;
 
@@ -211,7 +212,7 @@ function stepFlee(s, ex, ey) {
   integrate(s);
 }
 
-const EV = {
+export {
   FPS, maxSpeedOf, accelOf, turnOf,
   rad, norm, frameIndex, bearing,
   makeShip, thrust, steerToward, retrograde, integrate,
@@ -222,8 +223,3 @@ const EV = {
   HOMING_TURN, shotSpeedOf, makeShot, stepShot, applyDamage, stepShields,
   stepWarship, stepFlee,
 };
-
-if (typeof module !== 'undefined' && module.exports) module.exports = EV;
-else global.EV = EV;
-
-})(typeof self !== 'undefined' ? self : this);

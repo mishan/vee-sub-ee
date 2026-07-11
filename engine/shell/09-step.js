@@ -1,14 +1,23 @@
+import { S, TEST_MODE, escorts, explored, preloadSprites, ships, showMsg, spinsNeededFor, strictPlay, systs } from './01-state.js';
+import { maybeSpawnBountyHunter, spawnAI } from './02-spawning.js';
+import { attenuate, playSnd, stopAllLoops } from './03-sound.js';
+import { abortJump, completeJump, fire, hitShip, mapBearingTo, nearestSpobInfo, player, shipHalf, spawnExplosion } from './04-combat.js';
+import { keys, touchCtl } from './05-input.js';
+import { hailOpen, onShipDestroyed } from './06-interaction.js';
+import { maybeSpawnMissionShips, maybeSpawnPers, misnName, misns, onMissionEscortArrived, spobById } from './08-missions.js';
+import { introUp } from './11-title.js';
+
 /*
  * engine/shell/09-step.js — part of the browser flight shell.
  *
- * The shell modules are concatenated (in order.json order) into one <script>
- * in flight.html by `evexport --flight` and the loader, so they share a single
- * scope — treat them as one file split for readability, not as ES modules.
+ * esbuild bundles the shell modules (entry: main.js) into engine/shell.bundle.js,
+ * injected into flight.html by `evexport --flight` and the loader. 01-state is
+ * the leaf holding the shared state object S; modules import what they use.
  * Normative behavior: engine/ENGINE_SPEC.md.
  */
 /* ---------------- logic step (30Hz) ---------------- */
 
-function maxWeaponRange(e) {
+export function maxWeaponRange(e) {
   let r = 0;
   for (const w of e.weapons)
     if (w.rec.Guidance !== 99)
@@ -20,39 +29,39 @@ function maxWeaponRange(e) {
 /* Red-alert when the number of ships hostile to the player rises (a new
  * grudge, a bounty hunter jumping in, a defense fleet scrambling) — but not
  * for the ambient population when a system first loads (alertGrace). */
-let prevHostiles = 0, alertGrace = 0;
-function checkHostileAlert() {
-  const n = aiShips.filter(s => s.hostile && s.deathT < 0).length;
-  if (alertGrace > 0) alertGrace--;
-  else if (n > prevHostiles) playSnd(370, 0.7); // Red Alert
-  prevHostiles = n;
+S.prevHostiles = 0; S.alertGrace = 0;
+export function checkHostileAlert() {
+  const n = S.aiShips.filter(s => s.hostile && s.deathT < 0).length;
+  if (S.alertGrace > 0) S.alertGrace--;
+  else if (n > S.prevHostiles) playSnd(370, 0.7); // Red Alert
+  S.prevHostiles = n;
 }
 
-function step() {
+export function step() {
   // dialogs/splash/title pause the sim; landed pauses too — the system is
   // frozen while docked and rebuilt fresh on takeoff.
-  if (gameOver || hailOpen || introUp() || landedAt) return;
+  if (S.gameOver || hailOpen || introUp() || S.landedAt) return;
   maybeSpawnBountyHunter();
   checkHostileAlert();
-  if (!landedAt) {
-    if (jump && player.deathT >= 0) abortJump(); // no jumping out of a fireball
-    if (jump && jump.phase === 'engage') {
-      const ready = EV.stepJumpEngage(player, mapBearingTo(jump.destId));
-      jump.t++;
+  if (!S.landedAt) {
+    if (S.jump && player.deathT >= 0) abortJump(); // no jumping out of a fireball
+    if (S.jump && S.jump.phase === 'engage') {
+      const ready = EV.stepJumpEngage(player, mapBearingTo(S.jump.destId));
+      S.jump.t++;
       // spec: aligned+fast AND drive spun up AND clear of stellars
-      if (ready && jump.t >= EV.JUMP_WARMUP_FRAMES &&
+      if (ready && S.jump.t >= EV.JUMP_WARMUP_FRAMES &&
           nearestSpobInfo().dist >= EV.JUMP_MIN_DIST)
-        jump = { destId: jump.destId, phase: 'streak', t: 0 };
-    } else if (jump && jump.phase === 'streak') {
+        S.jump = { destId: S.jump.destId, phase: 'streak', t: 0 };
+    } else if (S.jump && S.jump.phase === 'streak') {
       EV.thrust(player); EV.integrate(player);
-      if (++jump.t >= EV.JUMP_STREAK_FRAMES) completeJump();
+      if (++S.jump.t >= EV.JUMP_STREAK_FRAMES) completeJump();
     } else if (player.deathT >= 0) {
       EV.integrate(player); // breaking up: drift while the death timer runs
       if (--player.deathT <= 0) {
         spawnExplosion(player.x, player.y, player.deathDelay >= 60 ? 2 : 1);
         playSnd(303);
         stopAllLoops();
-        gameOver = true;
+        S.gameOver = true;
         if (strictPlay) try { localStorage.removeItem('ve_pilot'); } catch {} // permadeath \u2014 the pilot is gone
         let hasPilot = false;
         try { hasPilot = !TEST_MODE && !!localStorage.getItem('ve_pilot'); } catch {}
@@ -83,15 +92,15 @@ function step() {
       });
       EV.stepShields(player, player.shieldMax, player.shieldRe);
       for (const w of player.weapons) if (w.cool > 0) w.cool--;
-      if (keys[' '] || touchCtl.fire) fire(player, shipTarget, true);
-      if (keys['x'] && player.selSecondary) fire(player, shipTarget, false);
+      if (keys[' '] || touchCtl.fire) fire(player, S.shipTarget, true);
+      if (keys['x'] && player.selSecondary) fire(player, S.shipTarget, false);
       /* klaxxon on shield collapse, re-armed on recovery */
-      if (player.shields <= 0 && klaxxonArmed) { playSnd(350, 0.8); klaxxonArmed = false; }
-      else if (player.shields > player.shieldMax * 0.25) klaxxonArmed = true;
+      if (player.shields <= 0 && S.klaxxonArmed) { playSnd(350, 0.8); S.klaxxonArmed = false; }
+      else if (player.shields > player.shieldMax * 0.25) S.klaxxonArmed = true;
     }
   }
 
-  for (const s of [...aiShips]) {
+  for (const s of [...S.aiShips]) {
     if (s.deathT >= 0) {                       // disintegrating (fireball already going)
       EV.integrate(s);
       // secondary blasts flicker across a bigger hull as it comes apart
@@ -101,8 +110,8 @@ function step() {
         spawnExplosion(s.x, s.y, s.deathDelay >= 60 ? 2 : 1); // final blast
         playSnd(303, attenuate(s.x, s.y)); // the final boom
         onShipDestroyed(s);
-        aiShips.splice(aiShips.indexOf(s), 1);
-        if (shipTarget === s) shipTarget = null;
+        S.aiShips.splice(S.aiShips.indexOf(s), 1);
+        if (S.shipTarget === s) S.shipTarget = null;
         if (s.fighter) {                         // a downed fighter is lost (bay ammo not restored)
           showMsg(`Your ${ships[s.shipId] ? ships[s.shipId].name : 'fighter'} was shot down.`);
           continue;
@@ -115,8 +124,8 @@ function step() {
           showMsg(`Your escort ${name} was destroyed.`);
           continue;                              // don't spawn an ambient replacement
         }
-        const epoch = systEpoch;
-        setTimeout(() => { if (epoch === systEpoch) spawnAI(true); }, 4000 + Math.random() * 8000);
+        const epoch = S.systEpoch;
+        setTimeout(() => { if (epoch === S.systEpoch) spawnAI(true); }, 4000 + Math.random() * 8000);
       }
       continue;
     }
@@ -128,18 +137,18 @@ function step() {
       // Guard the player: engage the nearest ship hostile to them, otherwise
       // hold a loose formation nearby. Escorts never target the player's side.
       let tgt = null, best = Infinity;
-      for (const h of aiShips) {
+      for (const h of S.aiShips) {
         if (h === s || h.playerEscort || h.deathT >= 0 || h.disabled || !h.hostile) continue;
         const d = Math.hypot(h.x - s.x, h.y - s.y);
         if (d < best) { best = d; tgt = h; }
       }
-      if (tgt && !gameOver && !landedAt) {
+      if (tgt && !S.gameOver && !S.landedAt) {
         const r = EV.stepWarship(s, tgt.x, tgt.y);
         if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, tgt, true);
       } else {
         EV.stepWarship(s, player.x, player.y); // shadow the player
       }
-    } else if (s.hostile && player.deathT < 0 && !gameOver && !landedAt) {
+    } else if (s.hostile && player.deathT < 0 && !S.gameOver && !S.landedAt) {
       const r = EV.stepWarship(s, player.x, player.y);
       if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, player, true);
     } else if (s.fleeing) {
@@ -154,15 +163,15 @@ function step() {
           // A catch-goal target (board/disable/destroy), or a named character
           // still carrying an unaccepted job, mustn't slip away by landing —
           // loiter near the spob instead of despawning.
-          s.target = spobs.length ? spobs[Math.floor(Math.random() * spobs.length)] : null;
+          s.target = S.spobs.length ? S.spobs[Math.floor(Math.random() * S.spobs.length)] : null;
           s.state = 'cruise'; s.fade = 1;
         } else {
           if (s.misnId != null && s.escort) onMissionEscortArrived(s);
-          aiShips.splice(aiShips.indexOf(s), 1);
-          if (shipTarget === s) shipTarget = null;
+          S.aiShips.splice(S.aiShips.indexOf(s), 1);
+          if (S.shipTarget === s) S.shipTarget = null;
           if (s.misnId == null) {
-            const epoch = systEpoch;
-            setTimeout(() => { if (epoch === systEpoch) spawnAI(Math.random() < 0.5); },
+            const epoch = S.systEpoch;
+            setTimeout(() => { if (epoch === S.systEpoch) spawnAI(Math.random() < 0.5); },
               2000 + Math.random() * 6000);
           }
         }
@@ -171,11 +180,11 @@ function step() {
   }
 
   /* shots */
-  const everyone = player.deathT < 0 && !landedAt && !gameOver ? [player, ...aiShips] : [...aiShips];
+  const everyone = player.deathT < 0 && !S.landedAt && !S.gameOver ? [player, ...S.aiShips] : [...S.aiShips];
   // The player and their escorts are one side: their fire never harms each other.
   const alliedTo = o => o === player || o.playerEscort;
   const friendly = (a, b) => alliedTo(a) && alliedTo(b);
-  for (const shot of [...shots]) {
+  for (const shot of [...S.shots]) {
     const alive = EV.stepShot(shot, shot.homing);
     let hit = false;
     for (const v of everyone) {
@@ -188,12 +197,12 @@ function step() {
         break;
       }
     }
-    if (hit || !alive) shots.splice(shots.indexOf(shot), 1);
+    if (hit || !alive) S.shots.splice(S.shots.indexOf(shot), 1);
   }
 
   /* beams: ray from owner's nose, damage first ship within 8 px */
-  for (const b of [...beams]) {
-    if (b.owner.deathT >= 0 || --b.life <= 0) { beams.splice(beams.indexOf(b), 1); continue; }
+  for (const b of [...S.beams]) {
+    if (b.owner.deathT >= 0 || --b.life <= 0) { S.beams.splice(S.beams.indexOf(b), 1); continue; }
     b.heading = b.turreted && b.target ? EV.bearing(b.target.x - b.owner.x, b.target.y - b.owner.y)
                                        : b.owner.heading;
     const dx = Math.sin(EV.rad(b.heading)), dy = -Math.cos(EV.rad(b.heading));
@@ -210,9 +219,60 @@ function step() {
   }
 
   /* explosions */
-  for (const ex of [...explosions]) {
+  for (const ex of [...S.explosions]) {
     if (++ex.tick % 2 === 0 && ++ex.f >= ex.frames)
-      explosions.splice(explosions.indexOf(ex), 1);
+      S.explosions.splice(S.explosions.indexOf(ex), 1);
   }
 }
 
+
+/* Arrive in / load a system: rebuild the per-system world and spawn ambient
+ * AI plus this system's mission/pers ships. Called on jump arrival,
+ * takeoff, and initial boot. */
+export function loadSystem(systId) {
+  S.SYSTEM_ID = +systId;
+  S.syst = systs[S.SYSTEM_ID];
+  explored.add(S.SYSTEM_ID);
+  S.systEpoch++;
+  S.spobs = Object.entries(DATA.types.spob)
+    .filter(([, p]) => p.System === S.SYSTEM_ID)
+    .map(([id, p]) => ({ id: +id, x: p.xPos, y: p.yPos, ...p }));
+  S.aiShips = [];
+  S.shots = []; S.beams = []; S.explosions = [];
+  S.navTarget = null; S.shipTarget = null;
+  S.alertGrace = 45; S.prevHostiles = 0; // don't red-alert the ambient population
+  preloadSprites(spinsNeededFor(S.SYSTEM_ID));
+  // Landscapes for this system's spobs (default 10000+Type and custom),
+  // so the planet screen never shows without its picture.
+  for (const p of S.spobs)
+    for (const id of [10000 + p.Type, p.CustPicID].filter(v => v >= 0)) {
+      if (document.getElementById('scape' + id)) continue;
+      const img = document.createElement('img');
+      img.id = 'scape' + id;
+      img.src = 'evassets/titles/PICT_' + id + '.png';
+      img.style.display = 'none';
+      img.onerror = () => img.remove();
+      document.body.appendChild(img);
+    }
+  const n = Math.min(Math.max(S.syst.AvgShips, 2), 8);
+  for (let i = 0; i < n; i++) spawnAI(false);
+  // NB: the player's escorts are spawned by the *caller*, after it has placed
+  // the player (arrival edge / launch pad) — see spawnEscorts(). Spawning here
+  // would use the player's stale pre-arrival coordinates.
+  // missions: AvailRandom rerolls per arrival; place this system's ships;
+  // mark observe goals satisfied when we arrive in the right system.
+  S.availRandom = {};
+  S.resolvedOffers = {}; // fresh mission destinations/cargo/deadlines per system
+  for (const A of S.activeMissions) {
+    maybeSpawnMissionShips(A);
+    if (A.shipGoal === 4 && !A.observed) {
+      const sys = A.shipSyst;
+      if ((sys >= 128 && sys === S.SYSTEM_ID) ||
+          (A.travelStel && spobById(A.travelStel) && spobById(A.travelStel).System === S.SYSTEM_ID)) {
+        A.observed = true;
+        showMsg(`${misnName(misns[A.id], A)}: target observed — return for payment.`);
+      }
+    }
+  }
+  maybeSpawnPers(); // a named character may be here with a job (after AvailRandom reset)
+}
