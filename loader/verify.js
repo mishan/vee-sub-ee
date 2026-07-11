@@ -13,12 +13,12 @@
 const fs = require('fs');
 const cp = require('child_process');
 const path = require('path');
-const { loadFork, parseFork, decodeRecord } = require('../evrsrc.js');
+const { loadFork, parseFork, decodeRecord, buildFork, resolveType } = require('../evrsrc.js');
 const { decodePict } = require('./evpict.js');
 const { decodeSnd } = require('./evsnd.js');
 const { compositeSprite } = require('./evsprite.js');
 const { parseSit, extractFork, unstuff13 } = require('./evsit.js');
-const { buildData } = require('./evbuild.js');
+const { buildData, buildManifest, routeAssets } = require('./evbuild.js');
 
 const ROOT = path.join(__dirname, '..');
 const D = f => path.join(ROOT, 'EV_data', f);
@@ -202,9 +202,100 @@ function checkHardening() {
   console.log(`guard: ${pass}/${pass + fail} hardening assertions pass`);
 }
 
+// Plugin merge: a plugin resource overrides the base resource at the same
+// (type, ID) and a new ID is added. Synthesized with buildFork from the real
+// base ship 128's bytes (nothing copyrighted is written to disk).
+function checkPluginMerge() {
+  const dataFile = D('EV Data.rsrc');
+  if (!fs.existsSync(dataFile)) return;
+  const dataFork = loadFork(dataFile).fork;
+  const shipType = parseFork(dataFork).find(t => t.typeName === 'shïp');
+  const base128 = shipType && shipType.resources.find(r => r.id === 128);
+  if (!base128) return;
+
+  const orig = Buffer.from(base128.data());
+  const tuned = Buffer.from(orig); tuned[2] ^= 0xff; tuned[3] ^= 0xff;   // perturb one field
+  const T = resolveType('ship');
+  const plugin = buildFork([
+    { type: T, id: 128, name: 'Tuned', data: tuned },              // override existing
+    { type: T, id: 200, name: 'Clone', data: Buffer.from(orig) },  // add new (copy of orig)
+  ]);
+
+  const schemaDir = path.join(ROOT, 'schemas'); const schemasByType = {};
+  for (const f of fs.readdirSync(schemaDir)) {
+    if (!f.endsWith('.json')) continue;
+    const s = JSON.parse(fs.readFileSync(path.join(schemaDir, f), 'utf8'));
+    schemasByType[s.name] = { alias: path.basename(f, '.json'), schema: s };
+  }
+  const base = buildData(dataFork, schemasByType);
+  const plug = buildData(dataFork, schemasByType, [plugin]);
+
+  let pass = 0, fail = 0;
+  const ok = (n, c) => { c ? pass++ : (fail++, console.log('  ✗ ' + n)); };
+  ok('override changes ship 128', JSON.stringify(plug.types.ship[128]) !== JSON.stringify(base.types.ship[128]));
+  ok('new ship 200 added', !!plug.types.ship[200] && !base.types.ship[200]);
+  ok('ship count grew by exactly 1', Object.keys(plug.types.ship).length === Object.keys(base.types.ship).length + 1);
+  // ship 200's bytes are a copy of the *original* 128, so it decodes identically (bar the name).
+  const a = { ...plug.types.ship[200] }, b = { ...base.types.ship[128] }; delete a.name; delete b.name;
+  ok('added ship decodes like the original', JSON.stringify(a) === JSON.stringify(b));
+  // an empty plugin list is a no-op (normalize the volatile `generated` stamp).
+  const norm = d => JSON.stringify({ ...d, generated: '' });
+  ok('empty plugin list is a no-op', norm(buildData(dataFork, schemasByType)) === norm(buildData(dataFork, schemasByType, [])));
+  console.log(`plugin: ${pass}/${pass + fail} merge assertions pass`);
+  if (fail) process.exitCode = 1;
+}
+
+// Plugin graphics/sounds routing: a plugin fork mixes everything, and its
+// resources must land in the right asset bucket (spïn/new-PICT → graphics,
+// PICT that overrides a title → titles, snd → sounds), and its spïn must reach
+// the manifest.
+function checkPluginAssets() {
+  const gF = D('EV Graphics.rsrc'), tF = D('EV Titles.rsrc'), sF = D('EV Sounds.rsrc');
+  if (!fs.existsSync(gF) || !fs.existsSync(tF)) return;
+  const gfx = loadFork(gF).fork, titles = loadFork(tF).fork;
+  const sounds = fs.existsSync(sF) ? loadFork(sF).fork : null;
+  // Bail cleanly (like the other checks) if the base forks lack the types we need.
+  const spinT = parseFork(gfx).find(t => t.typeName === 'spïn');
+  const titleT = parseFork(titles).find(t => t.typeName === 'PICT');
+  if (!spinT || !spinT.resources.length || !titleT || !titleT.resources.length) return;
+  const realSpin = spinT.resources[0];               // valid record bytes
+  const titlePictId = titleT.resources[0].id;
+
+  const plugin = buildFork([
+    { type: resolveType('spin'), id: 9500, data: Buffer.from(realSpin.data()) },   // new sprite → graphics
+    { type: resolveType('PICT'), id: 9600, data: Buffer.from([1, 2]) },            // new pict → graphics
+    { type: resolveType('PICT'), id: titlePictId, data: Buffer.from([3, 4]) },     // override title → titles
+    { type: resolveType('snd '), id: 9700, data: Buffer.from([5, 6]) },            // sound → sounds
+  ]);
+
+  const routed = routeAssets(gfx, titles, sounds, [plugin]);
+  const inBucket = (bucket, typeName, id) => {
+    const t = routed[bucket].find(x => x.typeName === typeName);
+    return !!t && t.resources.some(r => r.id === id);
+  };
+  const routedTitlePict = routed.titles.find(x => x.typeName === 'PICT');
+  const titlePict = routedTitlePict && routedTitlePict.resources.find(r => r.id === titlePictId);
+
+  let pass = 0, fail = 0;
+  const ok = (n, c) => { c ? pass++ : (fail++, console.log('  ✗ ' + n)); };
+  ok('plugin spïn → graphics', inBucket('graphics', 'spïn', 9500));
+  ok('new plugin PICT → graphics', inBucket('graphics', 'PICT', 9600));
+  ok('new plugin PICT not in titles', !inBucket('titles', 'PICT', 9600));
+  ok('title-override PICT → titles', inBucket('titles', 'PICT', titlePictId));
+  ok('title-override replaced the bytes', !!titlePict && Buffer.from(titlePict.data()).equals(Buffer.from([3, 4])));
+  ok('plugin snd → sounds', inBucket('sounds', 'snd ', 9700));
+  // the plugin's spïn 9500 reaches the sprite manifest (so a new ship gets a frame grid)
+  const m = buildManifest(gfx, JSON.parse(fs.readFileSync(path.join(ROOT, 'schemas', 'spin.json'), 'utf8')), [plugin]);
+  ok('plugin spïn 9500 reaches the manifest', !!m.spins[9500]);
+  console.log(`plugin-assets: ${pass}/${pass + fail} routing assertions pass`);
+  if (fail) process.exitCode = 1;
+}
+
 checkPict();
 checkSnd();
 checkSprites();
 checkSit();
 checkBuildData();
 checkHardening();
+checkPluginMerge();
+checkPluginAssets();

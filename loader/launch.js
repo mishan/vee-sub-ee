@@ -29,11 +29,20 @@
       ENGINE_FILES.map(f => fetch(f).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + f); return r.text(); })));
     return { tpl, core, rest };
   }
+  const toHex = digest => [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
   // SHA-256 of the concatenated sources — the build's identity in the marker.
   async function sourcesHash(src) {
     const bytes = new TextEncoder().encode([src.tpl, src.core, ...src.rest].join('\u0000'));
-    const digest = await crypto.subtle.digest('SHA-256', bytes);
-    return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+    return toHex(await crypto.subtle.digest('SHA-256', bytes));
+  }
+  // SHA-256 of the plugin forks, length-prefixed so order and boundaries matter
+  // (plugin order is override precedence). '' when there are no plugins.
+  async function pluginsHash(forks) {
+    if (!forks.length) return '';
+    let n = 0; for (const f of forks) n += 4 + f.length;
+    const buf = new Uint8Array(n), dv = new DataView(buf.buffer); let o = 0;
+    for (const f of forks) { dv.setUint32(o, f.length); o += 4; buf.set(f, o); o += f.length; }
+    return toHex(await crypto.subtle.digest('SHA-256', buf));
   }
 
   // Register the game SW and resolve once it's activated. We can't await
@@ -99,14 +108,16 @@
     }
   }
 
-  async function produceAssets(cache, base, forks, spinSchema, log, opts = {}) {
+  async function produceAssets(cache, base, forks, spinSchema, log, opts = {}, pluginForks = []) {
     const jobs = [];
     // Count skips per category. Individual bad resources are tolerated, but a
     // whole category failing (e.g. a decoder regression breaking every PICT)
     // should be visible rather than silently "building fine".
     const skip = { pict: 0, sprite: 0, snd: 0 }, tried = { pict: 0, sprite: 0, snd: 0 };
-    for (const [fork, dir] of [['EV Graphics', 'graphics'], ['EV Titles', 'titles']]) {
-      const types = EVRSRC.parseFork(Buffer.from(forks[fork]));
+    // Merge base + plugin graphics/titles/sounds by (type, ID); plugin sprites,
+    // shop art, and sounds fold in here (see EVBUILD.routeAssets).
+    const routed = EVBUILD.routeAssets(forks['EV Graphics'], forks['EV Titles'], forks['EV Sounds'], pluginForks);
+    for (const [types, dir] of [[routed.graphics, 'graphics'], [routed.titles, 'titles']]) {
       // findType returns undefined for an absent type; degrade to no jobs rather
       // than a TypeError. (The drop-time preview already rejects an archive
       // missing EV Graphics' PICT/spin with a clear message before we get here.)
@@ -142,17 +153,20 @@
     // resource (decodeSnd {error}, e.g. compressed, or a throw on corrupt data)
     // is skipped rather than caching a bogus WAV or aborting the whole build.
     const decodePcm = data => { try { const d = decodeSnd(data); return (d && d.sampleRate && (d.pcm8 || d.pcm16)) ? d : null; } catch { return null; } };
-    // sounds are cheap (no canvas); skip cleanly if the fork (or its snd type) is absent
-    if (forks['EV Sounds']) {
-      const sfx = EVRSRC.parseFork(Buffer.from(forks['EV Sounds']));
-      const sndType = EVRSRC.findType(sfx, 'snd ');
-      for (const r of (sndType ? sndType.resources : [])) { tried.snd++; const d = decodePcm(r.data()); if (d) await cache.put(base + 'evassets/sounds/snd_' + r.id + '.wav', wavResp(d)); else skip.snd++; }
-    }
-    if (forks['EV Music']) {
+    // sounds are cheap (no canvas); routed.sounds already folds in plugin snd.
+    // snd 30000 is the title music (a different asset path, below), not an
+    // effect — skip it here so it isn't also written under sounds/.
+    const sndType = EVRSRC.findType(routed.sounds, 'snd ');
+    for (const r of (sndType ? sndType.resources : [])) { if (r.id === 30000) continue; tried.snd++; const d = decodePcm(r.data()); if (d) await cache.put(base + 'evassets/sounds/snd_' + r.id + '.wav', wavResp(d)); else skip.snd++; }
+    // Music (snd 30000 → evassets/music/snd_30000.wav, per flight_template.html):
+    // prefer a plugin-provided/merged snd 30000, falling back to the base EV
+    // Music fork when no plugin overrides it.
+    let music = sndType && sndType.resources.find(r => r.id === 30000);
+    if (!music && forks['EV Music']) {
       const mus = EVRSRC.parseFork(Buffer.from(forks['EV Music'])), sm = EVRSRC.findType(mus, 'snd ');
-      const m = sm && sm.resources.find(r => r.id === 30000);
-      if (m) { const d = decodePcm(m.data()); if (d) await cache.put(base + 'evassets/music/snd_30000.wav', wavResp(d)); }
+      music = sm && sm.resources.find(r => r.id === 30000);
     }
+    if (music) { const d = decodePcm(music.data()); if (d) await cache.put(base + 'evassets/music/snd_30000.wav', wavResp(d)); }
     // One summary line, and a loud warning if a whole category was attempted but
     // entirely failed — the signature of a decoder regression, not stray data.
     if (log) {
@@ -182,7 +196,11 @@
 
   /* Build everything and stage it in Cache Storage + register the SW.
    * Returns the URL to navigate to. */
-  async function buildAndCache(forks, spinSchema, log = () => {}, opts = {}) {
+  async function buildAndCache(forks, spinSchema, plugins = [], log = () => {}, opts = {}) {
+    // plugins: array of raw resource-fork bytes, in load order. Their records
+    // override/add game data by (type, ID); their graphics/sounds fold into the
+    // asset render. An empty list leaves the build byte-for-byte as before.
+    const pluginForks = plugins;
     // Ask the browser to keep this origin's storage under pressure — the whole
     // first-run cache lives here, so persistence cuts "it forgot my game".
     if (navigator.storage && navigator.storage.persist) { try { await navigator.storage.persist(); } catch {} }
@@ -200,8 +218,8 @@
     }));
     if (failed.length) throw new Error('Could not load game schemas: ' + failed.join(', '));
     log('Building game database…');
-    const DATA = EVBUILD.buildData(forks['EV Data'], schemasByType);
-    const MANIFEST = EVBUILD.buildManifest(forks['EV Graphics'], spinSchema);
+    const DATA = EVBUILD.buildData(forks['EV Data'], schemasByType, pluginForks);
+    const MANIFEST = EVBUILD.buildManifest(forks['EV Graphics'], spinSchema, pluginForks);
     // Fetch the engine sources once; flight.html and the marker hash both derive
     // from these exact strings (no mid-build server-change window).
     const src = await fetchEngineSources();
@@ -218,14 +236,18 @@
     await registerSW();
     if (!opts.skipAssets) {
       log('Rendering assets…');
-      await produceAssets(cache, base, forks, spinSchema, log, opts);
+      await produceAssets(cache, base, forks, spinSchema, log, opts, pluginForks);
     }
     // Completion marker, written last so its presence guarantees a full build
     // is cached. Only a complete build qualifies for the instant-replay path —
     // `fast` (skips graphics PICTs) and `skipAssets` builds don't get a marker.
     if (!opts.skipAssets && !opts.fast) {
+      // Record the plugin identity too (count + content hash), so the cached
+      // build's provenance is explicit — a return visit knows it was built with
+      // plug-ins rather than silently replaying them (see checkBuilt/resume).
       await cache.put(base + BUILT_MARKER, new Response(
-        JSON.stringify({ h: await sourcesHash(src), built: Date.now() }),
+        JSON.stringify({ h: await sourcesHash(src), built: Date.now(),
+          plugins: pluginForks.length, ph: await pluginsHash(pluginForks) }),
         { headers: { 'content-type': 'application/json' } }));
     }
     log('Ready.');

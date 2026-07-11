@@ -144,15 +144,21 @@ function unwrapAppleDouble(buf) {
   return null;
 }
 
-function loadFork(file) {
-  const buf = fs.readFileSync(file);
+// Unwrap a container from bytes (works in the browser — no fs). Returns
+// { container, fork }. loadFork() is the Node file wrapper around it.
+function unwrapFork(buf) {
   const mb = unwrapMacBinary(buf);
   if (mb) return mb;
   const ad = unwrapAppleDouble(buf);
   if (ad) return ad;
   if (looksLikeResourceFork(buf)) return { container: 'raw fork', fork: buf };
-  throw new Error(`${file}: not MacBinary, AppleDouble, or a raw resource fork ` +
-    `(if this is a .sit/.cpt archive, expand it first — 'unar' handles StuffIt)`);
+  throw new Error('not MacBinary, AppleDouble, or a raw resource fork ' +
+    "(if this is a .sit/.cpt archive, expand it first — 'unar' handles StuffIt)");
+}
+
+function loadFork(file) {
+  try { return unwrapFork(fs.readFileSync(file)); }
+  catch (e) { throw new Error(`${file}: ${e.message}`); }
 }
 
 /* ------------------------------------------------------------------ */
@@ -201,6 +207,37 @@ function parseFork(fork) {
     });
   }
   return types;
+}
+
+/*
+ * Merge parsed type arrays (from parseFork) in **load order** — base first,
+ * then plugins. This is EV's plugin rule: a later fork's resource replaces any
+ * earlier resource with the same (type, ID); a new ID is added. See the EV
+ * Bible: "Any resources in a plugin file automatically replace same-numbered
+ * resources in the main files."
+ *
+ * Type order follows first appearance; within a type, an override keeps the
+ * base resource's position and a new ID appends — so the no-plugin result is
+ * identical to the single input.
+ */
+function mergeTypes(...typeArrays) {
+  const byType = new Map(); // typeHex -> { typeBytes, typeName, typeHex, ids: Map(id -> resource) }
+  for (const types of typeArrays) {
+    for (const t of types) {
+      let entry = byType.get(t.typeHex);
+      if (!entry) {
+        entry = { typeBytes: t.typeBytes, typeName: t.typeName, typeHex: t.typeHex, ids: new Map() };
+        byType.set(t.typeHex, entry);
+      }
+      // Map.set on an existing key overrides the value but keeps its position;
+      // a new id appends — exactly the override-or-add semantics we want.
+      for (const r of t.resources) entry.ids.set(r.id, r);
+    }
+  }
+  return [...byType.values()].map(e => ({
+    typeBytes: e.typeBytes, typeName: e.typeName, typeHex: e.typeHex,
+    resources: [...e.ids.values()],
+  }));
 }
 
 function findType(types, typeArg) {
@@ -473,7 +510,7 @@ function main() {
 }
 
 const EVRSRC_API = {
-  loadFork, parseFork, findType, resolveType, decodeRecord, decodeStrList,
+  loadFork, unwrapFork, parseFork, mergeTypes, findType, resolveType, decodeRecord, decodeStrList,
   buildFork, macRomanToString, stringToMacRoman,
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = EVRSRC_API;
