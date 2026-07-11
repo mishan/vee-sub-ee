@@ -25,14 +25,21 @@
     'evsit.js', 'evpict.js', 'evsnd.js', 'evsprite.js', 'evbuild.js',
     ...SCHEMA_NAMES.map(n => '../schemas/' + n + '.json')];
   async function fetchEngineSources() {
-    const [tpl, core, ...rest] = await Promise.all(
-      ENGINE_FILES.map(f => fetch(f).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + f); return r.text(); })));
-    return { tpl, core, rest };
+    // The flight shell is split into engine/shell/*.js, concatenated (in
+    // order.json order) into flight.html's script. Fetch those too, in order.
+    const order = await fetch('../engine/shell/order.json').then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ' for shell order.json'); return r.json(); });
+    const paths = [...ENGINE_FILES, ...order.map(f => '../engine/shell/' + f)];
+    const texts = await Promise.all(paths.map(f => fetch(f).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + f); return r.text(); })));
+    return {
+      tpl: texts[0], core: texts[1],
+      rest: texts.slice(2, ENGINE_FILES.length),   // evrsrc/semantics/nodeshim/decoders/schemas (hashed)
+      shell: texts.slice(ENGINE_FILES.length),      // shell modules, in load order
+    };
   }
   const toHex = digest => [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
   // SHA-256 of the concatenated sources — the build's identity in the marker.
   async function sourcesHash(src) {
-    const bytes = new TextEncoder().encode([src.tpl, src.core, ...src.rest].join('\u0000'));
+    const bytes = new TextEncoder().encode([src.tpl, src.core, ...src.rest, ...src.shell].join('\u0000'));
     return toHex(await crypto.subtle.digest('SHA-256', bytes));
   }
   // SHA-256 of the plugin forks, length-prefixed so order and boundaries matter
@@ -189,6 +196,7 @@
       .replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
     return src.tpl
       .replace('/*__ENGINE__*/', () => src.core)
+      .replace('/*__SHELL__*/', () => src.shell.join('\n'))   // concatenated shell modules
       .replace('/*__EVDATA__*/null', () => inject(DATA))
       .replace('/*__MANIFEST__*/null', () => inject(MANIFEST))
       .replace('/*__NAMES__*/null', () => 'null');

@@ -125,6 +125,12 @@ function main() {
     const engine = fs.readFileSync(path.join(__dirname, 'engine', 'core.js'), 'utf8');
     const tpl = fs.readFileSync(path.join(__dirname, 'flight_template.html'), 'utf8');
     if (!tpl.includes('/*__EVDATA__*/null')) throw new Error('flight template missing __EVDATA__ placeholder');
+    if (!tpl.includes('/*__SHELL__*/')) throw new Error('flight template missing __SHELL__ placeholder');
+    // The browser flight shell is split into engine/shell/*.js for readability;
+    // concatenate them (in order.json order) into the one template <script>.
+    const shellDir = path.join(__dirname, 'engine', 'shell');
+    const shellOrder = JSON.parse(fs.readFileSync(path.join(shellDir, 'order.json'), 'utf8'));
+    const shell = shellOrder.map(f => fs.readFileSync(path.join(shellDir, f), 'utf8')).join('\n');
     // Name suggestions (STR# 128 "Default Names") live in the EV application's
     // resource fork, not the game data. If the app rsrc is supplied, split the
     // list in half — pilot names, then ship names — and inject it. Otherwise
@@ -144,6 +150,7 @@ function main() {
     }
     fs.writeFileSync(flightPath, tpl
       .replace('/*__ENGINE__*/', () => engine)
+      .replace('/*__SHELL__*/', () => shell)
       .replace('/*__EVDATA__*/null', JSON.stringify(out))
       .replace('/*__MANIFEST__*/null', manifest.trim())
       .replace('/*__NAMES__*/null', () => names));

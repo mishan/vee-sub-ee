@@ -19,7 +19,8 @@ SCHEMAS := $(wildcard schemas/*.json)
 # file itself is intentionally not a prerequisite: it rarely changes and its
 # name contains a space (which make treats as a prerequisite separator), so
 # it's referenced only inside the recipes. Run `make clean flight` to force.
-FLIGHT_DEPS := flight_template.html engine/core.js evexport.js evrsrc.js \
+FLIGHT_DEPS := flight_template.html engine/core.js $(wildcard engine/shell/*.js) \
+               engine/shell/order.json evexport.js evrsrc.js \
                semantics.js $(ASSETS)/manifest.json $(SCHEMAS)
 GALAXY_DEPS := galaxy_viewer.html evexport.js evrsrc.js semantics.js $(SCHEMAS)
 

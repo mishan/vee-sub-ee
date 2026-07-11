@@ -58,8 +58,15 @@ Headless UI verification: `firefox --headless --screenshot out.png
 - `engine/ENGINE_SPEC.md` — **normative** flight/AI/game rules, implemented by
   `engine/core.js` (injected into flight.html at build; require-able in node).
   Any behavior change: spec first, then the core.
-- `flight_template.html` — browser shell (canvas render, DOM dialogs); the
-  built `flight.html` injects core.js + the game DATA/MANIFEST into it.
+- `flight_template.html` — browser shell HTML/CSS + a script with `/*__ENGINE__*/`
+  (core.js) and `/*__SHELL__*/` placeholders; the built `flight.html` injects
+  core.js, the shell, and the game DATA/MANIFEST into it.
+- `engine/shell/*.js` — the flight shell (canvas render, DOM dialogs, game
+  state/UI), split by domain (state, spawning, sound, combat, input, …) for
+  readability. `evexport --flight` and the loader **concatenate them in
+  `engine/shell/order.json` order into one `<script>`**, so they share a single
+  scope — edit them as one file split across files, not as ES modules (order
+  matters: later files may reference earlier top-level declarations).
 - Per-ship PICTs (index = shïp−128): target schematic 3000+i, hail comm
   portrait 5300+i, shipyard detail 5000+i, outfit detail 6000+i.
 - Asset conventions (spec "Sprite ID conventions"): ship spïn = shïp ID,
