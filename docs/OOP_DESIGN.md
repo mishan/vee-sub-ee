@@ -133,6 +133,104 @@ class HireBoard    extends Dialog { … }
 move fields onto it a cluster at a time, each with real getters/methods
 (`state.canAfford(n)`, `state.spend(n)`), so the invariants live with the data.
 
+## Separating UI from logic (the presentation layer)
+
+Layer 4 above is about *class* shape; this section is about *file* shape — where
+the dialog HTML and canvas drawing physically live. The two reinforce each
+other, but the file split can happen first and independently, and it's the
+natural continuation of the mission-board extraction.
+
+### Where UI lives today
+
+A quick census of the shell (counting `html\`\`` templates, `document.` access,
+canvas `ctx.` calls, and inline `onclick=` handlers) sorts the modules into
+three groups:
+
+- **Already UI-free logic** — `02-spawning`, `03-sound`, `04-combat`,
+  `08-missions`, `12-boarding`, `13-legal`, `15-pers`. Nothing to do.
+- **Already presentation** — `10-render` (canvas: ~115 `ctx.` calls),
+  `16-missionboard` (the split we just did), most of `11-title` and
+  `14-landing`.
+- **Still mixed** — `07-trade` (trade/outfit/buy logic + three shop render
+  functions), `06-interaction` (targeting/hail logic + a hail dialog with ~22
+  inline handlers). These are the real targets.
+
+Plus one cross-cutting item: the `html` / `SafeHtml` / `escapeHtml` template
+tag lives in `01-state.js` (the state leaf), even though it's a pure UI
+primitive used everywhere.
+
+### Target: an `engine/shell/ui/` subfolder
+
+Presentation modules move under `engine/shell/ui/`, so the logic/UI boundary is
+visible in the directory tree rather than implied by a comment. Logic modules
+keep their `NN-*.js` names and load-order role; UI modules are named by domain
+(they're mostly pure `render() → SafeHtml` with no init-order side effects, so
+they don't need the numeric prefix).
+
+```
+engine/shell/
+  01-state.js … 17-main.js         # game logic + state + the tick
+  ui/
+    html.js         # html`` / SafeHtml / escapeHtml (new leaf, imports nothing)
+    dialog.js       # the View/Dialog base + openService/close registry
+    shops.js        # renderExchange / renderOutfitter / renderShipyard / shopGrid
+    missionboard.js # moved from 16-missionboard.js
+    hail.js         # hail dialog, extracted from 06-interaction
+    landing.js      # planet landing screen, extracted from 14-landing
+    title.js        # title + splash screens, extracted from 11-title
+    render.js       # the canvas HUD/scene renderer (was 10-render.js)
+```
+
+Each UI module imports the logic it presents; the logic module no longer
+imports its own render function. Where a logic-side registry needs a render
+function (e.g. `07-trade`'s `SERVICE_VIEWS` pointing at `renderExchange`), it
+imports it from `ui/` — the same forward-reference across the module graph that
+already works for `renderBar`/`renderComputer` today (hoisted function
+declarations resolve regardless of file load order).
+
+### Boundaries, concretely
+
+- **`07-trade` → `ui/shops.js`.** Move `renderExchange`, `renderOutfitter`,
+  `renderShipyard`, `shopGrid`, `walletHtml`. Keep `trade`, `buyOutfit`,
+  `buyShip`, `techAvailable`, and the stock/price helpers in `07-trade`. The
+  `View` class, `openService`, `closeService`, and `SERVICE_VIEWS` move to
+  `ui/dialog.js` (they're the dialog framework, shared by every screen).
+- **`06-interaction` → `ui/hail.js`.** Move the hail dialog markup + its
+  handlers; keep target cycling, hail eligibility, and interaction state.
+- **`14-landing` → `ui/landing.js`**, **`11-title` → `ui/title.js`**,
+  **`10-render` → `ui/render.js`** — mostly relocations, since these are
+  already presentation-dominant.
+- **`html` primitive → `ui/html.js`.** New leaf that imports nothing; every
+  current `import { html } from './01-state.js'` becomes
+  `from './ui/html.js'`. Mechanical but wide; do it in its own commit.
+
+### Load order & the global bridge
+
+`main.js` keeps importing logic modules in their existing order (`01-state`
+stays the first leaf), then imports the `ui/` modules after them. UI modules
+must avoid top-level side effects that other init depends on; the one current
+example — `S.selMisnId = null` in the mission board — moves onto the state
+initializer instead. The `Object.assign(globalThis, …)` bridge still exposes UI
+handlers for now; retiring it is Layer-4 work (self-binding `Dialog`s), which
+this file split sets up but doesn't require.
+
+### Migration path (each slice ships green)
+
+Independent of the class work; each is one branch, verified with lint,
+`npm test`, and headless-boot screenshots of the affected screen:
+
+1. `ui/shops.js` — extract the three shop renderers from `07-trade` (mirrors
+   the mission-board split). **Recommended first slice.**
+2. `ui/dialog.js` — lift the `View`/`openService` framework out of `07-trade`;
+   move `16-missionboard.js` under `ui/`.
+3. `ui/hail.js` — the hardest one (most inline handlers); extract from
+   `06-interaction`.
+4. `ui/html.js` — relocate the template primitive; rewire every importer.
+5. `ui/landing.js`, `ui/title.js`, `ui/render.js` — relocations.
+
+Do the file separation first; the `Dialog`-class conversion (Layer 4) then
+lands cleanly on top, one screen at a time.
+
 ## Tradeoffs and risks
 
 - **Testability.** The core's purity is its greatest asset; classes must not
@@ -185,5 +283,8 @@ zero shell or DOM risk. If it feels right, we proceed to `World`.
 - **Compatibility layer (decided):** do **not** keep the old `EV.thrust(ship)`
   function exports long-term. Migrate call sites to methods and delete the free
   functions, so there's one way to do each thing and no dead API.
+- **UI/logic separation (decided):** presentation moves into an
+  `engine/shell/ui/` subfolder (see the section above). Planned only for now —
+  no extraction yet; recommended first slice is `ui/shops.js`.
 - **Open — `GameState` shape:** one class, or a few focused ones (Wallet,
   LegalRecord, MissionLog) composed together? (I lean toward a few focused ones.)
