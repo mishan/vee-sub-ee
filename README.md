@@ -63,8 +63,12 @@ zero-dependency toolchain lifts it into plain JSON that the engine consumes:
 
 The flight rules live once, normatively, in
 [`engine/ENGINE_SPEC.md`](engine/ENGINE_SPEC.md), implemented by the DOM-free
-`engine/core.js`, which the browser shell (`flight_template.html`) injects at
-build time.
+`engine/core.js`. The browser UI around it — canvas rendering, dialogs, input,
+game state — is the *shell*, split by domain across `engine/shell/*.js`. The
+build concatenates those modules (in `engine/shell/order.json` order) and injects
+them, with `core.js` and the game data, into `flight_template.html`; because they
+share one scope, treat them as a single file split for readability rather than as
+ES modules.
 
 The **browser loader** in `loader/` is a second, dependency-free
 implementation of that whole pipeline (StuffIt decompression, PICT/`snd `/sprite
@@ -85,7 +89,8 @@ make help       # list all targets
 ```
 
 The build is driven by placeholder injection: `evexport.js` slots the game
-database, sprite manifest, and `engine/core.js` into `flight_template.html`.
+database, sprite manifest, `engine/core.js`, and the concatenated
+`engine/shell/*.js` modules into `flight_template.html`.
 Dev/test hooks are URL params on `flight.html` — e.g. `?syst=`, `?ship=`,
 `?x=&y=&heading=`, `?map=1`, `?land=1` — handy for jumping straight into a
 scenario.
