@@ -3,8 +3,10 @@
 **Vₑ** (`V_e`, "vee-sub-e") — clean-room reimplementation of Escape
 Velocity (Ambrosia, classic Mac). The name is the physics symbol for
 escape velocity, and EV backwards.
-Browser-first engine with an SDL port kept in lockstep. The engine is ours;
-the game data is not — see "Data hygiene" below.
+Browser-first engine (DOM-free flight core in pure JS). The engine is ours;
+the game data is not — see "Data hygiene" below. (An old C++/SDL port was
+dropped to focus on the browser; it's preserved on the unmerged `sdl-port`
+branch.)
 
 ## Git workflow
 
@@ -21,7 +23,7 @@ the game data is not — see "Data hygiene" below.
 ## Commands
 
 A top-level `Makefile` wraps the common ones: `make` builds flight.html,
-plus `make galaxy`/`data`/`assets`/`schemas`/`check`/`selftest`/`cpp`/`clean`
+plus `make galaxy`/`data`/`assets`/`schemas`/`selftest`/`verify`/`clean`
 (`make help` lists targets). The raw commands are below.
 
 ```sh
@@ -32,17 +34,13 @@ node evexport.js "EV_data/EV Data.rsrc" --map galaxy.html            # galaxy vi
 node evexport.js "EV_data/EV Data.rsrc" --flight flight.html         # THE GAME (browser)
 ./evconvert.sh EV_data evassets   # PICT/snd → PNG/WAV (needs resource_dasm, ImageMagick)
 ./evsprites.sh evassets           # composite sprite+mask → transparent sheets
-node engine/check_traces.js       # golden trace: JS core vs C++ port (MUST pass)
-cd cpp && make && make test       # SDL leg build + headless render test
+node loader/verify.js             # check the loader's in-browser decoders vs native
 ```
 
 Headless UI verification: `firefox --headless --screenshot out.png
-"file://…/flight.html?<params>"` (browser) and `SDL_VIDEODRIVER=dummy
-./evflight --root .. --frames N --screenshot out.png <flags>` (SDL).
-Test affordances are mirrored: URL params `?map=1 ?dest= ?jump=1 ?land=1
-?exchange=1 ?outfitter=1 ?shipyard=1 ?tab=1 ?nav=1 ?ff=N ?syst= ?ship=
-?x/y/heading` ↔ SDL flags `--map --dest --jump --land --exchange
---outfitter --shipyard --tab --nav --frames --syst --ship --x/y/heading`.
+"file://…/flight.html?<params>"`. Test affordances are URL params:
+`?map=1 ?dest= ?jump=1 ?land=1 ?exchange=1 ?outfitter=1 ?shipyard=1 ?tab=1
+?nav=1 ?ff=N ?syst= ?ship= ?x/y/heading`.
 
 ## Architecture
 
@@ -57,13 +55,11 @@ Test affordances are mirrored: URL params `?map=1 ?dest= ?jump=1 ?land=1
 - `evexport.js` — full DB → evdata.json (`--semantic` adds `$sem`
   annotations); also builds galaxy.html / flight.html by placeholder
   injection into the *_template.html files.
-- `engine/ENGINE_SPEC.md` — **normative** flight/AI/game rules. Implemented
-  twice: `engine/core.js` (injected into flight.html at build; require-able)
-  and the `ev*` free functions in `cpp/main.cpp`. Any behavior change:
-  spec first, then BOTH legs in the same branch, then `check_traces.js`
-  must pass (tolerance 1e-6; typically agrees to ~1e-13).
-- `flight_template.html` — browser shell (canvas render, DOM dialogs).
-  `cpp/main.cpp` — SDL shell, a deliberate port of the same logic.
+- `engine/ENGINE_SPEC.md` — **normative** flight/AI/game rules, implemented by
+  `engine/core.js` (injected into flight.html at build; require-able in node).
+  Any behavior change: spec first, then the core.
+- `flight_template.html` — browser shell (canvas render, DOM dialogs); the
+  built `flight.html` injects core.js + the game DATA/MANIFEST into it.
 - Per-ship PICTs (index = shïp−128): target schematic 3000+i, hail comm
   portrait 5300+i, shipyard detail 5000+i, outfit detail 6000+i.
 - Asset conventions (spec "Sprite ID conventions"): ship spïn = shïp ID,
@@ -88,13 +84,9 @@ README "Legal shape of the project" and "Distribution".
   the bible.
 - Homing turn rate (3°/frame) and warship AI distance bands (260/120 px)
   are approximations; the damage formula itself is bible-exact.
-- Audio is browser-only for now (spec "Audio"); the SDL leg is also
-  behind on combat-adjacent UI — sync at the next parity checkpoint.
 
-## C++ gotchas
+## Gotchas
 
-- nlohmann const `operator[]` asserts on missing keys; `$sem.prices` omits
-  untraded commodities. Use the find()-based helpers in GameData.
 - The sandbox used for development wipes everything outside mounted dirs
   between shell calls; resource_dasm lives outside the repo (build it
   locally; evconvert.sh expects it on PATH or $RESOURCE_DASM).

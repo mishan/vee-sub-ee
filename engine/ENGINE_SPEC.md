@@ -1,17 +1,14 @@
 # Vₑ engine spec
 
-The normative description of flight physics and entity behavior shared by
-every implementation (currently `engine/core.js` for the browser and
-`cpp/main.cpp` for SDL). If an implementation disagrees with this file, the
-implementation is wrong; if this file is wrong, fix it and both
-implementations in the same commit. `engine/scenario.json` +
-`engine/check_traces` enforce agreement mechanically (golden trace).
+The normative description of flight physics and entity behavior, implemented by
+`engine/core.js` (the DOM-free browser core). If the code disagrees with this
+file, the code is wrong; if this file is wrong, fix both in the same commit.
 
 ## Units and coordinate system
 
 - Logic runs at a fixed **30 Hz** (classic EV's frame rate). All rates are
   per logic frame unless noted.
-- Positions are pixels. **y grows downward** (screen space, both legs).
+- Positions are pixels. **y grows downward** (screen space).
 - **Heading 0° points up (−y); degrees increase clockwise.** Stored
   normalized to [0, 360).
 - Sprite sheets: frame 0 faces up, frames advance clockwise.
@@ -81,7 +78,7 @@ not drifting). Landing refuels the ship to capacity (see Hyperjump).
 running on. **Takeoff rebuilds the system** (`loadSystem`): the ships that
 were present when you landed are gone and a fresh ambient population +
 mission ships are spawned — matching the original, where the world is
-repopulated each time you launch. (Shell behavior; SDL leg deferred.)
+repopulated each time you launch. (Shell behavior.)
 
 ## Time controls (shell; browser leg)
 
@@ -97,7 +94,7 @@ and manual states, so a keypress can't clobber a manual toggle. Caps Lock only
 toggles **in flight** — behind the splash/title/hail/service/landing/dead
 overlays (which swallow gameplay keys) it is ignored, so it can't silently arm
 2× for when you enter the game. It only changes how many `step()`s run per
-frame, not the per-step math, so the flight core and golden trace are untouched.
+frame, not the per-step math, so the flight core is untouched.
 
 ## Hyperjump
 
@@ -283,9 +280,7 @@ the system's `DudeTypes1..4` weighted by `Prob1..4`; pick ship from the
 düde's `ShipTypes1..4` weighted by its `Prob1..4`; skip IDs < 128 or
 missing records. Position: angle uniform in [0, 2π), radius 2400 (edge
 spawn) or 400 + rand·1200 (initial population). Target: uniform over the
-system's spobs. Despawned traders respawn after a delay (browser: 2–8 s
-timer; SDL: 1% chance per frame — intentionally loose, not part of the
-golden trace).
+system's spobs. Despawned traders respawn after a 2–8 s delay.
 
 ## Combat
 
@@ -339,8 +334,7 @@ into a bay of its type, restoring one `have` (and fighters auto-recall just
 before a hyperspace jump so they travel with you). A fighter **shot down is
 lost** — its slot is *not* returned to the bay (you rearm on landing). The
 sidebar shows `Fighters: have/size`. Deferred: AI carriers launching their
-own fighters, and persisting fighter losses across a landing. SDL leg:
-deferred.
+own fighters, and persisting fighter losses across a landing.
 
 **Damage** (bible, exact): shields up → `MassDmg/4 + EnergyDmg` off
 shields; shields down (≤0) → `MassDmg + EnergyDmg/4` off armor; always
@@ -374,7 +368,7 @@ and every same-govt ship in the system — holds a grudge for the session.
 matching weapon). Space fires all primary weapons; Q cycles secondary
 (MiscFlags 0x0002) weapons, X fires the selected one.
 
-## Audio (shell responsibility; browser leg only for now — SDL deferred)
+## Audio (shell responsibility)
 
 Sound IDs follow the classic files (names baked into the resources):
 weapon fire = snd **200 + wëap.Sound** (bible; −1 = silent), played once
@@ -488,7 +482,7 @@ snd 390) with **Capture vessel**, **Loot the hold**, and **Leave**:
   ship falls in as an escort; or **Add to your fleet** — keep your ship and
   the prize joins you as an escort. Failure ⇒ the crew **self-destruct** the
   ship (it begins its death sequence). Either way the attempt applies
-  `BoardPenalty`. SDL leg: deferred.
+  `BoardPenalty`.
 
 ## Escorts (shell; browser leg)
 
@@ -541,7 +535,7 @@ AI, persistence, friendly-fire immunity, and permanent loss on death.
 
 The wider original system (per-government rosters, tech-gated availability,
 pilot bios in desc 2100–2163, and in-flight fleet commands) is **not
-implemented**; escorts fight and follow automatically. SDL leg: deferred.
+implemented**; escorts fight and follow automatically.
 
 ## Persistence (shell responsibility; browser leg)
 
@@ -630,7 +624,7 @@ game-over screens).
   aiming never accidentally burns the engine. The joystick does **not** touch
   the flight core: it synthesizes the same `left`/`right` booleans the keyboard
   produces (turn toward the target heading, stopping within half a turn-step so
-  it doesn't oscillate), so physics and the golden trace are unaffected.
+  it doesn't oscillate), so physics is unaffected.
 - **Thrust and Fire buttons** (bottom-right, side by side, clear of the sidebar
   panel): each holds its control (`thrust` / primary trigger) while pressed.
 - **Mini action bar** (always-on, top-centre): Target/Nav cycle, Land, Board,
@@ -662,17 +656,3 @@ custom PICT is missing from the data. Per-ship PICTs (index = shïp − 128):
 shipyard detail 5000+i, **target-display schematic 3000+i** ("Target
 Pics"), **hail comm portrait 5300+i** ("Ship Comm Dialog"); shop menu
 sheets 5100 (ships) / 6100 (outfits), outfit detail 6000+i.
-
-## Golden trace
-
-`engine/scenario.json` defines ships-by-stats (self-contained — no data
-files needed), initial states, per-frame control scripts, an AI entity
-with a fixed target, and sample points. Runners:
-
-    node engine/run_trace.js engine/scenario.json      # JS core
-    cpp/evflight --trace engine/scenario.json          # C++ port
-
-Both emit `{samples: [{frame, entities: [{x, y, vx, vy, heading}]}]}`.
-`node engine/check_traces.js` runs both and requires agreement within
-**1e-6 px / deg** at every sample (both use IEEE-754 doubles; only libm vs
-V8 transcendental ulps differ).

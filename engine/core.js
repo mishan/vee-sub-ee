@@ -1,7 +1,6 @@
 /*
  * engine/core.js — DOM-free EV flight core. Normative behavior lives in
- * engine/ENGINE_SPEC.md; this file and cpp/main.cpp implement it, and
- * engine/check_traces.js proves they agree.
+ * engine/ENGINE_SPEC.md; this file implements it.
  *
  * Works as a node module (require) and as a browser global (EV) — the
  * flight shell gets this file injected at build time by evexport.js.

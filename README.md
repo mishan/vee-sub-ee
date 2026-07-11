@@ -2,9 +2,8 @@
 
 **Vₑ** ("vee-sub-e" — the physics symbol for escape velocity, and *EV*
 backwards) is a from-scratch reimplementation of Ambrosia Software's classic
-*Escape Velocity* (Mac, 1996). It's browser-first, with a C++/SDL port kept in
-lockstep. The engine is ours and ships **no game content** — you play it with
-your own copy of the original.
+*Escape Velocity* (Mac, 1996). It runs in the browser. The engine is ours and
+ships **no game content** — you play it with your own copy of the original.
 
 ## Play it
 
@@ -50,9 +49,8 @@ saves, and touch controls for phones and tablets.
 
 ## How it's built
 
-**One data pipeline, two engines.** The game's declarative data lives in
-Classic Mac resource forks; a small zero-dependency toolchain lifts it into
-plain JSON that both engines consume:
+The game's declarative data lives in Classic Mac resource forks; a small
+zero-dependency toolchain lifts it into plain JSON that the engine consumes:
 
 - `evrsrc.js` — reads resource forks (MacBinary / AppleDouble / raw).
 - `schemas/*.json` — record layouts, **generated** from the `TMPL` resources
@@ -64,16 +62,15 @@ plain JSON that both engines consume:
   PNG/WAV sprite sheets.
 
 The flight rules live once, normatively, in
-[`engine/ENGINE_SPEC.md`](engine/ENGINE_SPEC.md), and are implemented twice:
-`engine/core.js` (the browser leg) and the `ev*` functions in `cpp/main.cpp`
-(the SDL leg). `engine/check_traces.js` runs both against a shared scenario and
-requires they agree to within 1e-6 — so a behavior change means editing the
-spec, then both legs, and the golden trace keeps them honest.
+[`engine/ENGINE_SPEC.md`](engine/ENGINE_SPEC.md), implemented by the DOM-free
+`engine/core.js`, which the browser shell (`flight_template.html`) injects at
+build time.
 
 The **browser loader** in `loader/` is a second, dependency-free
 implementation of that whole pipeline (StuffIt decompression, PICT/`snd `/sprite
 decoders, the database builder) so the game can be assembled client-side from a
-dropped `.sit`.
+dropped `.sit`. `node loader/verify.js` checks its decoders against the native
+tools' output byte-for-byte.
 
 ## Building from source
 
@@ -83,14 +80,15 @@ You need a local copy of the game's data in `EV_data/` (never committed — see
 ```sh
 make            # build flight.html (the browser game)
 make galaxy     # build the galaxy map viewer
-make check      # golden trace: JS core vs C++ port must agree
-make cpp        # build the SDL port (needs libsdl2-dev)
+make verify     # check the loader's decoders against the native tools
 make help       # list all targets
 ```
 
-The SDL port is a deliberate line-for-line port of the browser leg and takes
-the same knobs the browser accepts as URL params (`--syst --ship --x --y
---heading …`); `make cpp-test` renders headless frames for verification.
+The build is driven by placeholder injection: `evexport.js` slots the game
+database, sprite manifest, and `engine/core.js` into `flight_template.html`.
+Dev/test hooks are URL params on `flight.html` — e.g. `?syst=`, `?ship=`,
+`?x=&y=&heading=`, `?map=1`, `?land=1` — handy for jumping straight into a
+scenario.
 
 ## Legal
 

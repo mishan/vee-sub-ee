@@ -1250,8 +1250,8 @@ document.getElementById('ff').addEventListener('keydown', e => {
 });
 /* Touch control state (mobile). The joystick doesn't drive the engine
  * directly — it synthesizes the same left/right/thrust the keyboard produces
- * (see step's player branch), so the flight core and golden trace are
- * untouched. touchHeading is the absolute facing the stick points at. */
+ * (see step's player branch), so the flight core is untouched.
+ * touchHeading is the absolute facing the stick points at. */
 const touchCtl = { steer: false, heading: 0, thrust: false, fire: false };
 addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
@@ -3716,7 +3716,7 @@ if (SAVED && SAVED.spob != null) {
 if (!landedAt) spawnEscorts();
 if (params.has('fire')) keys[' '] = true; // test affordance: hold the trigger
 
-// Test/dev affordances (mirror the SDL flags): ?map=1 opens the map,
+// Test/dev affordances (URL params): ?map=1 opens the map,
 // ?dest=<systId> preselects a destination, ?jump=1 engages the jump
 // autopilot, ?ff=N fast-forwards N logic frames before the first render.
 if (params.has('map')) mapOpen = true;
