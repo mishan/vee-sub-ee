@@ -54,7 +54,7 @@ export function renderMissionBoard(loc, topHtml = '') {
   if (!offers.length) listItems.push(html`<div class="sub">Nothing right now.</div>`);
   for (const o of offers)
     listItems.push(html`<div class="row" style="cursor:pointer;color:${o.id === S.selMisnId ? '#ffd479' : '#cfd6e4'}"
-      onclick="S.selMisnId=${o.id};refreshView()">${misnName(o, getOffer(o.id, p))}</div>`);
+      data-action="selMisn" data-arg="${o.id}">${misnName(o, getOffer(o.id, p))}</div>`);
   const list = html`<div style="flex:1;min-width:210px;max-height:340px;overflow-y:auto">${listItems}</div>`;
 
   let paneBody;
@@ -89,7 +89,7 @@ export function renderMissionBoard(loc, topHtml = '') {
       ${offer.deadline != null ? html`<div class="row">Deliver by: <b>${formatDate(offer.deadline)}</b> <span class="sub">(${sel.TimeLimit} days)</span></div>` : ''}
       <div class="row">Pay: <b>${pay}</b></div>
       <div style="margin-top:10px">
-        <button class="svc" onclick="doAcceptMission(${S.selMisnId})">Accept</button>
+        <button class="svc" data-action="accept">Accept</button>
       </div>`;
   } else if (active.length) {
     paneBody = html`<div class="sub">Select an available mission, or check your active missions (press I in flight for the briefing).</div>`;
@@ -102,7 +102,7 @@ export function renderMissionBoard(loc, topHtml = '') {
      <div class="meta">${p.name}</div>${topHtml}
      <div class="shop">${list}${pane}</div>
      <div class="wallet">${S.credits.toLocaleString('en-US')} credits · cargo ${cargoUsed()}/${holds} tons · day ${S.gameDay}</div>
-     <div style="margin-top:10px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
+     <div style="margin-top:10px"><button class="svc" data-action="close">Done (Esc)</button></div>`;
 }
 
 /* The bar hosts two boards — the mission BBS and the hire-escort dialog —
@@ -110,7 +110,7 @@ export function renderMissionBoard(loc, topHtml = '') {
 S.barTab = 'missions';
 export function barTabs() {
   const t = (k, label) =>
-    html`<button class="svc" onclick="S.barTab='${k}';refreshView()"${S.barTab === k ? ' disabled' : ''}>${label}</button>`;
+    html`<button class="svc" data-action="barTab" data-arg="${k}"${S.barTab === k ? ' disabled' : ''}>${label}</button>`;
   return html`<div style="margin:6px 0 2px">${t('missions', 'Missions')} ${t('hire', 'Hire Escorts')}</div>`;
 }
 export function renderBar() {
@@ -131,7 +131,7 @@ export function renderHireBoard() {
       kind = e.upkeep ? `~${e.upkeep.toLocaleString('en-US')} cr/jump` : 'captured';
     fleetItems.push(html`<div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
       <span>${e.name} <span class="sub">${r ? r.name : ''} · ${kind}</span></span>
-      <button class="svc" style="padding:2px 8px" onclick="dismissEscort(${e.id})">Dismiss</button></div>`);
+      <button class="svc" style="padding:2px 8px" data-action="dismiss" data-arg="${e.id}">Dismiss</button></div>`);
   }
   if (totalUpkeep)
     fleetItems.push(
@@ -152,7 +152,7 @@ export function renderHireBoard() {
     hireItems.push(html`<div class="row" style="border-bottom:1px solid #26304a;padding:6px 0">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
         <b>${r.name}</b>
-        <button class="svc" style="padding:2px 10px" onclick="hireEscort(${id})"${full || !afford ? ' disabled' : ''}>Hire</button>
+        <button class="svc" style="padding:2px 10px" data-action="hire" data-arg="${id}"${full || !afford ? ' disabled' : ''}>Hire</button>
       </div>
       <div class="sub">Fee ~${fee.toLocaleString('en-US')} cr · ~${up.toLocaleString('en-US')} cr/jump${
         full ? ' · fleet full' : !afford ? ' · can’t afford' : ''
@@ -168,7 +168,7 @@ export function renderHireBoard() {
   return html`<h2>Spaceport Bar</h2><div class="meta">${p.name}</div>${barTabs()}
      <div class="shop">${fleet}${hire}</div>
      <div class="wallet">${S.credits.toLocaleString('en-US')} credits · payroll ${totalUpkeep.toLocaleString('en-US')} cr/jump</div>
-     <div style="margin-top:10px"><button class="svc" onclick="closeService()">Done (Esc)</button></div>`;
+     <div style="margin-top:10px"><button class="svc" data-action="close">Done (Esc)</button></div>`;
 }
 
 export function doAcceptMission(id) {
