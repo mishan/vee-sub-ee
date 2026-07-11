@@ -232,9 +232,8 @@ function shipOfferPanel(s) {
   const pay = m.PayVal > 0 ? `${m.PayVal.toLocaleString('en-US')} cr` : 'see briefing';
   const dst = o.travelStel != null ? stelName(o.travelStel)
             : o.returnStel != null ? stelName(o.returnStel) : '—';
-  return (quote ? `<div class="say">“${escapeHtml(subst(quote, A))}”</div>` : '')
-    + `<div class="say" style="max-height:120px;overflow-y:auto">${escapeHtml(brief)}</div>`
-    + `<div class="who">Mission: <b>${escapeHtml(subst(m.name, A))}</b> · Destination: ${escapeHtml(dst)} · Pay: ${pay}</div>`;
+  return html`${quote ? html`<div class="say">“${subst(quote, A)}”</div>` : ''}<div class="say" style="max-height:120px;overflow-y:auto">${brief}</div>
+    <div class="who">Mission: <b>${subst(m.name, A)}</b> · Destination: ${dst} · Pay: ${pay}</div>`;
 }
 function acceptShipMission(s) {
   hailClick();
@@ -256,7 +255,7 @@ function declineShipMission(s) {
 
 function renderHail() {
   const t = hailTarget; if (!t) return;
-  let html;
+  let body;   // `buttons`/`tag` below are static trusted markup → raw(); data stays escaped
   if (t.kind === 'board') {
     const s = t.obj;
     const govtName = s.govt >= 128 && govts[s.govt] ? govts[s.govt].name : 'Independent';
@@ -278,12 +277,12 @@ function renderHail() {
         `<button onclick="hailClick();closeHail()">Leave it be</button>`;
     }
     const say = t.said || `You board the disabled ${shipName}. Your crew ${playerCrew()} vs theirs ${ships[s.shipId].Crew || 1}.`;
-    html = `<img class="commpic" src="evassets/graphics/PICT_${5300 + (s.shipId - 128)}.png" onerror="this.remove()">
-      <h3>${escapeHtml(shipName)}</h3>
-      <div class="who">${escapeHtml(govtName)} · <span style="color:#e06c75">DISABLED</span></div>
-      <div class="say">${escapeHtml(say)}</div>
-      ${buttons}`;
-    document.getElementById('hailCard').innerHTML = html;
+    body = html`<img class="commpic" src="evassets/graphics/PICT_${5300 + (s.shipId - 128)}.png" onerror="this.remove()">
+      <h3>${shipName}</h3>
+      <div class="who">${govtName} · <span style="color:#e06c75">DISABLED</span></div>
+      <div class="say">${say}</div>
+      ${raw(buttons)}`;
+    document.getElementById('hailCard').innerHTML = body;
     document.getElementById('hail').style.display = 'flex';
     return;
   }
@@ -312,25 +311,25 @@ function renderHail() {
         `<button onclick="demandSurrender(hailTarget.obj)"${s.disabled ? '' : ' disabled'}>Demand surrender / plunder</button>`;
     }
     // classic ship comm portrait: PICT 5300 + ship index
-    html = `<img class="commpic" src="evassets/graphics/PICT_${5300 + (s.shipId - 128)}.png" onerror="this.remove()">
-      <h3>${escapeHtml(s.misnName || ships[s.shipId].name)}</h3>
-      <div class="who">${escapeHtml(label)}${tag}</div>
-      <div class="say">“${escapeHtml(t.said)}”</div>
+    body = html`<img class="commpic" src="evassets/graphics/PICT_${5300 + (s.shipId - 128)}.png" onerror="this.remove()">
+      <h3>${s.misnName || ships[s.shipId].name}</h3>
+      <div class="who">${label}${raw(tag)}</div>
+      <div class="say">“${t.said}”</div>
       ${offering && t.mode !== 'fuel' && t.mode !== 'mercy' ? shipOfferPanel(s) : ''}
-      ${buttons}
+      ${raw(buttons)}
       <button onclick="hailClick();closeHail()">Close channel</button>`;
   } else {
     const p = t.obj, m = p.$sem || {};
     const greet = t.said || (pickFrom(3002, 0, 4) || 'Channel open to ') + p.name + '.';
     const dom = dominated.has(p.id);
-    html = `<h3>${escapeHtml(p.name)}</h3>
-      <div class="who">${escapeHtml(m.govt || 'Independent')}${dom ? ' · paying tribute' : ''}</div>
-      <div class="say">“${escapeHtml(greet)}”</div>
+    body = html`<h3>${p.name}</h3>
+      <div class="who">${m.govt || 'Independent'}${dom ? ' · paying tribute' : ''}</div>
+      <div class="say">“${greet}”</div>
       <button onclick="hailClick();hailSay(pickFrom(3002,15,24) || 'They have nothing to tell you.')">Request information</button>
       <button onclick="hailClick();demandTribute(hailTarget.obj)"${p.Govt < 128 ? ' disabled' : ''}>Demand tribute</button>
       <button onclick="hailClick();closeHail()">Close channel</button>`;
   }
-  document.getElementById('hailCard').innerHTML = html;
+  document.getElementById('hailCard').innerHTML = body;
   document.getElementById('hail').style.display = 'flex';
 }
 

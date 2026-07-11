@@ -70,13 +70,13 @@ function titleAbout() {
   // STR# 20000 is the intro crawl; show it as flavour + a clean-room note.
   const intro = (DATA.strings[20000] && DATA.strings[20000].list || [])
     .join(' ').replace(/\s+/g, ' ').trim();
-  document.getElementById('aboutCard').innerHTML =
-    '<h2>Vₑ — Escape Velocity, recreated</h2>' +
-    '<p>' + escapeHtml(intro) + '</p>' +
-    '<p style="color:#6f7c94;margin-top:12px">A clean-room reimplementation of ' +
-    'Ambrosia Software’s Escape Velocity. Engine by Misha Nasledov. ' +
-    'Game data is the original publisher’s and is not distributed.</p>' +
-    '<button onclick="document.getElementById(\'about\').style.display=\'none\'">Close</button>';
+  document.getElementById('aboutCard').innerHTML = html`
+    <h2>Vₑ — Escape Velocity, recreated</h2>
+    <p>${intro}</p>
+    <p style="color:#6f7c94;margin-top:12px">A clean-room reimplementation of
+    Ambrosia Software’s Escape Velocity. Engine by Misha Nasledov.
+    Game data is the original publisher’s and is not distributed.</p>
+    <button onclick="document.getElementById('about').style.display='none'">Close</button>`;
   document.getElementById('about').style.display = 'flex';
 }
 function titlePrefs() {
