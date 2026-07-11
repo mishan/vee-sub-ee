@@ -1,11 +1,13 @@
 /*
  * engine/shell/legal.js — the pilot's legal record and combat tally.
  *
- * Holds the mutable state behind the "Legal record" spec: per-government record
- * values and the running total of crew destroyed (which drives the combat
- * rating). The guarded mutations live here; the *queries* that need government
- * data — legalOf, legalStatus, isCriminalWith, combatRating — stay in
- * 13-legal.js, which reads this record plus the govt table.
+ * Holds the mutable state behind the "Legal record" spec: per-SYSTEM record
+ * values (keyed by system id, like classic EV — two systems of one government
+ * can differ) and the running total of crew destroyed (which drives the combat
+ * rating). This class is just the guarded keyed store; the queries and the
+ * govt-keyed effect scatter that need government data — legalOf, legalStatus,
+ * isCriminalWith, combatRating, applyGovtDelta — stay in 13-legal.js, which
+ * reads this record plus the govt table.
  *
  * DOM/game-free, so it is unit-tested directly (test/legal.test.mjs). One of the
  * focused state classes the S bag is being broken into (docs/OOP_DESIGN.md,

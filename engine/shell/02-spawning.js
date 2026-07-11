@@ -11,7 +11,7 @@ import {
 import { attenuate, playSnd } from './03-sound.js';
 import { armShip, player } from './04-combat.js';
 import { refreshView } from './07-trade.js';
-import { dudeShipPairs, govts } from './08-missions.js';
+import { dudeShipPairs, govtAllies, govts } from './08-missions.js';
 import { isCriminalWith, legalOf } from './13-legal.js';
 import { introUp } from './11-title.js';
 
@@ -66,8 +66,9 @@ export function spawnAI(atEdge) {
       : [];
   if ((gf.includes('alwaysAttacksPlayer') || gf.includes('xenophobic')) && e.aiType >= 3)
     e.hostile = true;
-  // a warship of a govt you're a criminal with attacks on sight (spec)
-  if (e.aiType >= 3 && isCriminalWith(e.govt)) e.hostile = true;
+  // a warship attacks on sight if you're a criminal in THIS system and its govt
+  // enforces here — the local government, an ally, or a "laws everywhere" govt
+  if (e.aiType >= 3 && enforcesHere(e.govt)) e.hostile = true;
   // Warp-in: ships hyperspace into the system (a brief flash) rather than
   // popping into existence. Arrivals near the player get the warp sound.
   e.warpIn = 18;
@@ -258,13 +259,26 @@ export function chargeEscortUpkeep() {
 export function systemGovt() {
   return S.syst && S.syst.Govt >= 128 ? S.syst.Govt : 128;
 }
+// Does govt `g` police the CURRENT system for your crimes here? True when you're
+// a criminal in this system and g is its government, an ally of it, or a govt
+// that enforces its laws everywhere (flag 0x0002).
+function enforcesHere(g) {
+  if (g < 128 || !isCriminalWith(S.SYSTEM_ID)) return false;
+  const sg = systemGovt();
+  if (g === sg || govtAllies(sg).includes(g) || govtAllies(g).includes(sg)) return true;
+  const gf = DATA.types.govt[g] && DATA.types.govt[g].$sem ? DATA.types.govt[g].$sem.flags : [];
+  return gf.includes('enforcesLawsEverywhere');
+}
 export function maybeSpawnBountyHunter() {
   if (S.landedAt || S.gameOver || player.deathT >= 0) return;
   const g = systemGovt();
-  if (!isCriminalWith(g)) return;
+  if (!isCriminalWith(S.SYSTEM_ID)) return;
   const present = S.aiShips.filter((s) => s.bounty).length;
   // more evil → more hunters, capped; low per-frame chance
-  const cap = Math.min(1 + Math.floor(-legalOf(g) / Math.max(govts[g].CrimeTol, 1) / 4), 4);
+  const cap = Math.min(
+    1 + Math.floor(-legalOf(S.SYSTEM_ID) / Math.max(govts[g].CrimeTol, 1) / 4),
+    4,
+  );
   if (present >= cap || Math.random() > 0.004) return;
   // hunters are warships: prefer a warship düde native to this system, then
   // any spöb's defense düde in-system, then any system düde.

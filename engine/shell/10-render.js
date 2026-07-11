@@ -420,9 +420,9 @@ export function drawMap(w, h) {
   // current one), plus the player's combat rating.
   const shownId = S.jumpDest >= 128 && systs[S.jumpDest] ? S.jumpDest : S.SYSTEM_ID;
   const shownSys = systs[shownId];
-  const statusG = shownSys.Govt >= 128 ? shownSys.Govt : 128;
-  const status = legalStatus(statusG);
-  const crim = isCriminalWith(statusG);
+  const statusG = shownSys.Govt >= 128 ? shownSys.Govt : 128; // for the govt name
+  const status = legalStatus(shownId); // per-system record, labelled by its govt
+  const crim = isCriminalWith(shownId);
   ctx.font = '12px system-ui, sans-serif';
   ctx.fillStyle = '#8fa3c8';
   ctx.fillText(

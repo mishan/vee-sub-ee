@@ -103,6 +103,12 @@ README "Legal shape of the project" and "Distribution".
   the bible.
 - Homing turn rate (3°/frame) and warship AI distance bands (260/120 px)
   are approximations; the damage formula itself is bible-exact.
+- Legal-record spread constants (`SPREAD_PROB` ≈¼, `SPREAD_FRAC` 0.4 in
+  `13-legal.js`) are tuned: classic EV scatters a legal change randomly
+  across the affected govt's systems (calibrated from real save diffs —
+  ~26% of Confed / ~31% of enemy systems moved), but the exact per-system
+  magnitude/probability isn't documented. The per-system storage, the
+  enemy-inversion sign, and the current-system-always rule ARE from the data.
 
 ## Gotchas
 

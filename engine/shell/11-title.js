@@ -9,7 +9,6 @@ import {
   showMsg,
   startNewPilot,
 } from './01-state.js';
-import { systemGovt } from './02-spawning.js';
 import { armAudioUnlock, startTitleMusic, stopTitleMusic } from './03-sound.js';
 import { combatRating, legalStatus } from './13-legal.js';
 import { render } from './10-render.js';
@@ -207,7 +206,7 @@ export function renderTitleSummary() {
     ['Pilot', pilotName || 'Pilot'],
     ['Ship name', shipName || shipTypeName],
     ['Ship type', shipTypeName],
-    ['Legal status', legalStatus(systemGovt())],
+    ['Legal status', legalStatus(S.SYSTEM_ID)],
     ['Combat rating', combatRating()],
     ['Date', gameDate()],
   ];
