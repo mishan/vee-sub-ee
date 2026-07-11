@@ -62,11 +62,11 @@ Headless UI verification: `firefox --headless --screenshot out.png
 - `engine/ENGINE_SPEC.md` — **normative** flight/AI/game rules, implemented by
   `engine/core.js`, a DOM-free **ES module** (importable in node). Any behavior
   change: spec first, then the core.
-- `engine/core.bundle.js` — GENERATED: esbuild bundles core.js into an IIFE that
-  exposes the exports as the browser global `EV`. Committed (so the in-browser
-  loader can inject it without a build step) but never hand-edited; `make`
-  rebuilds it from core.js. This is the first step of an in-progress move to
-  esbuild-bundled ES modules for the shell too.
+- `engine/core.bundle.js` — GENERATED (gitignored): esbuild bundles core.js into
+  an IIFE that exposes the exports as the browser global `EV`. Built by `make` /
+  `npm run build:engine` and shipped in releases; the in-browser loader fetches
+  it, so a deploy must build it first. Never hand-edited. First step of an
+  in-progress move to esbuild-bundled ES modules for the shell too.
 - `flight_template.html` — browser shell HTML/CSS + a script with `/*__ENGINE__*/`
   (core.bundle.js) and `/*__SHELL__*/` placeholders; the built `flight.html`
   injects the engine bundle, the shell, and the game DATA/MANIFEST into it.

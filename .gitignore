@@ -11,3 +11,7 @@ flight.html
 *.swp
 .DS_Store
 node_modules/
+
+# Generated build artifact (our engine code, no data): esbuild bundles core.js
+# into this. Built by `make` / `npm run build:engine`; shipped in releases.
+engine/core.bundle.js
