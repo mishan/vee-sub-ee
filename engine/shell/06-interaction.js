@@ -2,7 +2,8 @@ import { S, dominated, dudes, escorts, html, persDone, raw, ships, showMsg } fro
 import { MAX_ESCORTS, weighted } from './02-spawning.js';
 import { playSnd } from './03-sound.js';
 import { armShip, commitCrime, creditKill, fuelMax, penaltyOf, player } from './04-combat.js';
-import { PF, acceptMission, captureOdds, descText, dudeShipPairs, getOffer, govts, misns, onMissionShipDestroyed, pers, persOffersToPlayer, playerCrew, shipMissionAvailable, spobById, stelName, subst, systemSpob } from './08-missions.js';
+import { PF, acceptMission, descText, dudeShipPairs, getOffer, govts, misns, onMissionShipDestroyed, pers, persOffersToPlayer, shipMissionAvailable, spobById, stelName, subst, systemSpob } from './08-missions.js';
+import { captureOdds, playerCrew } from './12-boarding.js';
 
 /*
  * engine/shell/06-interaction.js — part of the browser flight shell.

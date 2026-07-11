@@ -11,7 +11,7 @@ import { render } from './10-render.js';
 import { showSplash, showTitle } from './11-title.js';
 
 /*
- * engine/shell/12-main.js — part of the browser flight shell.
+ * engine/shell/13-main.js — part of the browser flight shell.
  *
  * esbuild bundles the shell modules (entry: main.js) into engine/shell.bundle.js,
  * injected into flight.html by `evexport --flight` and the loader. 01-state is
