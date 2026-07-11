@@ -5,13 +5,13 @@ import { applyShipStats, beginJump, fuelMax, player } from './04-combat.js';
 import { fastForward, keys } from './05-input.js';
 import { cyclePlanetTarget, cycleShipTarget } from './06-interaction.js';
 import { openService } from './07-trade.js';
-import { renderPlanetScreen, tryLand } from './08-missions.js';
+import { renderPlanetScreen, tryLand } from './14-landing.js';
 import { loadSystem, step } from './09-step.js';
 import { render } from './10-render.js';
 import { showSplash, showTitle } from './11-title.js';
 
 /*
- * engine/shell/14-main.js — part of the browser flight shell.
+ * engine/shell/15-main.js — part of the browser flight shell.
  *
  * esbuild bundles the shell modules (entry: main.js) into engine/shell.bundle.js,
  * injected into flight.html by `evexport --flight` and the loader. 01-state is
