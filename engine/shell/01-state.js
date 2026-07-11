@@ -72,9 +72,11 @@ let activeMissions = SAVED && SAVED.missions ? SAVED.missions.map(m => ({ ...m }
 /* player-owned escorts (spec: "Escorts") — allied ships that follow the
  * player, fight the player's enemies, and persist across jumps/landings.
  * Saved as {id, shipId, name}; the live AI entity is respawned each system. */
-let escorts = SAVED && SAVED.escorts
-  ? SAVED.escorts.map(e => ({ ...e })).filter(e => ships[e.shipId]) // drop hulls this data set doesn't define
-  : [];
+// Declared here (before the save/load helpers that reference it); the
+// hull-existence filter is deferred until after `const ships` exists, since
+// `ships` is a const declared later in this module — reading it here would hit
+// the temporal dead zone and throw when loading a saved pilot that has escorts.
+let escorts = SAVED && SAVED.escorts ? SAVED.escorts.map(e => ({ ...e })) : [];
 let escNextId = escorts.reduce((m, e) => Math.max(m, e.id || 0), 0) + 1;
 
 let storageWarned = false;
@@ -164,6 +166,9 @@ function openNameDialog(cfg) {
 }
 
 const ships = DATA.types.ship;
+// Deferred from the escorts init above (needs `ships`): drop saved escorts whose
+// hull this data set no longer defines.
+escorts = escorts.filter(e => ships[e.shipId]);
 const dudes = DATA.types.dude;
 const systs = DATA.types.syst;
 

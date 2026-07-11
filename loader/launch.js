@@ -188,6 +188,11 @@
   // Assemble flight.html from already-fetched sources (see fetchEngineSources),
   // so the engine we cache is exactly the one we hash for the marker.
   function assembleFlight(src, DATA, MANIFEST) {
+    // Fail loudly if the template lost a placeholder (a .replace of a missing
+    // marker is a silent no-op → a subtly broken flight.html); evexport --flight
+    // guards the same way.
+    for (const ph of ['/*__ENGINE__*/', '/*__SHELL__*/', '/*__EVDATA__*/null', '/*__MANIFEST__*/null', '/*__NAMES__*/null'])
+      if (!src.tpl.includes(ph)) throw new Error('flight template missing placeholder ' + ph);
     // DATA/MANIFEST hold strings from the untrusted archive and are injected
     // into a <script> as JS literals. Escape the sequences that would break out
     // of the script element or of a JS string: '<' (so "</script>" can't close
