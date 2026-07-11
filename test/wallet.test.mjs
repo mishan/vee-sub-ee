@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Wallet } from '../engine/shell/wallet.js';
 
-test('Wallet tracks a balance and enforces affordability', () => {
+test('canAfford reports whether a cost fits the balance', () => {
   const w = new Wallet(100);
   assert.equal(w.credits, 100);
   assert.ok(w.canAfford(100)); // exact balance is affordable
@@ -20,6 +20,15 @@ test('earn and spend move the balance', () => {
   assert.equal(w.credits, 30);
   assert.ok(w.canAfford(30));
   assert.ok(!w.canAfford(31));
+});
+
+test('spend enforces the affordability invariant', () => {
+  const w = new Wallet(100);
+  w.spend(100); // exact-balance spend is allowed → 0
+  assert.equal(w.credits, 0);
+  const v = new Wallet(50);
+  assert.throws(() => v.spend(51), RangeError); // overdraw throws
+  assert.equal(v.credits, 50); // ...and leaves the balance untouched
 });
 
 test('a fresh Wallet defaults to 0 credits', () => {

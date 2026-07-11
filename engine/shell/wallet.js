@@ -19,7 +19,12 @@ export class Wallet {
     this.credits += amount;
   }
 
+  // Deduct `cost`. Callers must have checked canAfford() first; overdrawing is a
+  // bug, so fail fast rather than silently letting the balance go negative.
   spend(cost) {
+    if (cost > this.credits) {
+      throw new RangeError(`Wallet: cannot spend ${cost} with balance ${this.credits}`);
+    }
     this.credits -= cost;
   }
 }
