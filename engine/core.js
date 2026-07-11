@@ -2,6 +2,15 @@
  * engine/core.js — DOM-free EV flight core. Normative behavior lives in
  * engine/ENGINE_SPEC.md; this file implements it.
  *
+ * Entities are classes: `Ship` (kinematics, landing, hyperjump, damage) and
+ * `Projectile` (shot flight). The math lives in their methods; the older
+ * free-function exports (`thrust(s)`, `stepShot(shot, target)`, …) are kept as
+ * thin wrappers that delegate to those methods, so the shell keeps working
+ * unchanged while call sites migrate. The wrappers are duck-typed (they use
+ * `Ship.prototype.method.call`), so they also work on the plain state objects
+ * some call sites pass. See docs/OOP_DESIGN.md; these wrappers go away once
+ * callers move to methods.
+ *
  * An ES module: esbuild bundles it (npm run build:engine) into
  * engine/core.bundle.js — an IIFE that exposes the exports as the browser global
  * `EV`, which the flight shell reads and evexport.js / the loader inject at build
@@ -23,63 +32,218 @@ const frameIndex = (heading, frames) =>
   ((Math.round(heading / (360 / frames)) % frames) + frames) % frames;
 const bearing = (dx, dy) => norm((Math.atan2(dx, -dy) * 180) / Math.PI);
 
-/* ---- entities ---- */
-function makeShip(rec, x, y, heading) {
-  return {
-    rec,
-    x,
-    y,
-    heading: norm(heading),
-    vx: 0,
-    vy: 0,
-    maxSpeed: maxSpeedOf(rec),
-    accel: accelOf(rec),
-    turn: turnOf(rec),
-    thrusting: false,
-  };
-}
+/* ---- landing rules (spec: "Landing") ---- */
+const LAND_DIST = 60,
+  LAND_SPEED = 0.9;
 
-function thrust(s) {
-  s.vx += Math.sin(rad(s.heading)) * s.accel;
-  s.vy -= Math.cos(rad(s.heading)) * s.accel;
-  const v = Math.hypot(s.vx, s.vy);
-  if (v > s.maxSpeed) {
-    s.vx *= s.maxSpeed / v;
-    s.vy *= s.maxSpeed / v;
+/* ---- hyperjump (spec: "Hyperjump") ---- */
+const JUMP_FUEL = 100,
+  JUMP_STREAK_FRAMES = 30,
+  ARRIVE_DIST = 700;
+const JUMP_WARMUP_FRAMES = 220; // hyperdrive spin-up before the streak
+const JUMP_MIN_DIST = 800; // no jumping this close to a spöb (approx.)
+
+/* ---- combat (spec: "Combat") ---- */
+const HOMING_TURN = 3; // deg/frame (approximation, see spec)
+const ROCKET_ACCEL_DIV = 15; // rocket reaches max speed in 15 frames
+const shotSpeedOf = (rec) => rec.Speed / 100;
+
+/* ==================== entities ==================== */
+
+/* A ship in flight. `rec` is its raw shïp record; the derived stats
+ * (maxSpeed/accel/turn) are cached at construction. The shell adds more fields
+ * to instances (weapons, shields/armor, hostile, …); methods only touch what
+ * they read, so those extra fields are unaffected. */
+class Ship {
+  constructor(rec, x, y, heading) {
+    this.rec = rec;
+    this.x = x;
+    this.y = y;
+    this.heading = norm(heading);
+    this.vx = 0;
+    this.vy = 0;
+    this.maxSpeed = maxSpeedOf(rec);
+    this.accel = accelOf(rec);
+    this.turn = turnOf(rec);
+    this.thrusting = false;
   }
-  s.thrusting = true;
+
+  thrust() {
+    this.vx += Math.sin(rad(this.heading)) * this.accel;
+    this.vy -= Math.cos(rad(this.heading)) * this.accel;
+    const v = Math.hypot(this.vx, this.vy);
+    if (v > this.maxSpeed) {
+      this.vx *= this.maxSpeed / v;
+      this.vy *= this.maxSpeed / v;
+    }
+    this.thrusting = true;
+  }
+
+  /* Turn toward `desired` (deg), clamped to the turn rate. Returns whether the
+   * ship is now roughly aligned (within 1.5 turn-steps). */
+  steerToward(desired) {
+    let diff = norm(desired - this.heading);
+    if (diff > 180) diff -= 360;
+    const step = Math.max(-this.turn, Math.min(this.turn, diff));
+    this.heading = norm(this.heading + step);
+    return Math.abs(diff) < this.turn * 1.5;
+  }
+
+  /* Heading that points opposite the current velocity vector. */
+  retrograde() {
+    return norm((Math.atan2(-this.vx, this.vy) * 180) / Math.PI);
+  }
+
+  integrate() {
+    this.x += this.vx;
+    this.y += this.vy;
+  }
+
+  /* One frame of player control. controls: {left, right, retro, thrust}. */
+  stepPlayer(c) {
+    this.thrusting = false;
+    if (c.left) this.heading = norm(this.heading - this.turn);
+    if (c.right) this.heading = norm(this.heading + this.turn);
+    if (c.retro) this.steerToward(this.retrograde());
+    if (c.thrust) this.thrust();
+    this.integrate();
+  }
+
+  canLand(spob) {
+    return (
+      Math.hypot(spob.x - this.x, spob.y - this.y) < LAND_DIST &&
+      Math.hypot(this.vx, this.vy) <= LAND_SPEED
+    );
+  }
+
+  placeAtTakeoff(spob) {
+    this.x = spob.x;
+    this.y = spob.y - 40;
+    this.heading = 0;
+    this.vx = 0;
+    this.vy = 0; // launch stationary, not adrift
+  }
+
+  /* Autopilot one frame of jump engagement toward mapBearing (galaxy-map
+   * bearing to destination). Returns true once ready to enter hyperspace:
+   * aligned within one turn-step and at ≥95% max speed. */
+  stepJumpEngage(mapBearing) {
+    this.steerToward(mapBearing);
+    this.thrust();
+    this.integrate();
+    let diff = norm(mapBearing - this.heading);
+    if (diff > 180) diff -= 360;
+    return Math.abs(diff) <= this.turn && Math.hypot(this.vx, this.vy) >= 0.95 * this.maxSpeed;
+  }
+
+  /* Arrival placement in the destination system. inBearing = map bearing from
+   * origin to destination (degrees). */
+  placeAtArrival(inBearing) {
+    const b = rad(inBearing);
+    this.x = -Math.sin(b) * ARRIVE_DIST;
+    this.y = Math.cos(b) * ARRIVE_DIST;
+    this.heading = norm(inBearing);
+    this.vx = Math.sin(b) * this.maxSpeed;
+    this.vy = -Math.cos(b) * this.maxSpeed;
+  }
+
+  /* Apply one weapon hit. Reads/writes this.{shields, armor, armorMax,
+   * disableFrac?}. Returns 'shielded' | 'hit' | 'disabled' | 'destroyed'. */
+  takeDamage(rec) {
+    const up = this.shields > 0;
+    const dmg = Math.max(1, up ? rec.MassDmg / 4 + rec.EnergyDmg : rec.MassDmg + rec.EnergyDmg / 4);
+    if (up) {
+      this.shields = Math.max(0, this.shields - dmg);
+      return 'shielded';
+    }
+    this.armor -= dmg;
+    if (this.armor <= 0) return 'destroyed';
+    if (this.armor <= this.armorMax * (this.disableFrac ?? 1 / 3)) return 'disabled';
+    return 'hit';
+  }
+
+  /* Regenerate +1% of max every ShieldRe frames (this gains a shieldT counter). */
+  regenShields(shieldMax, shieldRe) {
+    if (this.shields >= shieldMax || shieldRe <= 0) return;
+    this.shieldT = (this.shieldT ?? 0) + 1;
+    if (this.shieldT >= shieldRe) {
+      this.shieldT = 0;
+      this.shields = Math.min(shieldMax, this.shields + shieldMax / 100);
+    }
+  }
 }
 
-function steerToward(s, desired) {
-  let diff = norm(desired - s.heading);
-  if (diff > 180) diff -= 360;
-  const step = Math.max(-s.turn, Math.min(s.turn, diff));
-  s.heading = norm(s.heading + step);
-  return Math.abs(diff) < s.turn * 1.5;
+/* A projectile in flight (bullet / beam / homing missile / rocket). `aim` is
+ * the launch heading the shell resolves (turret/quadrant aim + inaccuracy). */
+class Projectile {
+  constructor(rec, shooter, aim) {
+    const g = rec.Guidance;
+    const freefall = g === 5;
+    const heading = freefall ? shooter.heading : norm(aim);
+    const mv = freefall || g === 6 ? 0 : shotSpeedOf(rec);
+    this.rec = rec;
+    this.guidance = g;
+    this.x = shooter.x;
+    this.y = shooter.y;
+    this.heading = heading;
+    this.vx = shooter.vx * (freefall ? 0.8 : 1) + Math.sin(rad(heading)) * mv;
+    this.vy = shooter.vy * (freefall ? 0.8 : 1) - Math.cos(rad(heading)) * mv;
+    this.speed = shotSpeedOf(rec);
+    this.life = rec.Count;
+  }
+
+  /* Advance one frame. target: {x, y} or null. Returns false when it expires. */
+  step(target) {
+    const g = this.guidance;
+    if ((g === 1 || g === 2) && target) {
+      let diff = norm(bearing(target.x - this.x, target.y - this.y) - this.heading);
+      if (diff > 180) diff -= 360;
+      this.heading = norm(this.heading + Math.max(-HOMING_TURN, Math.min(HOMING_TURN, diff)));
+      this.vx = Math.sin(rad(this.heading)) * this.speed;
+      this.vy = -Math.cos(rad(this.heading)) * this.speed;
+    } else if (g === 6) {
+      const acc = this.speed / ROCKET_ACCEL_DIV;
+      this.vx += Math.sin(rad(this.heading)) * acc;
+      this.vy -= Math.cos(rad(this.heading)) * acc;
+      const v = Math.hypot(this.vx, this.vy);
+      if (v > this.speed) {
+        this.vx *= this.speed / v;
+        this.vy *= this.speed / v;
+      }
+    }
+    this.x += this.vx;
+    this.y += this.vy;
+    return --this.life > 0;
+  }
 }
 
-const retrograde = (s) => norm((Math.atan2(-s.vx, s.vy) * 180) / Math.PI);
+/* ---- factories (the shell constructs entities through these) ---- */
+const makeShip = (rec, x, y, heading) => new Ship(rec, x, y, heading);
+const makeShot = (rec, shooter, aim) => new Projectile(rec, shooter, aim);
 
-function integrate(s) {
-  s.x += s.vx;
-  s.y += s.vy;
-}
+/* ---- free-function compatibility wrappers (delegate to the methods) ----
+ * Kept until every call site uses methods; then deleted (see docs/OOP_DESIGN.md).
+ * `.call` keeps them working on the plain objects a few callers still pass. */
+const thrust = (s) => Ship.prototype.thrust.call(s);
+const steerToward = (s, desired) => Ship.prototype.steerToward.call(s, desired);
+const retrograde = (s) => Ship.prototype.retrograde.call(s);
+const integrate = (s) => Ship.prototype.integrate.call(s);
+const stepPlayer = (s, c) => Ship.prototype.stepPlayer.call(s, c);
+const canLand = (s, spob) => Ship.prototype.canLand.call(s, spob);
+const placeAtTakeoff = (s, spob) => Ship.prototype.placeAtTakeoff.call(s, spob);
+const stepJumpEngage = (s, mapBearing) => Ship.prototype.stepJumpEngage.call(s, mapBearing);
+const placeAtArrival = (s, inBearing) => Ship.prototype.placeAtArrival.call(s, inBearing);
+const applyDamage = (st, rec) => Ship.prototype.takeDamage.call(st, rec);
+const stepShields = (st, shieldMax, shieldRe) =>
+  Ship.prototype.regenShields.call(st, shieldMax, shieldRe);
+const stepShot = (shot, target) => Projectile.prototype.step.call(shot, target);
 
-/* ---- player controls (spec: "Player controls") ----
- * controls: {left, right, retro, thrust} booleans for this frame.
- * Applies controls and integrates. */
-function stepPlayer(s, c) {
-  s.thrusting = false;
-  if (c.left) s.heading = norm(s.heading - s.turn);
-  if (c.right) s.heading = norm(s.heading + s.turn);
-  if (c.retro) steerToward(s, retrograde(s));
-  if (c.thrust) thrust(s);
-  integrate(s);
-}
+/* ==================== AI (spec: "AI …") ====================
+ * Still free functions over a ship; Phase 3 (docs/OOP_DESIGN.md) turns these
+ * into strategy objects. They drive a ship through the wrappers above. */
 
-/* ---- AI trader state machine (spec: "AI trader state machine") ----
- * s.state: 'cruise' | 'brake' | 'landing'; s.fade for landing.
- * target: {x, y}. Returns false once the entity should despawn. */
+/* AI trader state machine. s.state: 'cruise' | 'brake' | 'landing'; s.fade for
+ * landing. target: {x, y}. Returns false once the entity should despawn. */
 function stepTrader(s, target) {
   s.thrusting = false;
   if (!target) {
@@ -113,124 +277,8 @@ function stepTrader(s, target) {
   return true;
 }
 
-/* ---- landing rules (spec: "Landing") ---- */
-const LAND_DIST = 60,
-  LAND_SPEED = 0.9;
-function canLand(s, spob) {
-  return Math.hypot(spob.x - s.x, spob.y - s.y) < LAND_DIST && Math.hypot(s.vx, s.vy) <= LAND_SPEED;
-}
-function placeAtTakeoff(s, spob) {
-  s.x = spob.x;
-  s.y = spob.y - 40;
-  s.heading = 0;
-  s.vx = 0;
-  s.vy = 0; // launch stationary, not adrift
-}
-
-/* ---- hyperjump (spec: "Hyperjump") ---- */
-const JUMP_FUEL = 100,
-  JUMP_STREAK_FRAMES = 30,
-  ARRIVE_DIST = 700;
-const JUMP_WARMUP_FRAMES = 220; // hyperdrive spin-up before the streak
-const JUMP_MIN_DIST = 800; // no jumping this close to a spöb (approx.)
-/* Autopilot one frame of jump engagement toward mapBearing (galaxy-map
- * bearing to destination). Returns true once ship is ready to enter
- * hyperspace: aligned within one turn-step and at ≥95% max speed. */
-function stepJumpEngage(s, mapBearing) {
-  steerToward(s, mapBearing);
-  thrust(s);
-  integrate(s);
-  let diff = norm(mapBearing - s.heading);
-  if (diff > 180) diff -= 360;
-  return Math.abs(diff) <= s.turn && Math.hypot(s.vx, s.vy) >= 0.95 * s.maxSpeed;
-}
-/* Arrival placement in the destination system. inBearing = map bearing
- * from origin to destination (degrees). */
-function placeAtArrival(s, inBearing) {
-  const b = rad(inBearing);
-  s.x = -Math.sin(b) * ARRIVE_DIST;
-  s.y = Math.cos(b) * ARRIVE_DIST;
-  s.heading = norm(inBearing);
-  s.vx = Math.sin(b) * s.maxSpeed;
-  s.vy = -Math.cos(b) * s.maxSpeed;
-}
-
-/* ---- combat (spec: "Combat") ---- */
-const HOMING_TURN = 3; // deg/frame (approximation, see spec)
-const ROCKET_ACCEL_DIV = 15; // rocket reaches max speed in 15 frames
-const shotSpeedOf = (rec) => rec.Speed / 100;
-
-/* aim: launch heading (shell resolves turret/quadrant aim + inaccuracy).
- * shooter: {x, y, vx, vy, heading}. */
-function makeShot(rec, shooter, aim) {
-  const g = rec.Guidance;
-  const freefall = g === 5;
-  const heading = freefall ? shooter.heading : norm(aim);
-  const mv = freefall || g === 6 ? 0 : shotSpeedOf(rec);
-  return {
-    rec,
-    guidance: g,
-    x: shooter.x,
-    y: shooter.y,
-    heading,
-    vx: shooter.vx * (freefall ? 0.8 : 1) + Math.sin(rad(heading)) * mv,
-    vy: shooter.vy * (freefall ? 0.8 : 1) - Math.cos(rad(heading)) * mv,
-    speed: shotSpeedOf(rec),
-    life: rec.Count,
-  };
-}
-
-/* target: {x, y} or null. Returns false when the shot expires. */
-function stepShot(shot, target) {
-  const g = shot.guidance;
-  if ((g === 1 || g === 2) && target) {
-    let diff = norm(bearing(target.x - shot.x, target.y - shot.y) - shot.heading);
-    if (diff > 180) diff -= 360;
-    shot.heading = norm(shot.heading + Math.max(-HOMING_TURN, Math.min(HOMING_TURN, diff)));
-    shot.vx = Math.sin(rad(shot.heading)) * shot.speed;
-    shot.vy = -Math.cos(rad(shot.heading)) * shot.speed;
-  } else if (g === 6) {
-    const acc = shot.speed / ROCKET_ACCEL_DIV;
-    shot.vx += Math.sin(rad(shot.heading)) * acc;
-    shot.vy -= Math.cos(rad(shot.heading)) * acc;
-    const v = Math.hypot(shot.vx, shot.vy);
-    if (v > shot.speed) {
-      shot.vx *= shot.speed / v;
-      shot.vy *= shot.speed / v;
-    }
-  }
-  shot.x += shot.vx;
-  shot.y += shot.vy;
-  return --shot.life > 0;
-}
-
-/* st: {shields, armor, armorMax, disableFrac?}. Returns the ship's new
- * condition after one hit: 'shielded' | 'hit' | 'disabled' | 'destroyed'. */
-function applyDamage(st, rec) {
-  const up = st.shields > 0;
-  const dmg = Math.max(1, up ? rec.MassDmg / 4 + rec.EnergyDmg : rec.MassDmg + rec.EnergyDmg / 4);
-  if (up) {
-    st.shields = Math.max(0, st.shields - dmg);
-    return 'shielded';
-  }
-  st.armor -= dmg;
-  if (st.armor <= 0) return 'destroyed';
-  if (st.armor <= st.armorMax * (st.disableFrac ?? 1 / 3)) return 'disabled';
-  return 'hit';
-}
-
-/* +1% of max every ShieldRe frames (st gains a shieldT counter). */
-function stepShields(st, shieldMax, shieldRe) {
-  if (st.shields >= shieldMax || shieldRe <= 0) return;
-  st.shieldT = (st.shieldT ?? 0) + 1;
-  if (st.shieldT >= shieldRe) {
-    st.shieldT = 0;
-    st.shields = Math.min(shieldMax, st.shields + shieldMax / 100);
-  }
-}
-
-/* Warship attack step (spec: "Warship AI"): steer, thrust per distance
- * bands, integrate. Returns {aligned, dist} so the shell decides firing. */
+/* Warship attack step (spec: "Warship AI"): steer, thrust per distance bands,
+ * integrate. Returns {aligned, dist} so the shell decides firing. */
 function stepWarship(s, ex, ey) {
   const dist = Math.hypot(ex - s.x, ey - s.y);
   const aligned = steerToward(s, bearing(ex - s.x, ey - s.y));
@@ -238,6 +286,7 @@ function stepWarship(s, ex, ey) {
   integrate(s);
   return { aligned, dist };
 }
+
 /* Flee: turn tail to the threat and burn. */
 function stepFlee(s, ex, ey) {
   const aligned = steerToward(s, norm(bearing(ex - s.x, ey - s.y) + 180));
@@ -254,6 +303,8 @@ export {
   norm,
   frameIndex,
   bearing,
+  Ship,
+  Projectile,
   makeShip,
   thrust,
   steerToward,
