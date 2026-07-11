@@ -153,14 +153,20 @@
     // resource (decodeSnd {error}, e.g. compressed, or a throw on corrupt data)
     // is skipped rather than caching a bogus WAV or aborting the whole build.
     const decodePcm = data => { try { const d = decodeSnd(data); return (d && d.sampleRate && (d.pcm8 || d.pcm16)) ? d : null; } catch { return null; } };
-    // sounds are cheap (no canvas); routed.sounds already folds in plugin snd
+    // sounds are cheap (no canvas); routed.sounds already folds in plugin snd.
+    // snd 30000 is the title music (a different asset path, below), not an
+    // effect — skip it here so it isn't also written under sounds/.
     const sndType = EVRSRC.findType(routed.sounds, 'snd ');
-    for (const r of (sndType ? sndType.resources : [])) { tried.snd++; const d = decodePcm(r.data()); if (d) await cache.put(base + 'evassets/sounds/snd_' + r.id + '.wav', wavResp(d)); else skip.snd++; }
-    if (forks['EV Music']) {
+    for (const r of (sndType ? sndType.resources : [])) { if (r.id === 30000) continue; tried.snd++; const d = decodePcm(r.data()); if (d) await cache.put(base + 'evassets/sounds/snd_' + r.id + '.wav', wavResp(d)); else skip.snd++; }
+    // Music (snd 30000 → evassets/music/snd_30000.wav, per flight_template.html):
+    // prefer a plugin-provided/merged snd 30000, falling back to the base EV
+    // Music fork when no plugin overrides it.
+    let music = sndType && sndType.resources.find(r => r.id === 30000);
+    if (!music && forks['EV Music']) {
       const mus = EVRSRC.parseFork(Buffer.from(forks['EV Music'])), sm = EVRSRC.findType(mus, 'snd ');
-      const m = sm && sm.resources.find(r => r.id === 30000);
-      if (m) { const d = decodePcm(m.data()); if (d) await cache.put(base + 'evassets/music/snd_30000.wav', wavResp(d)); }
+      music = sm && sm.resources.find(r => r.id === 30000);
     }
+    if (music) { const d = decodePcm(music.data()); if (d) await cache.put(base + 'evassets/music/snd_30000.wav', wavResp(d)); }
     // One summary line, and a loud warning if a whole category was attempted but
     // entirely failed — the signature of a decoder regression, not stray data.
     if (log) {
