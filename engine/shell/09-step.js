@@ -50,6 +50,10 @@ import { introUp } from './11-title.js';
  * through getters, so the tick reads its entities through one object and later
  * phases can migrate ownership onto it. `export const step` stays a thin wrapper
  * so the run loop (17-main) is unchanged.
+ *
+ * AI ships pick a behavior from a small strategy hierarchy (phase 3): the tick
+ * calls `aiFor(ship).step(ship, world)` instead of an if/else-if chain on the
+ * ship's flags.
  */
 /* ---------------- logic step (30Hz) ---------------- */
 
@@ -76,6 +80,106 @@ export function checkHostileAlert(aiShips = S.aiShips) {
   if (S.alertGrace > 0) S.alertGrace--;
   else if (n > S.prevHostiles) playSnd(370, 0.7); // Red Alert
   S.prevHostiles = n;
+}
+
+/* ---------------- AI strategies (spec: "AI …") ----------------
+ * One strategy per behavior an AI ship can take, dispatched each frame by
+ * `aiFor(ship)` from the ship's current disposition (docs/OOP_DESIGN.md,
+ * phase 3). Strategies are stateless — they act on the ship + world passed in —
+ * so a single shared instance of each is reused. The flight math still lives in
+ * the core (EV.stepWarship / stepTrader / stepFlee); the strategy decides which
+ * to run, picks a target, and fires. */
+class AI {
+  // eslint-disable-next-line no-unused-vars
+  step(s, world) {}
+}
+
+/* A player escort: guard the player, engaging the nearest ship hostile to them,
+ * otherwise holding a loose formation. Escorts never target the player's side. */
+class EscortAI extends AI {
+  step(s, world) {
+    let tgt = null,
+      best = Infinity;
+    for (const h of world.ships) {
+      if (h === s || h.playerEscort || h.deathT >= 0 || h.disabled || !h.hostile) continue;
+      const d = Math.hypot(h.x - s.x, h.y - s.y);
+      if (d < best) {
+        best = d;
+        tgt = h;
+      }
+    }
+    if (tgt && !S.gameOver && !S.landedAt) {
+      const r = EV.stepWarship(s, tgt.x, tgt.y);
+      if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, tgt, true);
+    } else {
+      EV.stepWarship(s, world.player.x, world.player.y); // shadow the player
+    }
+  }
+}
+
+/* A ship hostile to the player: close in and fire when aligned and in range. */
+class HunterAI extends AI {
+  step(s, world) {
+    const r = EV.stepWarship(s, world.player.x, world.player.y);
+    if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, world.player, true);
+  }
+}
+
+/* A frightened ship: turn tail to the player and run. */
+class FleeAI extends AI {
+  step(s, world) {
+    EV.stepFlee(s, world.player.x, world.player.y);
+  }
+}
+
+/* An ambient/mission trader: cruise to its target and land, then despawn (and
+ * schedule a replacement) — or loiter if it's a catch-goal or an unoffered pers. */
+class TraderAI extends AI {
+  step(s, world) {
+    const alive = EV.stepTrader(s, s.target);
+    // A plain trader that reaches its planet docks instantly (clean
+    // disappearance at the spob — no drawn-out ghost fade).
+    const docked = alive && !s.misnId && s.state === 'landing';
+    if (!alive || docked) {
+      if ((s.misnId != null && !s.escort) || (s.isPers && !s.offered)) {
+        // A catch-goal target (board/disable/destroy), or a named character
+        // still carrying an unaccepted job, mustn't slip away by landing —
+        // loiter near the spob instead of despawning.
+        s.target = S.spobs.length ? S.spobs[Math.floor(Math.random() * S.spobs.length)] : null;
+        s.state = 'cruise';
+        s.fade = 1;
+      } else {
+        if (s.misnId != null && s.escort) onMissionEscortArrived(s);
+        world.ships.splice(world.ships.indexOf(s), 1);
+        if (S.shipTarget === s) S.shipTarget = null;
+        if (s.misnId == null) {
+          const epoch = S.systEpoch;
+          setTimeout(
+            () => {
+              if (epoch === S.systEpoch) spawnAI(Math.random() < 0.5);
+            },
+            2000 + Math.random() * 6000,
+          );
+        }
+      }
+    }
+  }
+}
+
+const escortAI = new EscortAI(),
+  hunterAI = new HunterAI(),
+  fleeAI = new FleeAI(),
+  traderAI = new TraderAI();
+
+/* Pick the strategy for a ship this frame. The order and conditions match the
+ * original if/else-if chain exactly: a hostile ship only hunts while the player
+ * is alive and in flight; otherwise (and when not fleeing) it behaves as a
+ * trader. */
+function aiFor(s, world) {
+  if (s.playerEscort) return escortAI;
+  if (s.hostile && world.player.deathT < 0 && !S.gameOver && !S.landedAt) return hunterAI;
+  if (s.fleeing) return fleeAI;
+  return traderAI;
 }
 
 /* The live flight simulation for the current system. It owns the entities and
@@ -221,59 +325,9 @@ export class World {
       }
       EV.stepShields(s, s.shieldMax, s.shieldRe);
       for (const w of s.weapons) if (w.cool > 0) w.cool--;
-      if (s.playerEscort) {
-        // Guard the player: engage the nearest ship hostile to them, otherwise
-        // hold a loose formation nearby. Escorts never target the player's side.
-        let tgt = null,
-          best = Infinity;
-        for (const h of this.ships) {
-          if (h === s || h.playerEscort || h.deathT >= 0 || h.disabled || !h.hostile) continue;
-          const d = Math.hypot(h.x - s.x, h.y - s.y);
-          if (d < best) {
-            best = d;
-            tgt = h;
-          }
-        }
-        if (tgt && !S.gameOver && !S.landedAt) {
-          const r = EV.stepWarship(s, tgt.x, tgt.y);
-          if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, tgt, true);
-        } else {
-          EV.stepWarship(s, this.player.x, this.player.y); // shadow the player
-        }
-      } else if (s.hostile && this.player.deathT < 0 && !S.gameOver && !S.landedAt) {
-        const r = EV.stepWarship(s, this.player.x, this.player.y);
-        if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, this.player, true);
-      } else if (s.fleeing) {
-        EV.stepFlee(s, this.player.x, this.player.y);
-      } else {
-        const alive = EV.stepTrader(s, s.target);
-        // A plain trader that reaches its planet docks instantly (clean
-        // disappearance at the spob — no drawn-out ghost fade).
-        const docked = alive && !s.misnId && s.state === 'landing';
-        if (!alive || docked) {
-          if ((s.misnId != null && !s.escort) || (s.isPers && !s.offered)) {
-            // A catch-goal target (board/disable/destroy), or a named character
-            // still carrying an unaccepted job, mustn't slip away by landing —
-            // loiter near the spob instead of despawning.
-            s.target = S.spobs.length ? S.spobs[Math.floor(Math.random() * S.spobs.length)] : null;
-            s.state = 'cruise';
-            s.fade = 1;
-          } else {
-            if (s.misnId != null && s.escort) onMissionEscortArrived(s);
-            this.ships.splice(this.ships.indexOf(s), 1);
-            if (S.shipTarget === s) S.shipTarget = null;
-            if (s.misnId == null) {
-              const epoch = S.systEpoch;
-              setTimeout(
-                () => {
-                  if (epoch === S.systEpoch) spawnAI(Math.random() < 0.5);
-                },
-                2000 + Math.random() * 6000,
-              );
-            }
-          }
-        }
-      }
+      // Behavior is a strategy chosen from the ship's current disposition
+      // (escort / hostile-to-player / fleeing / trader) — see the AI classes.
+      aiFor(s, this).step(s, this);
     }
 
     /* shots */
