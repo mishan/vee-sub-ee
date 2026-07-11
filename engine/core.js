@@ -12,22 +12,29 @@
 const FPS = 30;
 
 /* ---- unit conversions (spec: "Ship stat conversions") ---- */
-const maxSpeedOf = rec => rec.Speed / 100;   // px/frame
-const accelOf    = rec => rec.Accel / 9000;  // px/frame²
-const turnOf     = rec => rec.Maneuver;      // deg/frame
+const maxSpeedOf = (rec) => rec.Speed / 100; // px/frame
+const accelOf = (rec) => rec.Accel / 9000; // px/frame²
+const turnOf = (rec) => rec.Maneuver; // deg/frame
 
 /* ---- angles ---- */
-const rad = d => d * Math.PI / 180;
-const norm = d => ((d % 360) + 360) % 360;
+const rad = (d) => (d * Math.PI) / 180;
+const norm = (d) => ((d % 360) + 360) % 360;
 const frameIndex = (heading, frames) =>
   ((Math.round(heading / (360 / frames)) % frames) + frames) % frames;
-const bearing = (dx, dy) => norm(Math.atan2(dx, -dy) * 180 / Math.PI);
+const bearing = (dx, dy) => norm((Math.atan2(dx, -dy) * 180) / Math.PI);
 
 /* ---- entities ---- */
 function makeShip(rec, x, y, heading) {
   return {
-    rec, x, y, heading: norm(heading), vx: 0, vy: 0,
-    maxSpeed: maxSpeedOf(rec), accel: accelOf(rec), turn: turnOf(rec),
+    rec,
+    x,
+    y,
+    heading: norm(heading),
+    vx: 0,
+    vy: 0,
+    maxSpeed: maxSpeedOf(rec),
+    accel: accelOf(rec),
+    turn: turnOf(rec),
     thrusting: false,
   };
 }
@@ -36,7 +43,10 @@ function thrust(s) {
   s.vx += Math.sin(rad(s.heading)) * s.accel;
   s.vy -= Math.cos(rad(s.heading)) * s.accel;
   const v = Math.hypot(s.vx, s.vy);
-  if (v > s.maxSpeed) { s.vx *= s.maxSpeed / v; s.vy *= s.maxSpeed / v; }
+  if (v > s.maxSpeed) {
+    s.vx *= s.maxSpeed / v;
+    s.vy *= s.maxSpeed / v;
+  }
   s.thrusting = true;
 }
 
@@ -48,16 +58,19 @@ function steerToward(s, desired) {
   return Math.abs(diff) < s.turn * 1.5;
 }
 
-const retrograde = s => norm(Math.atan2(-s.vx, s.vy) * 180 / Math.PI);
+const retrograde = (s) => norm((Math.atan2(-s.vx, s.vy) * 180) / Math.PI);
 
-function integrate(s) { s.x += s.vx; s.y += s.vy; }
+function integrate(s) {
+  s.x += s.vx;
+  s.y += s.vy;
+}
 
 /* ---- player controls (spec: "Player controls") ----
  * controls: {left, right, retro, thrust} booleans for this frame.
  * Applies controls and integrates. */
 function stepPlayer(s, c) {
   s.thrusting = false;
-  if (c.left)  s.heading = norm(s.heading - s.turn);
+  if (c.left) s.heading = norm(s.heading - s.turn);
   if (c.right) s.heading = norm(s.heading + s.turn);
   if (c.retro) steerToward(s, retrograde(s));
   if (c.thrust) thrust(s);
@@ -69,23 +82,30 @@ function stepPlayer(s, c) {
  * target: {x, y}. Returns false once the entity should despawn. */
 function stepTrader(s, target) {
   s.thrusting = false;
-  if (!target) { integrate(s); return true; }
+  if (!target) {
+    integrate(s);
+    return true;
+  }
   if (s.state === undefined) s.state = 'cruise';
-  const dx = target.x - s.x, dy = target.y - s.y;
+  const dx = target.x - s.x,
+    dy = target.y - s.y;
   const dist = Math.hypot(dx, dy);
   const speed = Math.hypot(s.vx, s.vy);
   // brake distance + coast while turning 180° to retrograde + pad
-  const stopDist = speed * speed / (2 * s.accel) + speed * (180 / s.turn) + 40;
+  const stopDist = (speed * speed) / (2 * s.accel) + speed * (180 / s.turn) + 40;
   if (s.state === 'cruise') {
     const aligned = steerToward(s, bearing(dx, dy));
-    if (dist > stopDist) { if (aligned) thrust(s); }
-    else s.state = 'brake';
+    if (dist > stopDist) {
+      if (aligned) thrust(s);
+    } else s.state = 'brake';
   } else if (s.state === 'brake') {
     const aligned = steerToward(s, retrograde(s));
-    if (speed > 0.15) { if (aligned) thrust(s); }
-    else if (dist < 80) s.state = 'landing';
+    if (speed > 0.15) {
+      if (aligned) thrust(s);
+    } else if (dist < 80) s.state = 'landing';
     else s.state = 'cruise';
-  } else { // landing
+  } else {
+    // landing
     s.fade = (s.fade ?? 1) - 0.02;
     if (s.fade <= 0) return false;
   }
@@ -94,20 +114,25 @@ function stepTrader(s, target) {
 }
 
 /* ---- landing rules (spec: "Landing") ---- */
-const LAND_DIST = 60, LAND_SPEED = 0.9;
+const LAND_DIST = 60,
+  LAND_SPEED = 0.9;
 function canLand(s, spob) {
-  return Math.hypot(spob.x - s.x, spob.y - s.y) < LAND_DIST &&
-         Math.hypot(s.vx, s.vy) <= LAND_SPEED;
+  return Math.hypot(spob.x - s.x, spob.y - s.y) < LAND_DIST && Math.hypot(s.vx, s.vy) <= LAND_SPEED;
 }
 function placeAtTakeoff(s, spob) {
-  s.x = spob.x; s.y = spob.y - 40;
-  s.heading = 0; s.vx = 0; s.vy = 0; // launch stationary, not adrift
+  s.x = spob.x;
+  s.y = spob.y - 40;
+  s.heading = 0;
+  s.vx = 0;
+  s.vy = 0; // launch stationary, not adrift
 }
 
 /* ---- hyperjump (spec: "Hyperjump") ---- */
-const JUMP_FUEL = 100, JUMP_STREAK_FRAMES = 30, ARRIVE_DIST = 700;
-const JUMP_WARMUP_FRAMES = 220;  // hyperdrive spin-up before the streak
-const JUMP_MIN_DIST = 800;       // no jumping this close to a spöb (approx.)
+const JUMP_FUEL = 100,
+  JUMP_STREAK_FRAMES = 30,
+  ARRIVE_DIST = 700;
+const JUMP_WARMUP_FRAMES = 220; // hyperdrive spin-up before the streak
+const JUMP_MIN_DIST = 800; // no jumping this close to a spöb (approx.)
 /* Autopilot one frame of jump engagement toward mapBearing (galaxy-map
  * bearing to destination). Returns true once ship is ready to enter
  * hyperspace: aligned within one turn-step and at ≥95% max speed. */
@@ -131,9 +156,9 @@ function placeAtArrival(s, inBearing) {
 }
 
 /* ---- combat (spec: "Combat") ---- */
-const HOMING_TURN = 3;          // deg/frame (approximation, see spec)
-const ROCKET_ACCEL_DIV = 15;    // rocket reaches max speed in 15 frames
-const shotSpeedOf = rec => rec.Speed / 100;
+const HOMING_TURN = 3; // deg/frame (approximation, see spec)
+const ROCKET_ACCEL_DIV = 15; // rocket reaches max speed in 15 frames
+const shotSpeedOf = (rec) => rec.Speed / 100;
 
 /* aim: launch heading (shell resolves turret/quadrant aim + inaccuracy).
  * shooter: {x, y, vx, vy, heading}. */
@@ -141,10 +166,13 @@ function makeShot(rec, shooter, aim) {
   const g = rec.Guidance;
   const freefall = g === 5;
   const heading = freefall ? shooter.heading : norm(aim);
-  const mv = (freefall || g === 6) ? 0 : shotSpeedOf(rec);
+  const mv = freefall || g === 6 ? 0 : shotSpeedOf(rec);
   return {
-    rec, guidance: g,
-    x: shooter.x, y: shooter.y, heading,
+    rec,
+    guidance: g,
+    x: shooter.x,
+    y: shooter.y,
+    heading,
     vx: shooter.vx * (freefall ? 0.8 : 1) + Math.sin(rad(heading)) * mv,
     vy: shooter.vy * (freefall ? 0.8 : 1) - Math.cos(rad(heading)) * mv,
     speed: shotSpeedOf(rec),
@@ -166,9 +194,13 @@ function stepShot(shot, target) {
     shot.vx += Math.sin(rad(shot.heading)) * acc;
     shot.vy -= Math.cos(rad(shot.heading)) * acc;
     const v = Math.hypot(shot.vx, shot.vy);
-    if (v > shot.speed) { shot.vx *= shot.speed / v; shot.vy *= shot.speed / v; }
+    if (v > shot.speed) {
+      shot.vx *= shot.speed / v;
+      shot.vy *= shot.speed / v;
+    }
   }
-  shot.x += shot.vx; shot.y += shot.vy;
+  shot.x += shot.vx;
+  shot.y += shot.vy;
   return --shot.life > 0;
 }
 
@@ -176,12 +208,14 @@ function stepShot(shot, target) {
  * condition after one hit: 'shielded' | 'hit' | 'disabled' | 'destroyed'. */
 function applyDamage(st, rec) {
   const up = st.shields > 0;
-  const dmg = Math.max(1, up ? rec.MassDmg / 4 + rec.EnergyDmg
-                             : rec.MassDmg + rec.EnergyDmg / 4);
-  if (up) { st.shields = Math.max(0, st.shields - dmg); return 'shielded'; }
+  const dmg = Math.max(1, up ? rec.MassDmg / 4 + rec.EnergyDmg : rec.MassDmg + rec.EnergyDmg / 4);
+  if (up) {
+    st.shields = Math.max(0, st.shields - dmg);
+    return 'shielded';
+  }
   st.armor -= dmg;
   if (st.armor <= 0) return 'destroyed';
-  if (st.armor <= st.armorMax * (st.disableFrac ?? (1 / 3))) return 'disabled';
+  if (st.armor <= st.armorMax * (st.disableFrac ?? 1 / 3)) return 'disabled';
   return 'hit';
 }
 
@@ -212,13 +246,38 @@ function stepFlee(s, ex, ey) {
 }
 
 export {
-  FPS, maxSpeedOf, accelOf, turnOf,
-  rad, norm, frameIndex, bearing,
-  makeShip, thrust, steerToward, retrograde, integrate,
-  stepPlayer, stepTrader,
-  LAND_DIST, LAND_SPEED, canLand, placeAtTakeoff,
-  JUMP_FUEL, JUMP_STREAK_FRAMES, ARRIVE_DIST, JUMP_WARMUP_FRAMES,
-  JUMP_MIN_DIST, stepJumpEngage, placeAtArrival,
-  HOMING_TURN, shotSpeedOf, makeShot, stepShot, applyDamage, stepShields,
-  stepWarship, stepFlee,
+  FPS,
+  maxSpeedOf,
+  accelOf,
+  turnOf,
+  rad,
+  norm,
+  frameIndex,
+  bearing,
+  makeShip,
+  thrust,
+  steerToward,
+  retrograde,
+  integrate,
+  stepPlayer,
+  stepTrader,
+  LAND_DIST,
+  LAND_SPEED,
+  canLand,
+  placeAtTakeoff,
+  JUMP_FUEL,
+  JUMP_STREAK_FRAMES,
+  ARRIVE_DIST,
+  JUMP_WARMUP_FRAMES,
+  JUMP_MIN_DIST,
+  stepJumpEngage,
+  placeAtArrival,
+  HOMING_TURN,
+  shotSpeedOf,
+  makeShot,
+  stepShot,
+  applyDamage,
+  stepShields,
+  stepWarship,
+  stepFlee,
 };

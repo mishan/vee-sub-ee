@@ -1,10 +1,37 @@
-import { S, TEST_MODE, escorts, explored, preloadSprites, ships, showMsg, spinsNeededFor, strictPlay, systs } from './01-state.js';
+import {
+  S,
+  TEST_MODE,
+  escorts,
+  explored,
+  preloadSprites,
+  ships,
+  showMsg,
+  spinsNeededFor,
+  strictPlay,
+  systs,
+} from './01-state.js';
 import { maybeSpawnBountyHunter, spawnAI } from './02-spawning.js';
 import { attenuate, playSnd, stopAllLoops } from './03-sound.js';
-import { abortJump, completeJump, fire, hitShip, mapBearingTo, nearestSpobInfo, player, shipHalf, spawnExplosion } from './04-combat.js';
+import {
+  abortJump,
+  completeJump,
+  fire,
+  hitShip,
+  mapBearingTo,
+  nearestSpobInfo,
+  player,
+  shipHalf,
+  spawnExplosion,
+} from './04-combat.js';
 import { keys, touchCtl } from './05-input.js';
 import { hailOpen, onShipDestroyed } from './06-interaction.js';
-import { maybeSpawnMissionShips, misnName, misns, onMissionEscortArrived, spobById } from './08-missions.js';
+import {
+  maybeSpawnMissionShips,
+  misnName,
+  misns,
+  onMissionEscortArrived,
+  spobById,
+} from './08-missions.js';
 import { maybeSpawnPers } from './15-pers.js';
 import { introUp } from './11-title.js';
 
@@ -22,17 +49,22 @@ export function maxWeaponRange(e) {
   let r = 0;
   for (const w of e.weapons)
     if (w.rec.Guidance !== 99)
-      r = Math.max(r, w.rec.Guidance === 0 || w.rec.Guidance === 3
-        ? w.rec.Speed : EV.shotSpeedOf(w.rec) * w.rec.Count);
+      r = Math.max(
+        r,
+        w.rec.Guidance === 0 || w.rec.Guidance === 3
+          ? w.rec.Speed
+          : EV.shotSpeedOf(w.rec) * w.rec.Count,
+      );
   return r;
 }
 
 /* Red-alert when the number of ships hostile to the player rises (a new
  * grudge, a bounty hunter jumping in, a defense fleet scrambling) — but not
  * for the ambient population when a system first loads (alertGrace). */
-S.prevHostiles = 0; S.alertGrace = 0;
+S.prevHostiles = 0;
+S.alertGrace = 0;
 export function checkHostileAlert() {
-  const n = S.aiShips.filter(s => s.hostile && s.deathT < 0).length;
+  const n = S.aiShips.filter((s) => s.hostile && s.deathT < 0).length;
   if (S.alertGrace > 0) S.alertGrace--;
   else if (n > S.prevHostiles) playSnd(370, 0.7); // Red Alert
   S.prevHostiles = n;
@@ -50,11 +82,11 @@ export function step() {
       const ready = EV.stepJumpEngage(player, mapBearingTo(S.jump.destId));
       S.jump.t++;
       // spec: aligned+fast AND drive spun up AND clear of stellars
-      if (ready && S.jump.t >= EV.JUMP_WARMUP_FRAMES &&
-          nearestSpobInfo().dist >= EV.JUMP_MIN_DIST)
+      if (ready && S.jump.t >= EV.JUMP_WARMUP_FRAMES && nearestSpobInfo().dist >= EV.JUMP_MIN_DIST)
         S.jump = { destId: S.jump.destId, phase: 'streak', t: 0 };
     } else if (S.jump && S.jump.phase === 'streak') {
-      EV.thrust(player); EV.integrate(player);
+      EV.thrust(player);
+      EV.integrate(player);
       if (++S.jump.t >= EV.JUMP_STREAK_FRAMES) completeJump();
     } else if (player.deathT >= 0) {
       EV.integrate(player); // breaking up: drift while the death timer runs
@@ -63,13 +95,19 @@ export function step() {
         playSnd(303);
         stopAllLoops();
         S.gameOver = true;
-        if (strictPlay) try { localStorage.removeItem('ve_pilot'); } catch {} // permadeath \u2014 the pilot is gone
+        if (strictPlay)
+          try {
+            localStorage.removeItem('ve_pilot');
+          } catch {} // permadeath \u2014 the pilot is gone
         let hasPilot = false;
-        try { hasPilot = !TEST_MODE && !!localStorage.getItem('ve_pilot'); } catch {}
-        document.getElementById('deadHint').textContent =
-          strictPlay ? 'Strict Play: this pilot is gone for good. N: new pilot' :
-          hasPilot ? 'R: return to your last landing \u00b7 N: new pilot'
-                   : 'Press R to try again';
+        try {
+          hasPilot = !TEST_MODE && !!localStorage.getItem('ve_pilot');
+        } catch {}
+        document.getElementById('deadHint').textContent = strictPlay
+          ? 'Strict Play: this pilot is gone for good. N: new pilot'
+          : hasPilot
+            ? 'R: return to your last landing \u00b7 N: new pilot'
+            : 'Press R to try again';
         document.getElementById('dead').style.display = 'flex';
       }
     } else {
@@ -87,7 +125,8 @@ export function step() {
       }
       if (touchCtl.thrust) cThrust = true;
       EV.stepPlayer(player, {
-        left: cl, right: cr,
+        left: cl,
+        right: cr,
         retro: keys['arrowdown'] || keys['s'],
         thrust: cThrust,
       });
@@ -96,13 +135,16 @@ export function step() {
       if (keys[' '] || touchCtl.fire) fire(player, S.shipTarget, true);
       if (keys['x'] && player.selSecondary) fire(player, S.shipTarget, false);
       /* klaxxon on shield collapse, re-armed on recovery */
-      if (player.shields <= 0 && S.klaxxonArmed) { playSnd(350, 0.8); S.klaxxonArmed = false; }
-      else if (player.shields > player.shieldMax * 0.25) S.klaxxonArmed = true;
+      if (player.shields <= 0 && S.klaxxonArmed) {
+        playSnd(350, 0.8);
+        S.klaxxonArmed = false;
+      } else if (player.shields > player.shieldMax * 0.25) S.klaxxonArmed = true;
     }
   }
 
   for (const s of [...S.aiShips]) {
-    if (s.deathT >= 0) {                       // disintegrating (fireball already going)
+    if (s.deathT >= 0) {
+      // disintegrating (fireball already going)
       EV.integrate(s);
       // secondary blasts flicker across a bigger hull as it comes apart
       if (s.deathDelay >= 30 && s.deathT % 7 === 0)
@@ -113,35 +155,52 @@ export function step() {
         onShipDestroyed(s);
         S.aiShips.splice(S.aiShips.indexOf(s), 1);
         if (S.shipTarget === s) S.shipTarget = null;
-        if (s.fighter) {                         // a downed fighter is lost (bay ammo not restored)
+        if (s.fighter) {
+          // a downed fighter is lost (bay ammo not restored)
           showMsg(`Your ${ships[s.shipId] ? ships[s.shipId].name : 'fighter'} was shot down.`);
           continue;
         }
-        if (s.playerEscort) {                    // a lost escort is gone for good
-          const i = escorts.findIndex(e => e.id === s.escId);
-          const name = (i >= 0 && escorts[i].name) || s.misnName
-            || (ships[s.shipId] && ships[s.shipId].name) || 'escort';
+        if (s.playerEscort) {
+          // a lost escort is gone for good
+          const i = escorts.findIndex((e) => e.id === s.escId);
+          const name =
+            (i >= 0 && escorts[i].name) ||
+            s.misnName ||
+            (ships[s.shipId] && ships[s.shipId].name) ||
+            'escort';
           if (i >= 0) escorts.splice(i, 1);
           showMsg(`Your escort ${name} was destroyed.`);
-          continue;                              // don't spawn an ambient replacement
+          continue; // don't spawn an ambient replacement
         }
         const epoch = S.systEpoch;
-        setTimeout(() => { if (epoch === S.systEpoch) spawnAI(true); }, 4000 + Math.random() * 8000);
+        setTimeout(
+          () => {
+            if (epoch === S.systEpoch) spawnAI(true);
+          },
+          4000 + Math.random() * 8000,
+        );
       }
       continue;
     }
     if (s.warpIn > 0) s.warpIn--;
-    if (s.disabled) { EV.integrate(s); continue; }
+    if (s.disabled) {
+      EV.integrate(s);
+      continue;
+    }
     EV.stepShields(s, s.shieldMax, s.shieldRe);
     for (const w of s.weapons) if (w.cool > 0) w.cool--;
     if (s.playerEscort) {
       // Guard the player: engage the nearest ship hostile to them, otherwise
       // hold a loose formation nearby. Escorts never target the player's side.
-      let tgt = null, best = Infinity;
+      let tgt = null,
+        best = Infinity;
       for (const h of S.aiShips) {
         if (h === s || h.playerEscort || h.deathT >= 0 || h.disabled || !h.hostile) continue;
         const d = Math.hypot(h.x - s.x, h.y - s.y);
-        if (d < best) { best = d; tgt = h; }
+        if (d < best) {
+          best = d;
+          tgt = h;
+        }
       }
       if (tgt && !S.gameOver && !S.landedAt) {
         const r = EV.stepWarship(s, tgt.x, tgt.y);
@@ -165,15 +224,20 @@ export function step() {
           // still carrying an unaccepted job, mustn't slip away by landing —
           // loiter near the spob instead of despawning.
           s.target = S.spobs.length ? S.spobs[Math.floor(Math.random() * S.spobs.length)] : null;
-          s.state = 'cruise'; s.fade = 1;
+          s.state = 'cruise';
+          s.fade = 1;
         } else {
           if (s.misnId != null && s.escort) onMissionEscortArrived(s);
           S.aiShips.splice(S.aiShips.indexOf(s), 1);
           if (S.shipTarget === s) S.shipTarget = null;
           if (s.misnId == null) {
             const epoch = S.systEpoch;
-            setTimeout(() => { if (epoch === S.systEpoch) spawnAI(Math.random() < 0.5); },
-              2000 + Math.random() * 6000);
+            setTimeout(
+              () => {
+                if (epoch === S.systEpoch) spawnAI(Math.random() < 0.5);
+              },
+              2000 + Math.random() * 6000,
+            );
           }
         }
       }
@@ -181,17 +245,17 @@ export function step() {
   }
 
   /* shots */
-  const everyone = player.deathT < 0 && !S.landedAt && !S.gameOver ? [player, ...S.aiShips] : [...S.aiShips];
+  const everyone =
+    player.deathT < 0 && !S.landedAt && !S.gameOver ? [player, ...S.aiShips] : [...S.aiShips];
   // The player and their escorts are one side: their fire never harms each other.
-  const alliedTo = o => o === player || o.playerEscort;
+  const alliedTo = (o) => o === player || o.playerEscort;
   const friendly = (a, b) => alliedTo(a) && alliedTo(b);
   for (const shot of [...S.shots]) {
     const alive = EV.stepShot(shot, shot.homing);
     let hit = false;
     for (const v of everyone) {
       if (v === shot.owner || v.deathT >= 0 || friendly(shot.owner, v)) continue;
-      if (Math.hypot(v.x - shot.x, v.y - shot.y) <
-          Math.max(shot.rec.ProxRadius, shipHalf(v))) {
+      if (Math.hypot(v.x - shot.x, v.y - shot.y) < Math.max(shot.rec.ProxRadius, shipHalf(v))) {
         hitShip(v, shot.rec, shot.heading, shot.owner);
         if (shot.rec.ExplodType >= 0) spawnExplosion(shot.x, shot.y, shot.rec.ExplodType);
         hit = true;
@@ -203,17 +267,28 @@ export function step() {
 
   /* beams: ray from owner's nose, damage first ship within 8 px */
   for (const b of [...S.beams]) {
-    if (b.owner.deathT >= 0 || --b.life <= 0) { S.beams.splice(S.beams.indexOf(b), 1); continue; }
-    b.heading = b.turreted && b.target ? EV.bearing(b.target.x - b.owner.x, b.target.y - b.owner.y)
-                                       : b.owner.heading;
-    const dx = Math.sin(EV.rad(b.heading)), dy = -Math.cos(EV.rad(b.heading));
-    let bestT = Infinity, bestV = null;
+    if (b.owner.deathT >= 0 || --b.life <= 0) {
+      S.beams.splice(S.beams.indexOf(b), 1);
+      continue;
+    }
+    b.heading =
+      b.turreted && b.target
+        ? EV.bearing(b.target.x - b.owner.x, b.target.y - b.owner.y)
+        : b.owner.heading;
+    const dx = Math.sin(EV.rad(b.heading)),
+      dy = -Math.cos(EV.rad(b.heading));
+    let bestT = Infinity,
+      bestV = null;
     for (const v of everyone) {
       if (v === b.owner || v.deathT >= 0 || friendly(b.owner, v)) continue;
       const t = (v.x - b.owner.x) * dx + (v.y - b.owner.y) * dy;
       if (t < 0 || t > b.rec.Speed) continue;
-      const px = b.owner.x + dx * t, py = b.owner.y + dy * t;
-      if (Math.hypot(v.x - px, v.y - py) < 8 + shipHalf(v) / 2 && t < bestT) { bestT = t; bestV = v; }
+      const px = b.owner.x + dx * t,
+        py = b.owner.y + dy * t;
+      if (Math.hypot(v.x - px, v.y - py) < 8 + shipHalf(v) / 2 && t < bestT) {
+        bestT = t;
+        bestV = v;
+      }
     }
     b.len = bestV ? bestT : b.rec.Speed;
     if (bestV) hitShip(bestV, b.rec, b.heading, b.owner);
@@ -225,7 +300,6 @@ export function step() {
       S.explosions.splice(S.explosions.indexOf(ex), 1);
   }
 }
-
 
 /* Arrive in / load a system: rebuild the per-system world and spawn ambient
  * AI plus this system's mission/pers ships. Called on jump arrival,
@@ -239,14 +313,18 @@ export function loadSystem(systId) {
     .filter(([, p]) => p.System === S.SYSTEM_ID)
     .map(([id, p]) => ({ id: +id, x: p.xPos, y: p.yPos, ...p }));
   S.aiShips = [];
-  S.shots = []; S.beams = []; S.explosions = [];
-  S.navTarget = null; S.shipTarget = null;
-  S.alertGrace = 45; S.prevHostiles = 0; // don't red-alert the ambient population
+  S.shots = [];
+  S.beams = [];
+  S.explosions = [];
+  S.navTarget = null;
+  S.shipTarget = null;
+  S.alertGrace = 45;
+  S.prevHostiles = 0; // don't red-alert the ambient population
   preloadSprites(spinsNeededFor(S.SYSTEM_ID));
   // Landscapes for this system's spobs (default 10000+Type and custom),
   // so the planet screen never shows without its picture.
   for (const p of S.spobs)
-    for (const id of [10000 + p.Type, p.CustPicID].filter(v => v >= 0)) {
+    for (const id of [10000 + p.Type, p.CustPicID].filter((v) => v >= 0)) {
       if (document.getElementById('scape' + id)) continue;
       const img = document.createElement('img');
       img.id = 'scape' + id;
@@ -268,8 +346,10 @@ export function loadSystem(systId) {
     maybeSpawnMissionShips(A);
     if (A.shipGoal === 4 && !A.observed) {
       const sys = A.shipSyst;
-      if ((sys >= 128 && sys === S.SYSTEM_ID) ||
-          (A.travelStel && spobById(A.travelStel) && spobById(A.travelStel).System === S.SYSTEM_ID)) {
+      if (
+        (sys >= 128 && sys === S.SYSTEM_ID) ||
+        (A.travelStel && spobById(A.travelStel) && spobById(A.travelStel).System === S.SYSTEM_ID)
+      ) {
         A.observed = true;
         showMsg(`${misnName(misns[A.id], A)}: target observed — return for payment.`);
       }

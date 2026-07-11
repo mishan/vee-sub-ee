@@ -1,5 +1,26 @@
-import { S, dominated, dudes, escorts, html, missionBits, outfits, params, reputation, savePilot, ships, showMsg, systs } from './01-state.js';
-import { HIRE_ROSTER, MAX_ESCORTS, hireFee, shipClassDesc, upkeepOf, weighted } from './02-spawning.js';
+import {
+  S,
+  dominated,
+  dudes,
+  escorts,
+  html,
+  missionBits,
+  outfits,
+  params,
+  reputation,
+  savePilot,
+  ships,
+  showMsg,
+  systs,
+} from './01-state.js';
+import {
+  HIRE_ROSTER,
+  MAX_ESCORTS,
+  hireFee,
+  shipClassDesc,
+  upkeepOf,
+  weighted,
+} from './02-spawning.js';
 import { applyShipStats, armShip, holds, player } from './04-combat.js';
 import { cargoUsed, refreshView } from './07-trade.js';
 import { adjustRep, legalOf } from './13-legal.js';
@@ -16,43 +37,54 @@ import { adjustRep, legalOf } from './13-legal.js';
 
 export const misns = DATA.types.misn;
 export const govts = DATA.types.govt;
-export const pers = DATA.types.pers || {};       // named characters (ship-offered missions)
+export const pers = DATA.types.pers || {}; // named characters (ship-offered missions)
 export const MISN_ALL = params.has('allmissions'); // test: ignore AvailRandom roll
 export const allSpobs = () => Object.entries(DATA.types.spob).map(([id, p]) => ({ id: +id, ...p }));
-export const spobById = id => DATA.types.spob[id];
-export const systOfSpob = p => p && systs[p.System];
-export const bitReq = (v) => { // AvailBitSet-style code check
+export const spobById = (id) => DATA.types.spob[id];
+export const systOfSpob = (p) => p && systs[p.System];
+export const bitReq = (v) => {
+  // AvailBitSet-style code check
   if (v < 0) return true;
   if (v >= 1000) return !missionBits[v - 1000];
   return !!missionBits[v];
 };
-export function setBitCode(v) { // CompBitSet-style: 0-511 set, 1000-1511 clear
-  if (v == null || v < 0) return;      // classic misn lacks some Nova bit fields
-  if (v >= 1000) missionBits[v - 1000] = 0; else missionBits[v] = 1;
+export function setBitCode(v) {
+  // CompBitSet-style: 0-511 set, 1000-1511 clear
+  if (v == null || v < 0) return; // classic misn lacks some Nova bit fields
+  if (v >= 1000) missionBits[v - 1000] = 0;
+  else missionBits[v] = 1;
 }
 export const field = (m, k, dflt = -1) => (m[k] == null ? dflt : m[k]); // classic vs Nova
 
 // govt relations (from $sem flags we don't have allies as data; use gövt Ally/Enemy)
-export function govtAllies(g) { const r = govts[g]; return r ? [r.Ally].filter(a => a >= 128) : []; }
-export function govtEnemies(g) { const r = govts[g]; return r ? [r.Enemy].filter(a => a >= 128) : []; }
+export function govtAllies(g) {
+  const r = govts[g];
+  return r ? [r.Ally].filter((a) => a >= 128) : [];
+}
+export function govtEnemies(g) {
+  const r = govts[g];
+  return r ? [r.Enemy].filter((a) => a >= 128) : [];
+}
 
 /* Resolve an AvailStel/TravelStel/ReturnStel code to a concrete spob id.
  * `here` is the spob the mission is being offered/accepted at. Returns a
  * spob id, or null if unresolvable. */
 export function resolveStel(code, here) {
-  const inhabited = () => allSpobs().filter(p => p.$sem && !p.$sem.uninhabited && p.$sem.canLand);
-  const uninhab = () => allSpobs().filter(p => p.$sem && p.$sem.uninhabited);
-  const pick = arr => arr.length ? arr[Math.floor(Math.random() * arr.length)].id : null;
-  if (code === -1) return null;              // no specific dest / any (caller decides)
+  const inhabited = () => allSpobs().filter((p) => p.$sem && !p.$sem.uninhabited && p.$sem.canLand);
+  const uninhab = () => allSpobs().filter((p) => p.$sem && p.$sem.uninhabited);
+  const pick = (arr) => (arr.length ? arr[Math.floor(Math.random() * arr.length)].id : null);
+  if (code === -1) return null; // no specific dest / any (caller decides)
   if (code === -2) return pick(inhabited());
   if (code === -3) return pick(uninhab());
   if (code === -4) return here ? here.id : null;
   if (code >= 128 && code <= 1627) return spobById(code) ? code : null;
-  const govtPick = (g, filter) => pick(inhabited().filter(p => filter(p.Govt, g)));
+  const govtPick = (g, filter) => pick(inhabited().filter((p) => filter(p.Govt, g)));
   if (code >= 9999 && code <= 10127) return govtPick(code - 9999, (pg, g) => pg === g);
-  if (code >= 15000 && code <= 15127) return govtPick(code - 15000, (pg, g) => govtAllies(g).includes(pg));
+  if (code >= 15000 && code <= 15127)
+    return govtPick(code - 15000, (pg, g) => govtAllies(g).includes(pg));
   if (code >= 20000 && code <= 20127) return govtPick(code - 20000, (pg, g) => pg !== g);
-  if (code >= 25000 && code <= 25127) return govtPick(code - 25000, (pg, g) => govtEnemies(g).includes(pg));
+  if (code >= 25000 && code <= 25127)
+    return govtPick(code - 25000, (pg, g) => govtEnemies(g).includes(pg));
   return null;
 }
 
@@ -60,7 +92,7 @@ export function resolveStel(code, here) {
 export function availStelMatch(code, p) {
   if (code === -1) return p.$sem && !p.$sem.uninhabited && p.$sem.canLand;
   if (code >= 128 && code <= 1627) return p.id === code;
-  const g = c => code - c;
+  const g = (c) => code - c;
   if (code >= 9999 && code <= 10127) return p.Govt === g(9999);
   if (code >= 15000 && code <= 15127) return govtAllies(g(15000)).includes(p.Govt);
   if (code >= 20000 && code <= 20127) return p.Govt !== g(20000);
@@ -73,7 +105,9 @@ export function goalSupported(m) {
   if (m.ShipCount > 0 && m.ShipGoal >= 0) return [0, 1, 2, 3, 4, 5, 6].includes(m.ShipGoal);
   return true; // cargo delivery / plain go-to
 }
-export function playerAI() { return ships[S.playerShipId].InherentAI; }
+export function playerAI() {
+  return ships[S.playerShipId].InherentAI;
+}
 
 /* Is mission m available at spob p (in this system), for the given loc? */
 export function missionAvailable(m, p, loc) {
@@ -87,19 +121,23 @@ export function missionAvailable(m, p, loc) {
   // legal-record gate (record with this spöb's govt): 0 ignore, positive =
   // at least this good, negative = at least this criminal, -32000 = must
   // have dominated this spöb.
-  if (m.AvailRecord === -32000) { if (!dominated.has(p.id)) return false; }
-  else if (m.AvailRecord > 0) { if (legalOf(p.Govt) < m.AvailRecord) return false; }
-  else if (m.AvailRecord < 0) { if (legalOf(p.Govt) > m.AvailRecord) return false; }
+  if (m.AvailRecord === -32000) {
+    if (!dominated.has(p.id)) return false;
+  } else if (m.AvailRecord > 0) {
+    if (legalOf(p.Govt) < m.AvailRecord) return false;
+  } else if (m.AvailRecord < 0) {
+    if (legalOf(p.Govt) > m.AvailRecord) return false;
+  }
   const ai = playerAI();
-  if ((m.Flags & 0x2000) && ai <= 2) return false;
-  if ((m.Flags & 0x4000) && ai >= 3) return false;
+  if (m.Flags & 0x2000 && ai <= 2) return false;
+  if (m.Flags & 0x4000 && ai >= 3) return false;
   const ast = m.AvailShipType;
   if (ast >= 128 && ast <= 255 && S.playerShipId !== ast) return false;
   if (ast >= 1128 && ast <= 1255 && S.playerShipId === ast - 1000) return false;
   if (ast >= 2128 && ast <= 2255 && ships[S.playerShipId].InherentGovt !== ast - 2000) return false;
   // AvailRandom rerolled per system arrival, cached on the spob-visit
   if (!MISN_ALL && m.AvailRandom > 0 && m.AvailRandom < 100) {
-    S.availRandom[m.id] = S.availRandom[m.id] ?? (Math.random() * 100);
+    S.availRandom[m.id] = S.availRandom[m.id] ?? Math.random() * 100;
     if (S.availRandom[m.id] >= m.AvailRandom) return false;
   }
   return true;
@@ -109,7 +147,7 @@ S.availRandom = {}; // misnId -> rolled %, reset each system arrival
 export function offeredMissions(p, loc) {
   const out = [];
   for (const [id, m] of Object.entries(misns)) {
-    if (S.activeMissions.some(a => a.id === +id)) continue; // already accepted (raw records have no id)
+    if (S.activeMissions.some((a) => a.id === +id)) continue; // already accepted (raw records have no id)
     if (missionAvailable(m, p, loc)) out.push({ id: +id, ...m });
   }
   // critical missions (Flags 0x1000) first, else by id
@@ -120,30 +158,35 @@ export function offeredMissions(p, loc) {
 /* A game "date": gameDay counts days since a fixed epoch. Classic EV shows
  * real calendar dates; we render day N of an in-fiction year for flavor. */
 export function formatDate(day) {
-  const YEAR0 = 1177, DPY = 365;
+  const YEAR0 = 1177,
+    DPY = 365;
   const y = YEAR0 + Math.floor(day / DPY);
-  return `day ${day % DPY + 1}, NC ${y}`;
+  return `day ${(day % DPY) + 1}, NC ${y}`;
 }
 
 /* Substitute EV mission text placeholders from a resolved offer/mission A.
  * (See the bible's token table: <DST> <DSY> <RST> <RSY> <CT> <CQ> <DL> ...) */
 export function subst(text, A) {
   if (!text) return text;
-  const stel = id => (id != null ? stelName(id) : null);
-  const sysOf = id => { const p = spobById(id); const s = p && systs[p.System]; return s && s.name; };
+  const stel = (id) => (id != null ? stelName(id) : null);
+  const sysOf = (id) => {
+    const p = spobById(id);
+    const s = p && systs[p.System];
+    return s && s.name;
+  };
   const map = {
     DST: (A && stel(A.travelStel)) || 'your destination',
     DSY: (A && sysOf(A.travelStel)) || 'the target system',
     RST: (A && stel(A.returnStel)) || (A && stel(A.travelStel)) || 'your destination',
     RSY: (A && sysOf(A.returnStel)) || (A && sysOf(A.travelStel)) || 'the target system',
-    CT:  (A && A.cargoName) || 'cargo',
+    CT: (A && A.cargoName) || 'cargo',
     // null-check, not truthiness: a legitimate quantity of 0 must render as
     // "0", not fall through to "the".
-    CQ:  A && A.cargoQty != null ? String(A.cargoQty) : 'the',
-    DL:  A && A.deadline != null ? formatDate(A.deadline) : 'the deadline',
-    PN:  'Captain',
+    CQ: A && A.cargoQty != null ? String(A.cargoQty) : 'the',
+    DL: A && A.deadline != null ? formatDate(A.deadline) : 'the deadline',
+    PN: 'Captain',
     PSN: ships[S.playerShipId] ? ships[S.playerShipId].name : 'your ship',
-    OSN: (A && A.osn) || 'the ship',   // offering ship name (ship-offered missions)
+    OSN: (A && A.osn) || 'the ship', // offering ship name (ship-offered missions)
   };
   return text.replace(/<(DST|DSY|RST|RSY|CT|CQ|DL|PN|PSN|OSN)>/g, (_, k) => map[k]);
 }
@@ -153,7 +196,7 @@ export const descText = (id, A) => {
 };
 /* Mission names carry tokens too (e.g. "Ferry Passengers to <DST>"). */
 export const misnName = (m, A) => subst(m.name, A);
-export const misnCargoName = m => {
+export const misnCargoName = (m) => {
   if (m.CargoType < 0) return null;
   if (m.CargoType === 1000) return DATA.strings[4000].list[Math.floor(Math.random() * 6)];
   return DATA.strings[4000].list[m.CargoType] || 'cargo';
@@ -174,8 +217,10 @@ export function getOffer(id, here) {
   const key = `${id}@${here ? here.id : ''}`;
   if (S.resolvedOffers[key]) return S.resolvedOffers[key];
   const m = misns[id];
-  const qty = m.CargoQty <= -2 ? Math.round(Math.abs(m.CargoQty) * (0.5 + Math.random()))
-            : Math.max(m.CargoQty, 0);
+  const qty =
+    m.CargoQty <= -2
+      ? Math.round(Math.abs(m.CargoQty) * (0.5 + Math.random()))
+      : Math.max(m.CargoQty, 0);
   const o = {
     id,
     travelStel: resolveStel(m.TravelStel, here),
@@ -194,17 +239,23 @@ export function acceptMission(id, here) {
   const m = misns[id];
   const offer = getOffer(id, here); // reuse what the briefing showed
   const A = {
-    id, name: m.name,
+    id,
+    name: m.name,
     accepted: S.gameDay,
     travelStel: offer.travelStel,
     returnStel: offer.returnStel,
-    cargoName: offer.cargoName, cargoQty: offer.cargoQty,
+    cargoName: offer.cargoName,
+    cargoQty: offer.cargoQty,
     cargoLoaded: false,
-    pickupMode: m.PickupMode, dropoffMode: m.DropoffMode,
+    pickupMode: m.PickupMode,
+    dropoffMode: m.DropoffMode,
     shipGoal: m.ShipCount > 0 ? m.ShipGoal : -1,
     shipsLeft: m.ShipCount > 0 ? m.ShipCount : 0,
     shipTotal: m.ShipCount > 0 ? m.ShipCount : 0,
-    shipSyst: m.ShipSyst, shipDude: m.ShipDude, shipBehav: m.ShipBehav, shipNameID: m.ShipNameID,
+    shipSyst: m.ShipSyst,
+    shipDude: m.ShipDude,
+    shipBehav: m.ShipBehav,
+    shipNameID: m.ShipNameID,
     observed: false,
     timeLimit: m.TimeLimit,
     deadline: offer.deadline,
@@ -212,7 +263,10 @@ export function acceptMission(id, here) {
   // prepaid outfit (PayVal -30128-g)
   if (m.PayVal >= -30255 && m.PayVal <= -30128) {
     const oid = -m.PayVal - 30000;
-    if (DATA.types.outf[oid]) { outfits[oid] = (outfits[oid] || 0) + 1; applyShipStats(); }
+    if (DATA.types.outf[oid]) {
+      outfits[oid] = (outfits[oid] || 0) + 1;
+      applyShipStats();
+    }
   }
   // cargo picked up at accept
   if (A.cargoName && A.pickupMode === 0) A.cargoLoaded = true;
@@ -222,14 +276,14 @@ export function acceptMission(id, here) {
 }
 
 export function abortMission(id) {
-  const i = S.activeMissions.findIndex(a => a.id === id);
+  const i = S.activeMissions.findIndex((a) => a.id === id);
   if (i < 0) return;
   const m = misns[id];
   const A = S.activeMissions[i];
   if (m.Flags & 0x0040) adjustRep(m.CompGovt, -5 * m.CompReward); // abort reversal
   S.activeMissions.splice(i, 1);
   // clear its mission ships from the system
-  S.aiShips = S.aiShips.filter(s => s.misnId !== id);
+  S.aiShips = S.aiShips.filter((s) => s.misnId !== id);
   showMsg(`Mission abandoned: ${misnName(m, A)}`);
 }
 
@@ -239,32 +293,48 @@ export function maybeSpawnMissionShips(A) {
   if (A.shipGoal < 0 || A.shipsLeft <= 0) return;
   const sys = A.shipSyst;
   const inThisSystem =
-    sys === -6 || sys === -1 ||                             // follow / initial
+    sys === -6 ||
+    sys === -1 || // follow / initial
     (sys >= 128 && sys <= 1127 && sys === S.SYSTEM_ID) ||
-    (A.travelStel && systOfSpob(spobById(A.travelStel)) && sys === -3 &&
-       spobById(A.travelStel).System === S.SYSTEM_ID) ||
+    (A.travelStel &&
+      systOfSpob(spobById(A.travelStel)) &&
+      sys === -3 &&
+      spobById(A.travelStel).System === S.SYSTEM_ID) ||
     (A.returnStel && sys === -4 && spobById(A.returnStel).System === S.SYSTEM_ID);
   if (!inThisSystem) return;
-  if (S.aiShips.some(s => s.misnId === A.id)) return; // already present
+  if (S.aiShips.some((s) => s.misnId === A.id)) return; // already present
   const dude = dudes[A.shipDude];
   if (!dude) return;
   for (let i = 0; i < A.shipsLeft; i++) {
     const shipId = weighted(dudeShipPairs(dude));
     if (shipId == null) continue;
-    const a = Math.random() * Math.PI * 2, r = 900 + Math.random() * 700;
-    const e = EV.makeShip(ships[shipId], player.x + Math.cos(a) * r, player.y + Math.sin(a) * r, Math.random() * 360);
-    e.shipId = shipId; e.govt = dude.Govt; e.aiType = 3;
+    const a = Math.random() * Math.PI * 2,
+      r = 900 + Math.random() * 700;
+    const e = EV.makeShip(
+      ships[shipId],
+      player.x + Math.cos(a) * r,
+      player.y + Math.sin(a) * r,
+      Math.random() * 360,
+    );
+    e.shipId = shipId;
+    e.govt = dude.Govt;
+    e.aiType = 3;
     e.booty = dude.Booty || 0; // boardable mission ships plunder like any other
     e.misnId = A.id;
     e.misnGoal = A.shipGoal;
     e.target = S.spobs.length ? S.spobs[Math.floor(Math.random() * S.spobs.length)] : null;
     armShip(e, ships[shipId]);
     // goal-specific setup (spec: "Mission ship goals")
-    if (A.shipGoal === 5) { e.disabled = true; e.shields = 0; } // Rescue: start disabled
-    if (A.shipGoal === 3) {                                    // Escort: protect, head out
-      e.escort = true; e.aiType = 1;                          // flee-style: run for the exit
+    if (A.shipGoal === 5) {
+      e.disabled = true;
+      e.shields = 0;
+    } // Rescue: start disabled
+    if (A.shipGoal === 3) {
+      // Escort: protect, head out
+      e.escort = true;
+      e.aiType = 1; // flee-style: run for the exit
     } else if (A.shipBehav === 0 || A.shipBehav === 10) {
-      e.hostile = true;                                       // attack player
+      e.hostile = true; // attack player
     }
     if (A.shipNameID >= 128 && DATA.strings[A.shipNameID])
       e.misnName = DATA.strings[A.shipNameID].list[i % DATA.strings[A.shipNameID].list.length];
@@ -274,7 +344,8 @@ export function maybeSpawnMissionShips(A) {
 export function dudeShipPairs(dude) {
   const out = [];
   for (let i = 1; i <= 4; i++) {
-    const s = dude['ShipTypes' + i], w = dude['Prob' + i];
+    const s = dude['ShipTypes' + i],
+      w = dude['Prob' + i];
     if (s >= 128 && ships[s] && w > 0) out.push([s, w]);
   }
   return out;
@@ -282,7 +353,7 @@ export function dudeShipPairs(dude) {
 
 /* Called when a mission ship is destroyed (from hitShip). */
 export function onMissionShipDestroyed(s) {
-  const A = S.activeMissions.find(a => a.id === s.misnId);
+  const A = S.activeMissions.find((a) => a.id === s.misnId);
   if (!A) return;
   switch (A.shipGoal) {
     case 3: // escort: any loss fails the mission
@@ -290,10 +361,11 @@ export function onMissionShipDestroyed(s) {
       showMsg(`${misnName(misns[A.id], A)}: escort lost — mission failed.`);
       return;
     case 1: // disable: a target already disabled (counted) is fine and must
-            // not be counted twice; destroying one that wasn't disabled fails
+      // not be counted twice; destroying one that wasn't disabled fails
       if (!s.misnCounted) A.captureLost = true;
       return;
-    case 2: case 5: // board/rescue: the target must be boarded, not killed
+    case 2:
+    case 5: // board/rescue: the target must be boarded, not killed
       A.captureLost = true;
       return;
     default: // destroy (0) / chase-off (6): count it down
@@ -306,11 +378,16 @@ export function onMissionShipDestroyed(s) {
 /* Called when a mission ship becomes disabled (from hitShip). Disable goal
  * counts it done; Board/Rescue now allow boarding. */
 export function onMissionShipDisabled(s) {
-  const A = S.activeMissions.find(a => a.id === s.misnId);
+  const A = S.activeMissions.find((a) => a.id === s.misnId);
   if (!A) return;
-  if (A.shipGoal === 1) { // Disable but don't destroy
-    if (!s.misnCounted) { s.misnCounted = true; A.shipsLeft--; }
-    if (A.shipsLeft <= 0) showMsg(`${misnName(misns[A.id], A)}: targets disabled — return for payment.`);
+  if (A.shipGoal === 1) {
+    // Disable but don't destroy
+    if (!s.misnCounted) {
+      s.misnCounted = true;
+      A.shipsLeft--;
+    }
+    if (A.shipsLeft <= 0)
+      showMsg(`${misnName(misns[A.id], A)}: targets disabled — return for payment.`);
   } else if (A.shipGoal === 2) {
     showMsg(`Target disabled — approach and press B to board.`);
   }
@@ -318,15 +395,14 @@ export function onMissionShipDisabled(s) {
 
 /* An escort ship reached its destination safely. */
 export function onMissionEscortArrived(s) {
-  const A = S.activeMissions.find(a => a.id === s.misnId);
+  const A = S.activeMissions.find((a) => a.id === s.misnId);
   if (!A) return;
-  if (!S.aiShips.some(x => x.misnId === A.id && x !== s))
+  if (!S.aiShips.some((x) => x.misnId === A.id && x !== s))
     showMsg(`${misnName(misns[A.id], A)}: escort delivered — return for payment.`);
 }
 /* Escort goal met once all escort ships have arrived (none remain) unharmed. */
 export function escortArrived(A) {
-  return A.shipGoal === 3 && !A.escortFailed &&
-    !S.aiShips.some(s => s.misnId === A.id);
+  return A.shipGoal === 3 && !A.escortFailed && !S.aiShips.some((s) => s.misnId === A.id);
 }
 
 /* Goal met? (used at ReturnStel). */
@@ -362,19 +438,23 @@ export function missionLandingEvents(p) {
       notes.push(descText(m.DropCargText, A) || `Delivered ${A.cargoQty}t of ${A.cargoName}.`);
     }
     // completion / failure at ReturnStel
-    const isReturn = (A.returnStel != null && A.returnStel === p.id) ||
-                     (A.returnStel == null && A.travelStel === p.id);
+    const isReturn =
+      (A.returnStel != null && A.returnStel === p.id) ||
+      (A.returnStel == null && A.travelStel === p.id);
     if (isReturn) {
       const expired = A.timeLimit > 0 && S.gameDay - A.accepted > A.timeLimit;
       if (!expired && !goalFailed(A) && goalMet(A)) {
         notes.push(descText(m.CompText, A) || `Mission complete: ${misnName(m, A)}.`);
         payMission(m);
-        setBitCode(m.CompBitSet); setBitCode(m.CompBitSet2); setBitCode(m.CompBitSet4);
+        setBitCode(m.CompBitSet);
+        setBitCode(m.CompBitSet2);
+        setBitCode(m.CompBitSet4);
         adjustRep(m.CompGovt, m.CompReward);
         removeMission(A.id);
       } else if (expired || goalFailed(A) || m.CanAbort) {
         notes.push(descText(m.FailText, A) || `Mission failed: ${misnName(m, A)}.`);
-        setBitCode(m.FailBitSet); setBitCode(m.FailBitSet2);
+        setBitCode(m.FailBitSet);
+        setBitCode(m.FailBitSet2);
         adjustRep(m.CompGovt, -Math.round(m.CompReward / 2));
         removeMission(A.id);
       }
@@ -383,14 +463,15 @@ export function missionLandingEvents(p) {
   return notes;
 }
 export function removeMission(id) {
-  S.activeMissions = S.activeMissions.filter(a => a.id !== id);
-  S.aiShips = S.aiShips.filter(s => s.misnId !== id);
+  S.activeMissions = S.activeMissions.filter((a) => a.id !== id);
+  S.aiShips = S.aiShips.filter((s) => s.misnId !== id);
 }
 export function checkExpiredMissions() {
   for (const A of [...S.activeMissions]) {
     if (A.timeLimit > 0 && S.gameDay - A.accepted > A.timeLimit) {
       const m = misns[A.id];
-      setBitCode(m.FailBitSet); setBitCode(m.FailBitSet2);
+      setBitCode(m.FailBitSet);
+      setBitCode(m.FailBitSet2);
       adjustRep(m.CompGovt, -Math.round(m.CompReward / 2));
       removeMission(A.id);
       showMsg(`Mission failed (out of time): ${misnName(misns[A.id], A)}`);
@@ -399,15 +480,24 @@ export function checkExpiredMissions() {
 }
 /* I in flight: briefing for the active missions (QuickBrief). */
 export function showMissionBriefing() {
-  if (!S.activeMissions.length) { showMsg('No active missions.'); return; }
-  const lines = S.activeMissions.map(a => {
+  if (!S.activeMissions.length) {
+    showMsg('No active missions.');
+    return;
+  }
+  const lines = S.activeMissions.map((a) => {
     const destId = a.travelStel != null ? a.travelStel : a.returnStel;
-    const dest = destId != null
-      ? `${stelName(destId)}${systOfSpob(spobById(destId)) ? ' (' + systOfSpob(spobById(destId)).name + ')' : ''}`
-      : '—';
-    const days = a.timeLimit > 0 ? `, ${Math.max(0, a.timeLimit - (S.gameDay - a.accepted))}d left` : '';
-    const goal = a.shipsLeft > 0 ? `${a.shipsLeft} ships remain` :
-                 a.cargoName ? `deliver ${a.cargoQty}t ${a.cargoName}` : `go to ${dest}`;
+    const dest =
+      destId != null
+        ? `${stelName(destId)}${systOfSpob(spobById(destId)) ? ' (' + systOfSpob(spobById(destId)).name + ')' : ''}`
+        : '—';
+    const days =
+      a.timeLimit > 0 ? `, ${Math.max(0, a.timeLimit - (S.gameDay - a.accepted))}d left` : '';
+    const goal =
+      a.shipsLeft > 0
+        ? `${a.shipsLeft} ships remain`
+        : a.cargoName
+          ? `deliver ${a.cargoQty}t ${a.cargoName}`
+          : `go to ${dest}`;
     return `${a.name}: ${goal} → ${dest}${days}`;
   });
   showMsg(lines.join('  |  '));
@@ -415,22 +505,33 @@ export function showMissionBriefing() {
 export function payMission(m) {
   const v = m.PayVal;
   if (v > 0) S.credits += v;
-  else if (v >= -20255 && v <= -20128) { const oid = -v - 20000; if (DATA.types.outf[oid]) { outfits[oid] = (outfits[oid] || 0) + 1; applyShipStats(); } }
-  else if (v >= -40099 && v <= -40001) S.credits = Math.round(S.credits * (1 - (-v - 40000) / 100));
+  else if (v >= -20255 && v <= -20128) {
+    const oid = -v - 20000;
+    if (DATA.types.outf[oid]) {
+      outfits[oid] = (outfits[oid] || 0) + 1;
+      applyShipStats();
+    }
+  } else if (v >= -40099 && v <= -40001)
+    S.credits = Math.round(S.credits * (1 - (-v - 40000) / 100));
   // -10128..-10255 clean legal record: reputation reset with that govt
-  else if (v >= -10255 && v <= -10128) reputation[-v - 10000] = Math.max(0, reputation[-v - 10000] || 0);
+  else if (v >= -10255 && v <= -10128)
+    reputation[-v - 10000] = Math.max(0, reputation[-v - 10000] || 0);
 }
 
 /* ---- mission bar / computer dialog ---- */
 
 S.selMisnId = null;
-export function stelName(id) { const p = spobById(id); return p && p.name ? p.name : (id != null ? 'stellar ' + id : '—'); }
+export function stelName(id) {
+  const p = spobById(id);
+  return p && p.name ? p.name : id != null ? 'stellar ' + id : '—';
+}
 
-export function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 = bar
+export function renderMissionBoard(loc, topHtml = '') {
+  // loc 0 = computer, 1 = bar
   const p = S.landedAt;
   const offers = offeredMissions(p, loc);
   const active = S.activeMissions;
-  if (S.selMisnId == null || !offers.some(o => o.id === S.selMisnId))
+  if (S.selMisnId == null || !offers.some((o) => o.id === S.selMisnId))
     S.selMisnId = offers.length ? offers[0].id : null;
   const sel = S.selMisnId != null ? misns[S.selMisnId] : null;
 
@@ -438,12 +539,19 @@ export function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 =
   if (active.length) {
     listItems.push(html`<div class="meta" style="margin:0 0 4px">Active missions</div>`);
     for (const a of active) {
-      const days = a.timeLimit > 0 ? html` <span class="sub">(${Math.max(0, a.timeLimit - (S.gameDay - a.accepted))}d left)</span>` : '';
-      listItems.push(html`<div class="row" style="color:#98c379">${misnName(misns[a.id], a)}${days}</div>`);
+      const days =
+        a.timeLimit > 0
+          ? html` <span class="sub">(${Math.max(0, a.timeLimit - (S.gameDay - a.accepted))}d left)</span>`
+          : '';
+      listItems.push(
+        html`<div class="row" style="color:#98c379">${misnName(misns[a.id], a)}${days}</div>`,
+      );
     }
     listItems.push(html`<hr style="border-color:#26304a;margin:8px 0">`);
   }
-  listItems.push(html`<div class="meta" style="margin:0 0 4px">Available here (${offers.length})</div>`);
+  listItems.push(
+    html`<div class="meta" style="margin:0 0 4px">Available here (${offers.length})</div>`,
+  );
   if (!offers.length) listItems.push(html`<div class="sub">Nothing right now.</div>`);
   for (const o of offers)
     listItems.push(html`<div class="row" style="cursor:pointer;color:${o.id === S.selMisnId ? '#ffd479' : '#cfd6e4'}"
@@ -452,18 +560,28 @@ export function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 =
 
   let paneBody;
   if (sel) {
-    const offer = getOffer(S.selMisnId, p);                // resolved once, stable
-    const brief = descText(sel.BriefText, offer) || descText(sel.QuickBrief, offer)
-      || 'No further details are offered.';
-    const pay = sel.PayVal > 0 ? `${sel.PayVal.toLocaleString('en-US')} cr` :
-      sel.PayVal <= -20128 && sel.PayVal >= -20255 ? 'an outfit' : 'see briefing';
-    const goalTxt = ['Destroy the ships', null, 'Board', 'Escort', 'Observe', 'Rescue', 'Drive off the ships'][sel.ShipGoal] || null;
+    const offer = getOffer(S.selMisnId, p); // resolved once, stable
+    const brief =
+      descText(sel.BriefText, offer) ||
+      descText(sel.QuickBrief, offer) ||
+      'No further details are offered.';
+    const pay =
+      sel.PayVal > 0
+        ? `${sel.PayVal.toLocaleString('en-US')} cr`
+        : sel.PayVal <= -20128 && sel.PayVal >= -20255
+          ? 'an outfit'
+          : 'see briefing';
+    const goalTxt =
+      ['Destroy the ships', null, 'Board', 'Escort', 'Observe', 'Rescue', 'Drive off the ships'][
+        sel.ShipGoal
+      ] || null;
     // Delivery missions go to the destination; return-only missions come back here.
     const destId = offer.travelStel != null ? offer.travelStel : offer.returnStel;
-    const destShown = destId != null
-      ? `${stelName(destId)}${systOfSpob(spobById(destId)) ? ' (' + systOfSpob(spobById(destId)).name + ')' : ''}`
-        + (destId === p.id ? ' — return here' : '')
-      : 'no fixed destination';
+    const destShown =
+      destId != null
+        ? `${stelName(destId)}${systOfSpob(spobById(destId)) ? ' (' + systOfSpob(spobById(destId)).name + ')' : ''}` +
+          (destId === p.id ? ' — return here' : '')
+        : 'no fixed destination';
     paneBody = html`<h3>${misnName(sel, offer)}</h3>
       <div class="desc" style="max-height:150px;overflow-y:auto">${brief}</div>
       <div class="row">Destination: <b>${destShown}</b></div>
@@ -492,11 +610,16 @@ export function renderMissionBoard(loc, topHtml = '') { // loc 0 = computer, 1 =
  * toggled by a pair of tabs (spec: "Escorts for hire"). */
 S.barTab = 'missions';
 export function barTabs() {
-  const t = (k, label) => html`<button class="svc" onclick="S.barTab='${k}';refreshView()"${S.barTab === k ? ' disabled' : ''}>${label}</button>`;
+  const t = (k, label) =>
+    html`<button class="svc" onclick="S.barTab='${k}';refreshView()"${S.barTab === k ? ' disabled' : ''}>${label}</button>`;
   return html`<div style="margin:6px 0 2px">${t('missions', 'Missions')} ${t('hire', 'Hire Escorts')}</div>`;
 }
-export function renderBar() { return S.barTab === 'hire' ? renderHireBoard() : renderMissionBoard(1, barTabs()); }
-export function renderComputer() { return renderMissionBoard(0); }
+export function renderBar() {
+  return S.barTab === 'hire' ? renderHireBoard() : renderMissionBoard(1, barTabs());
+}
+export function renderComputer() {
+  return renderMissionBoard(0);
+}
 
 export function renderHireBoard() {
   const p = S.landedAt;
@@ -505,20 +628,27 @@ export function renderHireBoard() {
   const fleetItems = [];
   if (!escorts.length) fleetItems.push(html`<div class="sub">You have no escorts yet.</div>`);
   for (const e of escorts) {
-    const r = ships[e.shipId], kind = e.upkeep ? `~${e.upkeep.toLocaleString('en-US')} cr/jump` : 'captured';
+    const r = ships[e.shipId],
+      kind = e.upkeep ? `~${e.upkeep.toLocaleString('en-US')} cr/jump` : 'captured';
     fleetItems.push(html`<div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
       <span>${e.name} <span class="sub">${r ? r.name : ''} · ${kind}</span></span>
       <button class="svc" style="padding:2px 8px" onclick="dismissEscort(${e.id})">Dismiss</button></div>`);
   }
-  if (totalUpkeep) fleetItems.push(html`<div class="row sub" style="margin-top:6px">Payroll: ~${totalUpkeep.toLocaleString('en-US')} cr / jump</div>`);
+  if (totalUpkeep)
+    fleetItems.push(
+      html`<div class="row sub" style="margin-top:6px">Payroll: ~${totalUpkeep.toLocaleString('en-US')} cr / jump</div>`,
+    );
   const fleet = html`<div style="flex:1;min-width:210px;max-height:340px;overflow-y:auto">
     <div class="meta" style="margin:0 0 4px">Your fleet (${escorts.length}/${MAX_ESCORTS})</div>${fleetItems}</div>`;
 
   const hireItems = [];
   for (const id of HIRE_ROSTER) {
-    const r = ships[id]; if (!r) continue;
-    const fee = hireFee(r), up = upkeepOf(r);
-    const full = escorts.length >= MAX_ESCORTS, afford = S.credits >= fee;
+    const r = ships[id];
+    if (!r) continue;
+    const fee = hireFee(r),
+      up = upkeepOf(r);
+    const full = escorts.length >= MAX_ESCORTS,
+      afford = S.credits >= fee;
     const desc = shipClassDesc(id);
     hireItems.push(html`<div class="row" style="border-bottom:1px solid #26304a;padding:6px 0">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -526,8 +656,12 @@ export function renderHireBoard() {
         <button class="svc" style="padding:2px 10px" onclick="hireEscort(${id})"${full || !afford ? ' disabled' : ''}>Hire</button>
       </div>
       <div class="sub">Fee ~${fee.toLocaleString('en-US')} cr · ~${up.toLocaleString('en-US')} cr/jump${
-        full ? ' · fleet full' : !afford ? ' · can’t afford' : ''}</div>${
-        desc ? html`<div class="sub" style="margin-top:3px;max-height:64px;overflow-y:auto">${desc}</div>` : ''}</div>`);
+        full ? ' · fleet full' : !afford ? ' · can’t afford' : ''
+      }</div>${
+        desc
+          ? html`<div class="sub" style="margin-top:3px;max-height:64px;overflow-y:auto">${desc}</div>`
+          : ''
+      }</div>`);
   }
   const hire = html`<div style="flex:1.3;min-width:240px;max-height:340px;overflow-y:auto">
     <div class="meta" style="margin:0 0 4px">Pilots for hire</div>${hireItems}</div>`;
@@ -540,9 +674,16 @@ export function renderHireBoard() {
 
 export function doAcceptMission(id) {
   const m = misns[id];
-  const need = (m.CargoType >= 0 && m.CargoQty && m.PickupMode === 0)
-    ? (m.CargoQty <= -2 ? Math.abs(m.CargoQty) : m.CargoQty) : 0;
-  if (need > holds - cargoUsed()) { showMsg('Not enough cargo space for this mission.'); return; }
+  const need =
+    m.CargoType >= 0 && m.CargoQty && m.PickupMode === 0
+      ? m.CargoQty <= -2
+        ? Math.abs(m.CargoQty)
+        : m.CargoQty
+      : 0;
+  if (need > holds - cargoUsed()) {
+    showMsg('Not enough cargo space for this mission.');
+    return;
+  }
   acceptMission(id, S.landedAt);
   savePilot(S.landedAt.id);
   refreshView();

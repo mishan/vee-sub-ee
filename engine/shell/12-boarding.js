@@ -6,11 +6,36 @@
  * main.js). Normative behavior: engine/ENGINE_SPEC.md.
  */
 
-import { COMMODITIES, S, cargo, escorts, outfits, preloadSprites, shipName, ships, showMsg, spinOfShip } from './01-state.js';
+import {
+  COMMODITIES,
+  S,
+  cargo,
+  escorts,
+  outfits,
+  preloadSprites,
+  shipName,
+  ships,
+  showMsg,
+  spinOfShip,
+} from './01-state.js';
 import { MAX_ESCORTS, addEscort } from './02-spawning.js';
 import { playSnd } from './03-sound.js';
-import { applyShipStats, beginDestruction, commitCrime, fuelMax, holds, penaltyOf, player } from './04-combat.js';
-import { checkDefenseCleared, hailClick, hailOpen, openHail, renderHail } from './06-interaction.js';
+import {
+  applyShipStats,
+  beginDestruction,
+  commitCrime,
+  fuelMax,
+  holds,
+  penaltyOf,
+  player,
+} from './04-combat.js';
+import {
+  checkDefenseCleared,
+  hailClick,
+  hailOpen,
+  openHail,
+  renderHail,
+} from './06-interaction.js';
 import { cargoNames, cargoUsed } from './07-trade.js';
 import { misnName, misns } from './08-missions.js';
 
@@ -19,25 +44,40 @@ import { misnName, misns } from './08-missions.js';
  * plundered for cargo (a crime against its government). */
 export function boardTarget() {
   if (S.landedAt || S.gameOver || hailOpen) return;
-  let best = null, bd = 50;
+  let best = null,
+    bd = 50;
   for (const s of S.aiShips) {
     if (!s.disabled || s.deathT >= 0 || s.looted) continue; // looted ships are done
     const d = Math.hypot(s.x - player.x, s.y - player.y);
-    if (d < bd) { bd = d; best = s; }
+    if (d < bd) {
+      bd = d;
+      best = s;
+    }
   }
-  if (!best) { showMsg('No disabled ship in boarding range.'); return; }
-  if (Math.hypot(player.vx, player.vy) > EV.LAND_SPEED * 2) { showMsg('Slow down to board.'); return; }
-  const A = (best.misnGoal === 2 || best.misnGoal === 5)
-    ? S.activeMissions.find(a => a.id === best.misnId) : null;
+  if (!best) {
+    showMsg('No disabled ship in boarding range.');
+    return;
+  }
+  if (Math.hypot(player.vx, player.vy) > EV.LAND_SPEED * 2) {
+    showMsg('Slow down to board.');
+    return;
+  }
+  const A =
+    best.misnGoal === 2 || best.misnGoal === 5
+      ? S.activeMissions.find((a) => a.id === best.misnId)
+      : null;
   playSnd(390, 0.7); // Airlock — the boarding sound
-  if (A) { // mission boarding: complete the objective, no plunder dialog
+  if (A) {
+    // mission boarding: complete the objective, no plunder dialog
     S.aiShips.splice(S.aiShips.indexOf(best), 1);
     if (best === S.shipTarget) S.shipTarget = null;
     checkDefenseCleared(best.defOf, best);
     A.shipsLeft--;
-    showMsg(A.shipsLeft > 0
-      ? `${misnName(misns[A.id], A)}: boarded (${A.shipsLeft} to go).`
-      : `${misnName(misns[A.id], A)}: objective complete — return for payment.`);
+    showMsg(
+      A.shipsLeft > 0
+        ? `${misnName(misns[A.id], A)}: boarded (${A.shipsLeft} to go).`
+        : `${misnName(misns[A.id], A)}: objective complete — return for payment.`,
+    );
     return;
   }
   openHail('board', best); // non-mission: the boarding dialog (loot / capture)
@@ -54,30 +94,46 @@ export function playerCrew() {
   }
   return c;
 }
-export const captureOdds = s => { const my = playerCrew(), th = ships[s.shipId].Crew || 1; return my / (my + th); };
+export const captureOdds = (s) => {
+  const my = playerCrew(),
+    th = ships[s.shipId].Crew || 1;
+  return my / (my + th);
+};
 
 export function lootVessel() {
   hailClick();
-  const s = S.hailTarget.obj, booty = s.booty || 0, rec = ships[s.shipId];
+  const s = S.hailTarget.obj,
+    booty = s.booty || 0,
+    rec = ships[s.shipId];
   const got = [];
-  if (booty & 0x40) { // Money — a slice of the hull's purchase price (bible)
+  if (booty & 0x40) {
+    // Money — a slice of the hull's purchase price (bible)
     const money = Math.max(200, Math.round((rec.Cost || 0) * (0.03 + Math.random() * 0.07)));
-    S.credits += money; got.push(`${money.toLocaleString('en-US')} cr`);
+    S.credits += money;
+    got.push(`${money.toLocaleString('en-US')} cr`);
   }
-  let free = holds - cargoUsed();          // commodity flags 0x01..0x20 → the six goods
+  let free = holds - cargoUsed(); // commodity flags 0x01..0x20 → the six goods
   let noRoom = false;
-  for (let i = 0; i < 6; i++) if (booty & (1 << i)) {
-    if (free <= 0) { noRoom = true; continue; } // goods aboard, but no hold space
-    const take = Math.min(1 + Math.floor(Math.random() * 4), free);
-    cargo[COMMODITIES[i]] += take; free -= take; got.push(`${take}t ${cargoNames[i]}`);
-  }
-  s.looted = true;                          // stays disabled but no longer boardable
+  for (let i = 0; i < 6; i++)
+    if (booty & (1 << i)) {
+      if (free <= 0) {
+        noRoom = true;
+        continue;
+      } // goods aboard, but no hold space
+      const take = Math.min(1 + Math.floor(Math.random() * 4), free);
+      cargo[COMMODITIES[i]] += take;
+      free -= take;
+      got.push(`${take}t ${cargoNames[i]}`);
+    }
+  s.looted = true; // stays disabled but no longer boardable
   commitCrime(s.govt, penaltyOf(s.govt, 'BoardPenalty'));
   checkDefenseCleared(s.defOf, s);
   S.hailTarget.mode = 'result';
-  S.hailTarget.said = got.length ? `You strip the hold — ${got.join(', ')}.`
-    : noRoom ? 'Cargo aboard, but your hold is full — nothing you can carry.'
-    : 'The hold is bare.';
+  S.hailTarget.said = got.length
+    ? `You strip the hold — ${got.join(', ')}.`
+    : noRoom
+      ? 'Cargo aboard, but your hold is full — nothing you can carry.'
+      : 'The hold is bare.';
   renderHail();
 }
 
@@ -95,7 +151,7 @@ export function captureVessel() {
   } else {
     S.hailTarget.mode = 'result';
     S.hailTarget.said = 'The crew repel your party and scuttle the ship!';
-    beginDestruction(s);                    // failed capture → self-destruct
+    beginDestruction(s); // failed capture → self-destruct
     checkDefenseCleared(s.defOf, s);
   }
   renderHail();
@@ -106,11 +162,12 @@ export function captureVessel() {
 export function takeCapturedShip() {
   hailClick();
   const s = S.hailTarget.obj;
-  const defOf = s.defOf;                     // read before takeCommand removes s
-  const oldShip = S.playerShipId, oldName = shipName;
-  takeCommand(s);                            // switch to the captured hull
+  const defOf = s.defOf; // read before takeCommand removes s
+  const oldShip = S.playerShipId,
+    oldName = shipName;
+  takeCommand(s); // switch to the captured hull
   const room = escorts.length < MAX_ESCORTS; // is there a slot for the old ship?
-  if (room) addEscort(oldShip, oldName);     // former command falls in as escort
+  if (room) addEscort(oldShip, oldName); // former command falls in as escort
   checkDefenseCleared(defOf, s);
   S.hailTarget.mode = 'result';
   S.hailTarget.said = room
@@ -123,13 +180,15 @@ export function takeCapturedShip() {
 export function escortCapturedShip() {
   hailClick();
   const s = S.hailTarget.obj;
-  if (escorts.length >= MAX_ESCORTS) {       // hard cap — keep the choice open
+  if (escorts.length >= MAX_ESCORTS) {
+    // hard cap — keep the choice open
     showMsg('Your fleet is already full — take command instead, or leave it.');
     return;
   }
-  const i = S.aiShips.indexOf(s); if (i >= 0) S.aiShips.splice(i, 1);
+  const i = S.aiShips.indexOf(s);
+  if (i >= 0) S.aiShips.splice(i, 1);
   if (S.shipTarget === s) S.shipTarget = null;
-  const name = s.misnName || ships[s.shipId].name;  // keep any custom display name
+  const name = s.misnName || ships[s.shipId].name; // keep any custom display name
   addEscort(s.shipId, name);
   checkDefenseCleared(s.defOf, s);
   S.hailTarget.mode = 'result';
@@ -140,16 +199,28 @@ export function escortCapturedShip() {
 /* Take command of a captured hull: you abandon your old ship (and its outfits,
  * per classic) and fly the prize away, freshly repaired and fuelled. */
 export function takeCommand(s) {
-  const i = S.aiShips.indexOf(s); if (i >= 0) S.aiShips.splice(i, 1);
+  const i = S.aiShips.indexOf(s);
+  if (i >= 0) S.aiShips.splice(i, 1);
   if (S.shipTarget === s) S.shipTarget = null;
-  S.playerShipId = s.shipId; player.shipId = S.playerShipId;
+  S.playerShipId = s.shipId;
+  player.shipId = S.playerShipId;
   preloadSprites([spinOfShip(S.playerShipId)]); // ensure the new hull's sprite is ready
-  player.x = s.x; player.y = s.y; player.heading = s.heading; player.vx = 0; player.vy = 0;
-  player.deathT = -1; player.disabled = false;
+  player.x = s.x;
+  player.y = s.y;
+  player.heading = s.heading;
+  player.vx = 0;
+  player.vy = 0;
+  player.deathT = -1;
+  player.disabled = false;
   for (const k of Object.keys(outfits)) delete outfits[k]; // old ship & upgrades left behind
-  applyShipStats();                         // arm the stock captured hull
+  applyShipStats(); // arm the stock captured hull
   S.fuel = fuelMax;
-  player.shields = player.shieldMax; player.armor = player.armorMax;
+  player.shields = player.shieldMax;
+  player.armor = player.armorMax;
   for (const c of COMMODITIES) cargo[c] = Math.min(cargo[c], holds); // clamp to new hold
-  while (cargoUsed() > holds) { const c = COMMODITIES.find(x => cargo[x] > 0); if (!c) break; cargo[c]--; }
+  while (cargoUsed() > holds) {
+    const c = COMMODITIES.find((x) => cargo[x] > 0);
+    if (!c) break;
+    cargo[c]--;
+  }
 }

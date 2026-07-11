@@ -1,4 +1,14 @@
-import { S, SAVED, html, pilotBorn, pilotName, shipName, ships, showMsg, startNewPilot } from './01-state.js';
+import {
+  S,
+  SAVED,
+  html,
+  pilotBorn,
+  pilotName,
+  shipName,
+  ships,
+  showMsg,
+  startNewPilot,
+} from './01-state.js';
 import { systemGovt } from './02-spawning.js';
 import { armAudioUnlock, startTitleMusic, stopTitleMusic } from './03-sound.js';
 import { combatRating, legalStatus } from './13-legal.js';
@@ -17,7 +27,9 @@ import { render } from './10-render.js';
  * already-initialised game; the sim is paused (titleShown) until the
  * player picks Enter Ship / Open Pilot. Test-param runs skip it so
  * headless screenshots go straight to the game. ?title=1 forces it. */
-export let titleShown = false, splashShown = false, splashAdvancing = false;
+export let titleShown = false,
+  splashShown = false,
+  splashAdvancing = false;
 export const titleEl = document.getElementById('title');
 export const splashEl = document.getElementById('splash');
 export const introUp = () => splashShown || titleShown; // sim paused, keys swallowed
@@ -29,22 +41,28 @@ export function showSplash() {
   splashShown = true;
   splashEl.style.display = 'flex';
   document.getElementById('splashPrompt').textContent = 'Press any key to continue';
-  const arm = () => { advanceSplash(); removeEventListener('pointerdown', arm, true); };
+  const arm = () => {
+    advanceSplash();
+    removeEventListener('pointerdown', arm, true);
+  };
   addEventListener('pointerdown', arm, true); // keydown handled in the key listener
-  armAudioUnlock();                           // unlock audio on any gesture type
+  armAudioUnlock(); // unlock audio on any gesture type
 }
 export function advanceSplash() {
   if (!splashShown || splashAdvancing) return;
   splashAdvancing = true;
   startTitleMusic(); // first gesture unlocks + starts the theme
   document.getElementById('splashPrompt').textContent = 'Loading…';
-  setTimeout(() => {           // hold the splash a beat, like the original
-    showTitle();               // title menu comes up beneath the splash
+  setTimeout(() => {
+    // hold the splash a beat, like the original
+    showTitle(); // title menu comes up beneath the splash
     splashEl.classList.add('fade');
-    setTimeout(() => {         // then fade the splash away to reveal it
+    setTimeout(() => {
+      // then fade the splash away to reveal it
       splashEl.style.display = 'none';
       splashEl.classList.remove('fade');
-      splashShown = false; splashAdvancing = false;
+      splashShown = false;
+      splashAdvancing = false;
     }, 700);
   }, 1600);
 }
@@ -68,14 +86,19 @@ export function enterGame() {
   titleShown = false;
   titleEl.style.display = 'none';
   stopTitleMusic();
-  if (titleSummaryResize) { removeEventListener('resize', titleSummaryResize); titleSummaryResize = null; }
+  if (titleSummaryResize) {
+    removeEventListener('resize', titleSummaryResize);
+    titleSummaryResize = null;
+  }
   render();
 }
 export function titleAbout() {
   startTitleMusic();
   // STR# 20000 is the intro crawl; show it as flavour + a clean-room note.
-  const intro = (DATA.strings[20000] && DATA.strings[20000].list || [])
-    .join(' ').replace(/\s+/g, ' ').trim();
+  const intro = ((DATA.strings[20000] && DATA.strings[20000].list) || [])
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   document.getElementById('aboutCard').innerHTML = html`
     <h2>Vₑ — Escape Velocity, recreated</h2>
     <p>${intro}</p>
@@ -87,7 +110,8 @@ export function titleAbout() {
 }
 export function titlePrefs() {
   S.soundOn = !S.soundOn;
-  if (!S.soundOn) stopTitleMusic(); else startTitleMusic();
+  if (!S.soundOn) stopTitleMusic();
+  else startTitleMusic();
   showMsg('Sound ' + (S.soundOn ? 'on' : 'off'));
 }
 
@@ -100,38 +124,73 @@ export function gameDate() {
   const base = new Date(pilotBorn);
   const d = new Date(base.getFullYear() + 250, base.getMonth(), base.getDate());
   d.setDate(d.getDate() + S.gameDay);
-  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
-    'August', 'September', 'October', 'November', 'December'];
+  const months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
   const day = d.getDate();
-  const suf = (day % 10 === 1 && day !== 11) ? 'st' : (day % 10 === 2 && day !== 12) ? 'nd'
-            : (day % 10 === 3 && day !== 13) ? 'rd' : 'th';
+  const suf =
+    day % 10 === 1 && day !== 11
+      ? 'st'
+      : day % 10 === 2 && day !== 12
+        ? 'nd'
+        : day % 10 === 3 && day !== 13
+          ? 'rd'
+          : 'th';
   return `${months[d.getMonth()]} ${day}${suf}, ${d.getFullYear()}`;
 }
 export function renderTitleSummary() {
   const cv = document.getElementById('titleView');
-  const w = cv.clientWidth, h = cv.clientHeight;
-  if (!w || !h) return;                     // not laid out yet
-  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  const w = cv.clientWidth,
+    h = cv.clientHeight;
+  if (!w || !h) return; // not laid out yet
+  if (cv.width !== w || cv.height !== h) {
+    cv.width = w;
+    cv.height = h;
+  }
   const g = cv.getContext('2d');
   g.clearRect(0, 0, cv.width, cv.height);
-  if (!SAVED) { // nothing to summarize until a pilot is opened/created
+  if (!SAVED) {
+    // nothing to summarize until a pilot is opened/created
     const words = ['No', 'Pilot', 'file', 'loaded'];
-    const m = Math.round(cv.width * 0.08), aw = cv.width - m * 2;
+    const m = Math.round(cv.width * 0.08),
+      aw = cv.width - m * 2;
     let fs = Math.round(cv.height / 7);
-    g.textAlign = 'center'; g.textBaseline = 'top';
-    const longest = () => Math.max(...words.map(wd => g.measureText(wd).width));
+    g.textAlign = 'center';
+    g.textBaseline = 'top';
+    const longest = () => Math.max(...words.map((wd) => g.measureText(wd).width));
     g.font = `bold ${fs}px monospace`;
-    while (fs > 7 && longest() > aw) { fs -= 1; g.font = `bold ${fs}px monospace`; }
-    const lines = []; let line = '';
+    while (fs > 7 && longest() > aw) {
+      fs -= 1;
+      g.font = `bold ${fs}px monospace`;
+    }
+    const lines = [];
+    let line = '';
     for (const wd of words) {
       const t = line ? line + ' ' + wd : wd;
-      if (line && g.measureText(t).width > aw) { lines.push(line); line = wd; } else line = t;
+      if (line && g.measureText(t).width > aw) {
+        lines.push(line);
+        line = wd;
+      } else line = t;
     }
     if (line) lines.push(line);
     const lh = fs * 1.35;
     let y = (cv.height - lines.length * lh) / 2;
     g.fillStyle = '#6f9f80';
-    for (const ln of lines) { g.fillText(ln, cv.width / 2, y); y += lh; }
+    for (const ln of lines) {
+      g.fillText(ln, cv.width / 2, y);
+      y += lh;
+    }
     g.textAlign = 'left';
     return;
   }
@@ -152,26 +211,41 @@ export function renderTitleSummary() {
   g.textBaseline = 'top';
   let y = pad * 0.6;
   for (const [label, val] of fields) {
-    g.fillStyle = '#3f8f63'; g.font = `${labelSz}px monospace`;
-    g.fillText(label + ':', pad, y); y += lh * 0.95;
+    g.fillStyle = '#3f8f63';
+    g.font = `${labelSz}px monospace`;
+    g.fillText(label + ':', pad, y);
+    y += lh * 0.95;
     // shrink the value to fit the narrow viewscreen if needed
-    let vs = valueSz; g.font = `bold ${vs}px monospace`;
-    while (vs > 6 && g.measureText(val).width > avail) { vs -= 1; g.font = `bold ${vs}px monospace`; }
-    g.fillStyle = '#86ffb6'; g.fillText(val, pad, y); y += lh * 1.05;
+    let vs = valueSz;
+    g.font = `bold ${vs}px monospace`;
+    while (vs > 6 && g.measureText(val).width > avail) {
+      vs -= 1;
+      g.font = `bold ${vs}px monospace`;
+    }
+    g.fillStyle = '#86ffb6';
+    g.fillText(val, pad, y);
+    y += lh * 1.05;
   }
 }
 // re-render on resize while the title is up (the canvas is sized from layout)
 export let titleSummaryResize = null;
 
 // Enter Ship / Open Pilot need a loaded pilot; otherwise nudge toward New Pilot.
-export const needPilot = () => { showMsg('No pilot loaded — choose New Pilot to begin.'); };
-document.getElementById('hotEnter').onclick = () => { if (SAVED) enterGame(); else needPilot(); };
-document.getElementById('hotOpen').onclick  = () => { if (SAVED) enterGame(); else needPilot(); };
-document.getElementById('hotNew').onclick   = () => {
+export const needPilot = () => {
+  showMsg('No pilot loaded — choose New Pilot to begin.');
+};
+document.getElementById('hotEnter').onclick = () => {
+  if (SAVED) enterGame();
+  else needPilot();
+};
+document.getElementById('hotOpen').onclick = () => {
+  if (SAVED) enterGame();
+  else needPilot();
+};
+document.getElementById('hotNew').onclick = () => {
   if (!SAVED || confirm('Start a new pilot? Your saved pilot will be erased.')) startNewPilot();
 };
 document.getElementById('hotAbout').onclick = titleAbout;
 document.getElementById('hotPrefs').onclick = titlePrefs;
-document.getElementById('hotQuit').onclick  = () =>
+document.getElementById('hotQuit').onclick = () =>
   showMsg('This is the browser edition — just close the tab to quit.');
-

@@ -15,17 +15,26 @@ import { govtAllies, govtEnemies, misns, missionAvailable, pers, playerAI } from
 /* ---------- përs (named characters) & ship-offered missions ----------
  * A mïsn with AvailLoc 2 is carried by a përs ship (bible): you hail the
  * character and it offers its LinkMission. See spec "Ship-offered missions". */
-export const PF = { GRUDGE: 0x0001, REPLACE: 0x0040, DEACTIVATE: 0x0100, ONBOARD: 0x0200,
-             LEAVE: 0x0800, NOT_WIMPY: 0x1000, NOT_BEEFY: 0x2000, NOT_WARSHIP: 0x4000 };
+export const PF = {
+  GRUDGE: 0x0001,
+  REPLACE: 0x0040,
+  DEACTIVATE: 0x0100,
+  ONBOARD: 0x0200,
+  LEAVE: 0x0800,
+  NOT_WIMPY: 0x1000,
+  NOT_BEEFY: 0x2000,
+  NOT_WARSHIP: 0x4000,
+};
 
 /* Does a përs's LinkSyst permit `systId`? Mirrors availStelMatch's govt ranges;
  * an unrecognized encoding falls through to "allowed" so a character isn't
  * silently lost. */
 export function linkSystMatches(ls, systId) {
-  if (ls == null || ls === -1) return true;              // any system
-  if (ls >= 128 && ls <= 1127) return ls === systId;     // a specific system
-  const sy = systs[systId], pg = sy ? sy.Govt : -1;
-  if (ls >= 9999  && ls <= 10127) return pg === ls - 9999;
+  if (ls == null || ls === -1) return true; // any system
+  if (ls >= 128 && ls <= 1127) return ls === systId; // a specific system
+  const sy = systs[systId],
+    pg = sy ? sy.Govt : -1;
+  if (ls >= 9999 && ls <= 10127) return pg === ls - 9999;
   if (ls >= 15000 && ls <= 15127) return govtAllies(ls - 15000).includes(pg);
   if (ls >= 20000 && ls <= 20127) return pg !== ls - 20000;
   if (ls >= 25000 && ls <= 25127) return govtEnemies(ls - 25000).includes(pg);
@@ -35,24 +44,31 @@ export function linkSystMatches(ls, systId) {
 /* A representative inhabited spöb of the current system, for evaluating a
  * ship-offered mission's spöb-relative gates (AvailStel/AvailRecord). */
 export function systemSpob() {
-  return S.spobs.find(s => s.$sem && !s.$sem.uninhabited && s.$sem.canLand) || S.spobs[0]
-    || { id: -1, Govt: systemGovt(), System: S.SYSTEM_ID, $sem: { canLand: true, uninhabited: false } };
+  return (
+    S.spobs.find((s) => s.$sem && !s.$sem.uninhabited && s.$sem.canLand) ||
+    S.spobs[0] || {
+      id: -1,
+      Govt: systemGovt(),
+      System: S.SYSTEM_ID,
+      $sem: { canLand: true, uninhabited: false },
+    }
+  );
 }
 
 /* Is a ship-offered mission currently available and not already taken? */
 export function shipMissionAvailable(id) {
   const m = misns[id];
   if (!m || m.AvailLoc !== 2) return false;
-  if (S.activeMissions.some(a => a.id === id)) return false;
+  if (S.activeMissions.some((a) => a.id === id)) return false;
   return missionAvailable({ ...m, id }, systemSpob(), 2);
 }
 
 /* Player's current ship class excluded by the përs's don't-offer flags? */
 export function persOffersToPlayer(pr) {
   const ai = playerAI();
-  if ((pr.Flags & PF.NOT_WIMPY) && ai === 1) return false;
-  if ((pr.Flags & PF.NOT_BEEFY) && ai === 2) return false;
-  if ((pr.Flags & PF.NOT_WARSHIP) && ai >= 3) return false;
+  if (pr.Flags & PF.NOT_WIMPY && ai === 1) return false;
+  if (pr.Flags & PF.NOT_BEEFY && ai === 2) return false;
+  if (pr.Flags & PF.NOT_WARSHIP && ai >= 3) return false;
   return true;
 }
 
@@ -69,8 +85,11 @@ export function persEligible(id) {
 /* Arm a përs ship: stock loadout, then any përs weapon override + shield mod. */
 export function armShipFromPers(e, pr) {
   armShip(e, ships[pr.ShipType]);
-  if ([1, 2, 3, 4].some(i => pr['WeapType' + i] >= 128)) {   // the character's own guns
-    e.weapons = []; e.pools = {}; e.poolCap = {};
+  if ([1, 2, 3, 4].some((i) => pr['WeapType' + i] >= 128)) {
+    // the character's own guns
+    e.weapons = [];
+    e.pools = {};
+    e.poolCap = {};
     for (let i = 1; i <= 4; i++) {
       const t = pr['WeapType' + i];
       if (t >= 128 && weaps[t]) {
@@ -83,7 +102,8 @@ export function armShipFromPers(e, pr) {
       }
     }
   }
-  if (pr.ShieldMod) {                                        // % shield tweak (bible)
+  if (pr.ShieldMod) {
+    // % shield tweak (bible)
     e.shieldMax = Math.max(1, Math.round(e.shieldMax * (1 + pr.ShieldMod / 100)));
     e.shields = e.shieldMax;
   }
@@ -98,7 +118,8 @@ export function maybeSpawnPers() {
   if (!eligible.length) return;
   const id = eligible[Math.floor(Math.random() * eligible.length)];
   const pr = pers[id];
-  const a = Math.random() * Math.PI * 2, r = 600 + Math.random() * 1400;
+  const a = Math.random() * Math.PI * 2,
+    r = 600 + Math.random() * 1400;
   const e = EV.makeShip(ships[pr.ShipType], Math.cos(a) * r, Math.sin(a) * r, Math.random() * 360);
   e.shipId = pr.ShipType;
   e.govt = pr.Govt >= 128 ? pr.Govt : 0;
@@ -106,8 +127,12 @@ export function maybeSpawnPers() {
   e.booty = 0;
   e.target = S.spobs.length ? S.spobs[Math.floor(Math.random() * S.spobs.length)] : null;
   armShipFromPers(e, pr);
-  e.isPers = true; e.persId = id; e.misnName = pr.name;
-  e.misnLink = pr.LinkMission; e.persFlags = pr.Flags; e.commQuote = pr.CommQuote;
+  e.isPers = true;
+  e.persId = id;
+  e.misnName = pr.name;
+  e.misnLink = pr.LinkMission;
+  e.persFlags = pr.Flags;
+  e.commQuote = pr.CommQuote;
   e.warpIn = 18;
   S.aiShips.push(e);
 }
