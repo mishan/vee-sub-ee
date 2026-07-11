@@ -6,14 +6,14 @@
  * (entry: main.js). Normative behavior: engine/ENGINE_SPEC.md.
  */
 
-import { S, reputation } from './01-state.js';
+import { legal } from './01-state.js';
 import { govts } from './08-missions.js';
 
 /* ---- legal record & combat rating (spec: "Legal record") ---- */
 // Player's legal record with a govt, defaulting to the govt's InitialRec.
 export function legalOf(g) {
   if (g < 128) g = 128; // independent systems use govt 128
-  if (reputation[g] != null) return reputation[g];
+  if (legal.has(g)) return legal.raw(g);
   return govts[g] ? govts[g].InitialRec : 0;
 }
 // STR# 134 status label, scaled by the govt's crime tolerance (bible App. II:
@@ -67,11 +67,6 @@ export const RATING_STEPS = [
 ];
 export function combatRating() {
   for (const [t, idx] of RATING_STEPS)
-    if (S.kills >= t) return DATA.strings[138].list[idx] || 'Harmless';
+    if (legal.kills >= t) return DATA.strings[138].list[idx] || 'Harmless';
   return 'Harmless';
-}
-
-export function adjustRep(govt, amt) {
-  if (govt < 0 || !amt) return;
-  reputation[govt] = (reputation[govt] || 0) + amt;
 }

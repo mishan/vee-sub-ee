@@ -3,7 +3,7 @@ import {
   outfits,
   params,
   persGrudge,
-  reputation,
+  legal,
   ships,
   showMsg,
   spinOfShip,
@@ -241,27 +241,27 @@ export const penaltyOf = (g, field) => (g >= 128 && govts[g] ? govts[g][field] :
 // A crime against govt g costs record with g and (halved) its allies.
 export function commitCrime(victimGovt, penalty) {
   if (victimGovt < 128 || !penalty) return;
-  reputation[victimGovt] = legalOf(victimGovt) - penalty;
+  legal.set(victimGovt, legalOf(victimGovt) - penalty);
   for (const ally of govtAllies(victimGovt))
-    reputation[ally] = legalOf(ally) - Math.round(penalty / 2);
+    legal.set(ally, legalOf(ally) - Math.round(penalty / 2));
 }
 // A kill: adds to combat rating, penalizes the victim's govt, and rewards
 // every govt that considers the victim's govt an enemy (bounty for the deed).
 export function creditKill(victim) {
-  S.kills += Math.max(1, (ships[victim.shipId] && ships[victim.shipId].Crew) || 1);
+  legal.recordKill(ships[victim.shipId] && ships[victim.shipId].Crew);
   const g = victim.govt;
   if (g < 128) return;
   const kp = penaltyOf(g, 'KillPenalty');
   commitCrime(g, kp);
   // every govt that considers the victim's govt an enemy rewards the deed
   for (const [hid, h] of Object.entries(govts))
-    if (h.Enemy === g && +hid !== g) reputation[hid] = legalOf(+hid) + kp;
+    if (h.Enemy === g && +hid !== g) legal.set(+hid, legalOf(+hid) + kp);
   // killing a xenophobic aggressor (pirates) is lawful everywhere — the
   // current system's government credits you too, matching classic feel
   const vf = govts[g].$sem ? govts[g].$sem.flags : [];
   if (vf.includes('xenophobic')) {
     const sg = systemGovt();
-    if (sg !== g) reputation[sg] = legalOf(sg) + kp;
+    if (sg !== g) legal.set(sg, legalOf(sg) + kp);
   }
 }
 

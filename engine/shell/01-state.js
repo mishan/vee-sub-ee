@@ -7,6 +7,7 @@
  * Normative behavior: engine/ENGINE_SPEC.md.
  */
 import { Wallet } from './wallet.js';
+import { LegalRecord } from './legal.js';
 /* ---------------- configuration ---------------- */
 
 export const params = new URLSearchParams(location.search);
@@ -123,8 +124,8 @@ export const Save = {
       bits: [...missionBits.keys()].filter((b) => missionBits[b]),
       day: S.gameDay,
       born: pilotBorn,
-      rep: reputation,
-      kills: S.kills,
+      rep: legal.records,
+      kills: legal.kills,
       missions: S.activeMissions,
       dominated: [...dominated],
       name: pilotName,
@@ -214,8 +215,10 @@ export const shipName = (SAVED && SAVED.shipName) || '';
 export const strictPlay = SAVED ? !!SAVED.strict : false;
 /* legal record per govt (spec: "Legal record") — negative = evil, positive
  * = good; defaults to each govt's InitialRec. Missions and combat move it. */
-export const reputation = SAVED && SAVED.rep ? { ...SAVED.rep } : {}; // govtId -> record
-S.kills = SAVED ? SAVED.kills || 0 : 0; // total crew destroyed → combat rating
+export const legal = new LegalRecord(
+  SAVED && SAVED.rep ? { ...SAVED.rep } : {},
+  SAVED ? SAVED.kills || 0 : 0,
+);
 export const dominated = new Set(SAVED ? SAVED.dominated : []); // spob ids subdued for tribute
 // përs (named characters) that have been "spent" — a one-shot character whose
 // mission you accepted (deactivateAfterLinkMission) won't reappear.

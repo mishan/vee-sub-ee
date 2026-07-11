@@ -6,14 +6,14 @@ import {
   missionBits,
   outfits,
   params,
-  reputation,
+  legal,
   ships,
   showMsg,
   systs,
 } from './01-state.js';
 import { weighted } from './02-spawning.js';
 import { applyShipStats, armShip, player } from './04-combat.js';
-import { adjustRep, legalOf } from './13-legal.js';
+import { legalOf } from './13-legal.js';
 
 /*
  * engine/shell/08-missions.js — part of the browser flight shell.
@@ -107,7 +107,7 @@ export function missionAvailable(m, p, loc) {
   if (!bitReq(m.AvailBitSet)) return false;
   if (m.AvailBitClr >= 0 && missionBits[m.AvailBitClr]) return false;
   // combat rating gate: -1 ignore, else kills must be at least AvailRating
-  if (m.AvailRating >= 0 && S.kills < m.AvailRating) return false;
+  if (m.AvailRating >= 0 && legal.kills < m.AvailRating) return false;
   // legal-record gate (record with this spöb's govt): 0 ignore, positive =
   // at least this good, negative = at least this criminal, -32000 = must
   // have dominated this spöb.
@@ -270,7 +270,7 @@ export function abortMission(id) {
   if (i < 0) return;
   const m = misns[id];
   const A = S.activeMissions[i];
-  if (m.Flags & 0x0040) adjustRep(m.CompGovt, -5 * m.CompReward); // abort reversal
+  if (m.Flags & 0x0040) legal.adjust(m.CompGovt, -5 * m.CompReward); // abort reversal
   S.activeMissions.splice(i, 1);
   // clear its mission ships from the system
   S.aiShips = S.aiShips.filter((s) => s.misnId !== id);
@@ -439,13 +439,13 @@ export function missionLandingEvents(p) {
         setBitCode(m.CompBitSet);
         setBitCode(m.CompBitSet2);
         setBitCode(m.CompBitSet4);
-        adjustRep(m.CompGovt, m.CompReward);
+        legal.adjust(m.CompGovt, m.CompReward);
         removeMission(A.id);
       } else if (expired || goalFailed(A) || m.CanAbort) {
         notes.push(descText(m.FailText, A) || `Mission failed: ${misnName(m, A)}.`);
         setBitCode(m.FailBitSet);
         setBitCode(m.FailBitSet2);
-        adjustRep(m.CompGovt, -Math.round(m.CompReward / 2));
+        legal.adjust(m.CompGovt, -Math.round(m.CompReward / 2));
         removeMission(A.id);
       }
     }
@@ -462,7 +462,7 @@ export function checkExpiredMissions() {
       const m = misns[A.id];
       setBitCode(m.FailBitSet);
       setBitCode(m.FailBitSet2);
-      adjustRep(m.CompGovt, -Math.round(m.CompReward / 2));
+      legal.adjust(m.CompGovt, -Math.round(m.CompReward / 2));
       removeMission(A.id);
       showMsg(`Mission failed (out of time): ${misnName(misns[A.id], A)}`);
     }
@@ -507,9 +507,8 @@ export function payMission(m) {
     const kept = Math.round(wallet.credits * (1 - (-v - 40000) / 100));
     wallet.spend(wallet.credits - kept);
   }
-  // -10128..-10255 clean legal record: reputation reset with that govt
-  else if (v >= -10255 && v <= -10128)
-    reputation[-v - 10000] = Math.max(0, reputation[-v - 10000] || 0);
+  // -10128..-10255 clean legal record: clear a criminal record with that govt
+  else if (v >= -10255 && v <= -10128) legal.pardon(-v - 10000);
 }
 
 /* stelName: id → display name, shared by the briefing and the board UI. */
