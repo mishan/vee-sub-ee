@@ -26,6 +26,20 @@ test('the constructor seeds the mission list from a pilot file', () => {
   assert.ok(log.has(1));
 });
 
+test('remove mutates the list in place (stable identity)', () => {
+  const log = new MissionLog([{ id: 1 }, { id: 2 }, { id: 3 }]);
+  const ref = log.list;
+  log.remove(2);
+  assert.equal(log.list, ref); // same array object — no reference-holder breaks
+  assert.deepEqual(
+    log.list.map((a) => a.id),
+    [1, 3],
+  );
+  log.remove(99); // missing id is a no-op
+  assert.equal(log.list, ref);
+  assert.equal(log.count, 2);
+});
+
 test('plot bits: set/clear/test, seeded from a pilot file, 512 wide', () => {
   const log = new MissionLog([], [3, 100]);
   assert.ok(log.bit(3));

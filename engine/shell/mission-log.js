@@ -37,7 +37,10 @@ export class MissionLog {
     this.list.push(mission);
   }
   remove(id) {
-    this.list = this.list.filter((a) => a.id !== id);
+    // Splice in place so the list keeps its identity for any holder of
+    // missionLog.list; ids are unique in the log, so one removal suffices.
+    const i = this.list.findIndex((a) => a.id === id);
+    if (i >= 0) this.list.splice(i, 1);
   }
 
   /* ---- plot flags (spec: mission bits) ---- */
