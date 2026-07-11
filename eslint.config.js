@@ -68,7 +68,14 @@ module.exports = [
 
   // Node CommonJS tools
   {
-    files: ['evexport.js', 'evatlas.js', 'tmpl2schema.js', 'eslint.config.js', 'loader/verify.js'],
+    files: [
+      'evexport.js',
+      'evatlas.js',
+      'evpilot.js',
+      'tmpl2schema.js',
+      'eslint.config.js',
+      'loader/verify.js',
+    ],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'commonjs',

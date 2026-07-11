@@ -52,23 +52,41 @@ function simpleCrypt(buf, key = KEY_CLASSIC) {
  * whose *resource name is the ship's name*. The pilot's own name is the file
  * name. Confirmed fields in decrypted MpïL 128 so far:
  *
- *   0x0000  i16  docked spöb  (stored −128; gives current location + system)
- *   0x0002  i16  ship type    (stored −128)
- *   0x0014  i16  date: month
- *   0x0016  i16  date: day
- *   0x0018  i16  date: year
- *   0x11ba  u32  credits
+ *   0x0000  i16   docked spöb  (stored −128; gives current location + system)
+ *   0x0002  i16   ship type    (stored −128)
+ *   0x0014  i16   date: month
+ *   0x0016  i16   date: day
+ *   0x0018  i16   date: year
+ *   0x251a  i16[] escorts: 72 slots, −1 = empty, else ship type (stored −128)
+ *   0x25ac  i16   kills (crew destroyed) → combat rating (bible App. I / STR#138)
+ *   0x08ea  i16[] legal record, 108 slots indexed by system (stored −128); the
+ *                 per-system standing that drives the legal-status label
+ *   0x11ba  u32   credits
  *
- * Still mapping: legal record (per-govt array), combat rating / kills, cargo,
- * outfits, mission bits, the per-system status array at ~0x1a. */
+ * The legal record is stored PER SYSTEM (108 int16), not per government — two
+ * systems under the same govt can show different standings (e.g. Rebel is a
+ * "Good Egg" in Nemesis but only "Decent Individual" in Orion, both Rebellion).
+ * Vₑ's own model is per-govt, so an importer collapses this array.
+ *
+ * Confirmed against two real pilots cross-checked with the game's title readout
+ * (Rebel: 268 kills/"Average", two Clipper escorts, NGC-6564 negative/"Offender";
+ * Confed: 112 kills/"Fair", no escorts).
+ *
+ * Still mapping: cargo hold, installed outfits, active missions + mission (plot)
+ * bits — see notes; a sample pilot that HAS active missions/cargo is needed to
+ * locate those, since both current samples are empty there. */
 const MP128 = {
   spob:    { off: 0x0000, u32: false, add: 128 },
   ship:    { off: 0x0002, u32: false, add: 128 },
   month:   { off: 0x0014, u32: false },
   day:     { off: 0x0016, u32: false },
   year:    { off: 0x0018, u32: false },
+  kills:   { off: 0x25ac, u32: false },
   credits: { off: 0x11ba, u32: true },
 };
+// Variable-length arrays (int16, decoded separately from the scalar fields).
+const LEGAL = { off: 0x08ea, count: 108 };   // record per system, index = systId−128
+const ESCORTS = { off: 0x251a, count: 72 };   // −1 empty, else ship type stored −128
 
 /* Decode the confirmed summary fields of a pilot file (resource fork). */
 function readPilotSummary(file) {
@@ -82,6 +100,18 @@ function readPilotSummary(file) {
   if (!r128) throw new Error('no pilot-data (id 128) resource');
   const b = Buffer.from(r128.data()); simpleCrypt(b);
   const g = f => (f.u32 ? b.readUInt32BE(f.off) : b.readInt16BE(f.off)) + (f.add || 0);
+  // legal record: sparse map of systemId -> standing (skip the untouched zeros)
+  const legalBySystem = {};
+  for (let i = 0; i < LEGAL.count; i++) {
+    const v = b.readInt16BE(LEGAL.off + 2 * i);
+    if (v !== 0) legalBySystem[128 + i] = v;
+  }
+  // escorts: occupied slots (−1 = empty) hold a ship type stored −128
+  const escorts = [];
+  for (let i = 0; i < ESCORTS.count; i++) {
+    const v = b.readInt16BE(ESCORTS.off + 2 * i);
+    if (v >= 0) escorts.push(v + 128);
+  }
   return {
     pilotName: path.basename(file).replace(/^\._/, '').replace(/\.rsrc$/i, ''),
     shipName: r129 ? r129.name : null,
@@ -89,10 +119,13 @@ function readPilotSummary(file) {
     shipType: g(MP128.ship),
     date: { year: g(MP128.year), month: g(MP128.month), day: g(MP128.day) },
     credits: g(MP128.credits),
+    kills: g(MP128.kills),
+    escorts,
+    legalBySystem,
   };
 }
 
-module.exports = { simpleCrypt, readPilotSummary, MP128, KEY_CLASSIC, KEY_NOVA };
+module.exports = { simpleCrypt, readPilotSummary, MP128, LEGAL, ESCORTS, KEY_CLASSIC, KEY_NOVA };
 
 /* ------------------------------------------------------------------ */
 /* CLI: node evpilot.js selftest
@@ -129,7 +162,6 @@ if (require.main === module) {
   }
 
   if (cmd === 'inspect') {
-    const fs = require('fs');
     const path = process.argv[3];
     if (!path) { console.error('usage: node evpilot.js inspect <resource-fork-file> [keyHex]'); process.exit(1); }
     const key = process.argv[4] ? parseInt(process.argv[4], 16) : KEY_CLASSIC;
