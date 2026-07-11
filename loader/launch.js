@@ -29,11 +29,20 @@
       ENGINE_FILES.map(f => fetch(f).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + f); return r.text(); })));
     return { tpl, core, rest };
   }
+  const toHex = digest => [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
   // SHA-256 of the concatenated sources — the build's identity in the marker.
   async function sourcesHash(src) {
     const bytes = new TextEncoder().encode([src.tpl, src.core, ...src.rest].join('\u0000'));
-    const digest = await crypto.subtle.digest('SHA-256', bytes);
-    return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+    return toHex(await crypto.subtle.digest('SHA-256', bytes));
+  }
+  // SHA-256 of the plugin forks, length-prefixed so order and boundaries matter
+  // (plugin order is override precedence). '' when there are no plugins.
+  async function pluginsHash(forks) {
+    if (!forks.length) return '';
+    let n = 0; for (const f of forks) n += 4 + f.length;
+    const buf = new Uint8Array(n), dv = new DataView(buf.buffer); let o = 0;
+    for (const f of forks) { dv.setUint32(o, f.length); o += 4; buf.set(f, o); o += f.length; }
+    return toHex(await crypto.subtle.digest('SHA-256', buf));
   }
 
   // Register the game SW and resolve once it's activated. We can't await
@@ -227,8 +236,12 @@
     // is cached. Only a complete build qualifies for the instant-replay path —
     // `fast` (skips graphics PICTs) and `skipAssets` builds don't get a marker.
     if (!opts.skipAssets && !opts.fast) {
+      // Record the plugin identity too (count + content hash), so the cached
+      // build's provenance is explicit — a return visit knows it was built with
+      // plug-ins rather than silently replaying them (see checkBuilt/resume).
       await cache.put(base + BUILT_MARKER, new Response(
-        JSON.stringify({ h: await sourcesHash(src), built: Date.now() }),
+        JSON.stringify({ h: await sourcesHash(src), built: Date.now(),
+          plugins: pluginForks.length, ph: await pluginsHash(pluginForks) }),
         { headers: { 'content-type': 'application/json' } }));
     }
     log('Ready.');

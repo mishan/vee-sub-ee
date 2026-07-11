@@ -151,14 +151,16 @@ const SUPPORTED_TYPES = new Set(['dësc', 'dsïg', 'düde', 'flët', 'gövt', 'j
   'PICT', 'snd ', 'STR#']);
 const pluginFile = $('#pluginFile');
 $('#addPlugin').onclick = () => pluginFile.click();
-pluginFile.onchange = e => { for (const f of e.target.files) addPlugin(f); pluginFile.value = ''; };
+// Await each add so plug-ins land in selection order (order = override precedence).
+pluginFile.onchange = async e => { for (const f of e.target.files) await addPlugin(f); pluginFile.value = ''; };
 
 async function addPlugin(file) {
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     let fork;
     if (String.fromCharCode(...bytes.slice(0, 7)) === 'StuffIt') {   // plugin inside a .sit
-      const res = parseSit(bytes).find(en => en.isResource) || parseSit(bytes)[0];
+      const entries = parseSit(bytes);
+      const res = entries.find(en => en.isResource) || entries[0];
       if (!res) throw new Error('no resource fork in archive');
       fork = extractFork(bytes, res);
     } else {
@@ -355,7 +357,9 @@ async function load(file) {
   if (!m) return;
   const banner = $('#resume');
   const built = new Date(m.built);
-  $('#resumeNote').textContent = 'built ' + built.toLocaleDateString() + ' — no re-import needed';
+  // Surface the cached build's plug-in provenance so resuming isn't silent about it.
+  const plug = m.plugins ? ` · includes ${m.plugins} plug-in${m.plugins > 1 ? 's' : ''}` : '';
+  $('#resumeNote').textContent = 'built ' + built.toLocaleDateString() + plug + ' — no re-import needed';
   $('#resumeBtn').onclick = async () => {
     $('#resumeBtn').disabled = true;
     try {

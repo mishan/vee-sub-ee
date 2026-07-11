@@ -76,7 +76,15 @@ function main() {
   const args = process.argv.slice(2);
   const opt = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args.splice(i, 2)[1] : null; };
   // Repeatable: --plugin A.rsrc --plugin B.rsrc (in load order; later wins).
-  const opts = (flag) => { const v = []; let i; while ((i = args.indexOf(flag)) >= 0) v.push(args.splice(i, 2)[1]); return v; };
+  const opts = (flag) => {
+    const v = []; let i;
+    while ((i = args.indexOf(flag)) >= 0) {
+      const val = args.splice(i, 2)[1];
+      if (val == null) { console.error(`error: ${flag} needs a file argument`); process.exit(1); }
+      v.push(val);
+    }
+    return v;
+  };
   const pluginFiles = opts('--plugin');
   const outPath = opt('-o');
   const mapPath = opt('--map');

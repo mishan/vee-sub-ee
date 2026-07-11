@@ -13,7 +13,7 @@
 const fs = require('fs');
 const cp = require('child_process');
 const path = require('path');
-const { loadFork, parseFork, decodeRecord, mergeTypes, buildFork, resolveType } = require('../evrsrc.js');
+const { loadFork, parseFork, decodeRecord, buildFork, resolveType } = require('../evrsrc.js');
 const { decodePict } = require('./evpict.js');
 const { decodeSnd } = require('./evsnd.js');
 const { compositeSprite } = require('./evsprite.js');
@@ -279,9 +279,9 @@ function checkPluginAssets() {
   ok('title-override PICT → titles', inBucket('titles', 'PICT', titlePictId));
   ok('title-override replaced the bytes', Buffer.from(titlePict.data()).equals(Buffer.from([3, 4])));
   ok('plugin snd → sounds', inBucket('sounds', 'snd ', 9700));
-  // manifest picks up the new plugin ship
+  // the plugin's spïn 9500 reaches the sprite manifest (so a new ship gets a frame grid)
   const m = buildManifest(gfx, JSON.parse(fs.readFileSync(path.join(ROOT, 'schemas', 'spin.json'), 'utf8')), [plugin]);
-  ok('plugin ship reaches the manifest', !!m.spins[9500]);
+  ok('plugin spïn 9500 reaches the manifest', !!m.spins[9500]);
   console.log(`plugin-assets: ${pass}/${pass + fail} routing assertions pass`);
   if (fail) process.exitCode = 1;
 }
