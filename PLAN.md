@@ -134,7 +134,7 @@ browser) deliberately undecided until sprites are on screen.
   future compatibility goal; this is the gameplay-persistence layer.
 
 - **Milestone: missions** (browser). The mïsn resource — a faithful,
-  completable subset. Mission bits (256, persisted), day counter (advances
+  completable subset. Mission bits (512, persisted), day counter (advances
   per jump), availability (AvailStel incl. govt codes, AvailBitSet/Clr,
   AvailRandom rerolled per arrival, ship-type Flags 0x2000/0x4000). Bar +
   Mission-BBS boards on the landing screen with briefing text, accept/
@@ -223,15 +223,54 @@ browser) deliberately undecided until sprites are on screen.
   headless landscape/portrait screenshots + a scripted harness (steer→heading,
   push→thrust/speed, fire hold, bar actions, map hide). SDL leg unaffected.
 
+- **Milestone: escorts, ship-offered missions, fighter bays** (browser; merged
+  to main, PRs #24–#27). Player escorts: captured ships kept as companions
+  (take command vs add to the fleet) and hire-for-fee escorts in the spaceport
+  bar, both with follow/fight AI, per-jump upkeep, and persistence. Ship-offered
+  missions (AvailLoc 2): eligible përs characters spawn in their `LinkSyst`
+  systems and hail to offer work, with accept/refuse and the përs done/grudge
+  bookkeeping; mission-bit store widened to the full 0–511 range so every
+  `MissionBit` can gate a character. Fighter bays (weapon g99): launch and recall
+  carried fighters, tracked as per-bay ammo, auto-recalled on jump; HUD bay
+  count. Spec'd + headless-verified in the same branches; SDL leg deferred.
+
+- **Milestone: browser loader** (`loader/`) — the pure-web distribution path
+  from README "Distribution", and better than the planned asset-bundle: the
+  user drops their own Escape Velocity **`.sit`** on a page and it decodes and
+  **plays entirely in the browser** — no command line, no external tools. Every
+  native step is reimplemented in dependency-free JS: `evsit.js` parses the
+  StuffIt 5 archive and decompresses its method-13 ("LZ+Huffman") forks (5/5
+  byte-exact, ~200 ms for the ~8 MB archive; reimplemented from XADMaster's
+  format, not code); `evpict.js` QuickDraw PICT → RGBA (471/471 pixel-exact vs
+  `resource_dasm` — v1/v2, PackBits/BitsRect + region variants, DirectBits
+  16/32-bit, tiled multi-op pictures); `evsnd.js` `snd ` → PCM (59/59
+  byte-exact); `evsprite.js` sprite+mask → transparent sheet (79/81 byte-exact
+  incl. alpha). `evbuild.js` builds the engine `DATA` (byte-identical to
+  `evexport`) + sprite `MANIFEST`; `launch.js` renders every asset to a PNG/WAV
+  in Cache Storage, assembles `flight.html` (inject `DATA`/`MANIFEST` +
+  `core.js`, exactly like `evexport --flight`), and a **service worker**
+  (`sw.js`) serves `evassets/*` so the **unmodified engine** runs. `nodeshim.js`
+  (a tiny `Buffer` shim) + dual-mode guards let `evrsrc.js`/`semantics.js` serve
+  both the Node build and the browser. The bundled installer is Installer VISE
+  (`SVCT`, proprietary, no open tooling) — the `.sit` is the source. Verified:
+  `node loader/verify.js` checks every stage against the native pipeline; the
+  in-browser-assembled `flight.html` boots a full playable game against real
+  assets (headless screenshot); the SW's cached serving is verified
+  cross-instance. **First-run caching** is in: a versioned completion marker in
+  Cache Storage lets a return visit replay the built game without re-importing
+  the `.sit`. Format notes + credits in `loader/README.md`. Remaining polish:
+  PWA install + an "export bundle" button, read name suggestions from the app's
+  STR# 128, 2 cosmetic edge-alpha sprites.
+
 ## Next
 
-1. **Distribution loader** (deferred per Misha; see README "Distribution"):
-   data-free hosted page that accepts a user-built asset bundle (zip of
-   evdata.json + evassets), cached client-side. Add `evexport --bundle`.
-2. **Also open**: SDL parity catch-up (audio, combat UI, missions, legal
-   record), real Mac pilot-file read/write via `buildFork`, ship-offered
-   missions (AvailLoc 2, needs hail integration), fighter bays (weap g99 +
-   Voice Targ sound).
+1. **Distribution loader — polish** (core + first-run caching delivered; see the
+   loader milestone and `loader/README.md`): PWA install + an "export bundle"
+   button, and optional original name suggestions (STR# 128 from the app inside
+   the `.sit`).
+2. **Also open**: SDL parity catch-up — the browser leg is now well ahead (audio,
+   combat UI, missions, legal record, escorts, ship-offered missions, fighter
+   bays all browser-only); and real Mac pilot-file read/write via `buildFork`.
 
 ## Notes
 
