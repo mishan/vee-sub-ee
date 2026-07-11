@@ -144,15 +144,21 @@ function unwrapAppleDouble(buf) {
   return null;
 }
 
-function loadFork(file) {
-  const buf = fs.readFileSync(file);
+// Unwrap a container from bytes (works in the browser — no fs). Returns
+// { container, fork }. loadFork() is the Node file wrapper around it.
+function unwrapFork(buf) {
   const mb = unwrapMacBinary(buf);
   if (mb) return mb;
   const ad = unwrapAppleDouble(buf);
   if (ad) return ad;
   if (looksLikeResourceFork(buf)) return { container: 'raw fork', fork: buf };
-  throw new Error(`${file}: not MacBinary, AppleDouble, or a raw resource fork ` +
-    `(if this is a .sit/.cpt archive, expand it first — 'unar' handles StuffIt)`);
+  throw new Error('not MacBinary, AppleDouble, or a raw resource fork ' +
+    "(if this is a .sit/.cpt archive, expand it first — 'unar' handles StuffIt)");
+}
+
+function loadFork(file) {
+  try { return unwrapFork(fs.readFileSync(file)); }
+  catch (e) { throw new Error(`${file}: ${e.message}`); }
 }
 
 /* ------------------------------------------------------------------ */
@@ -504,7 +510,7 @@ function main() {
 }
 
 const EVRSRC_API = {
-  loadFork, parseFork, mergeTypes, findType, resolveType, decodeRecord, decodeStrList,
+  loadFork, unwrapFork, parseFork, mergeTypes, findType, resolveType, decodeRecord, decodeStrList,
   buildFork, macRomanToString, stringToMacRoman,
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = EVRSRC_API;

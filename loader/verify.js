@@ -18,7 +18,7 @@ const { decodePict } = require('./evpict.js');
 const { decodeSnd } = require('./evsnd.js');
 const { compositeSprite } = require('./evsprite.js');
 const { parseSit, extractFork, unstuff13 } = require('./evsit.js');
-const { buildData } = require('./evbuild.js');
+const { buildData, buildManifest, routeAssets } = require('./evbuild.js');
 
 const ROOT = path.join(__dirname, '..');
 const D = f => path.join(ROOT, 'EV_data', f);
@@ -245,6 +245,47 @@ function checkPluginMerge() {
   if (fail) process.exitCode = 1;
 }
 
+// Plugin graphics/sounds routing: a plugin fork mixes everything, and its
+// resources must land in the right asset bucket (spïn/new-PICT → graphics,
+// PICT that overrides a title → titles, snd → sounds), and its spïn must reach
+// the manifest.
+function checkPluginAssets() {
+  const gF = D('EV Graphics.rsrc'), tF = D('EV Titles.rsrc'), sF = D('EV Sounds.rsrc');
+  if (!fs.existsSync(gF) || !fs.existsSync(tF)) return;
+  const gfx = loadFork(gF).fork, titles = loadFork(tF).fork;
+  const sounds = fs.existsSync(sF) ? loadFork(sF).fork : null;
+  const realSpin = parseFork(gfx).find(t => t.typeName === 'spïn').resources[0];  // valid record bytes
+  const titlePictId = parseFork(titles).find(t => t.typeName === 'PICT').resources[0].id;
+
+  const plugin = buildFork([
+    { type: resolveType('spin'), id: 9500, data: Buffer.from(realSpin.data()) },   // new sprite → graphics
+    { type: resolveType('PICT'), id: 9600, data: Buffer.from([1, 2]) },            // new pict → graphics
+    { type: resolveType('PICT'), id: titlePictId, data: Buffer.from([3, 4]) },     // override title → titles
+    { type: resolveType('snd '), id: 9700, data: Buffer.from([5, 6]) },            // sound → sounds
+  ]);
+
+  const routed = routeAssets(gfx, titles, sounds, [plugin]);
+  const inBucket = (bucket, typeName, id) => {
+    const t = routed[bucket].find(x => x.typeName === typeName);
+    return !!t && t.resources.some(r => r.id === id);
+  };
+  const titlePict = routed.titles.find(x => x.typeName === 'PICT').resources.find(r => r.id === titlePictId);
+
+  let pass = 0, fail = 0;
+  const ok = (n, c) => { c ? pass++ : (fail++, console.log('  ✗ ' + n)); };
+  ok('plugin spïn → graphics', inBucket('graphics', 'spïn', 9500));
+  ok('new plugin PICT → graphics', inBucket('graphics', 'PICT', 9600));
+  ok('new plugin PICT not in titles', !inBucket('titles', 'PICT', 9600));
+  ok('title-override PICT → titles', inBucket('titles', 'PICT', titlePictId));
+  ok('title-override replaced the bytes', Buffer.from(titlePict.data()).equals(Buffer.from([3, 4])));
+  ok('plugin snd → sounds', inBucket('sounds', 'snd ', 9700));
+  // manifest picks up the new plugin ship
+  const m = buildManifest(gfx, JSON.parse(fs.readFileSync(path.join(ROOT, 'schemas', 'spin.json'), 'utf8')), [plugin]);
+  ok('plugin ship reaches the manifest', !!m.spins[9500]);
+  console.log(`plugin-assets: ${pass}/${pass + fail} routing assertions pass`);
+  if (fail) process.exitCode = 1;
+}
+
 checkPict();
 checkSnd();
 checkSprites();
@@ -252,3 +293,4 @@ checkSit();
 checkBuildData();
 checkHardening();
 checkPluginMerge();
+checkPluginAssets();

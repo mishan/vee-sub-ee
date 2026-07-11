@@ -38,9 +38,13 @@
     return out;
   }
 
-  /* Build the sprite manifest from the EV Graphics spïn resources. */
-  function buildManifest(gfxFork, spinSchema) {
-    const types = EV.parseFork(B.from(gfxFork));
+  /* Build the sprite manifest from the EV Graphics spïn resources.
+   * Plugin spïn resources override/add by ID (so new ships get manifest entries). */
+  function buildManifest(gfxFork, spinSchema, pluginForks = []) {
+    const base = EV.parseFork(B.from(gfxFork));
+    const types = pluginForks.length
+      ? EV.mergeTypes(base, ...pluginForks.map(f => EV.parseFork(B.from(f))))
+      : base;
     const spins = EV.findType(types, 'spin');
     const manifest = { spins: {} };
     if (spins) for (const r of spins.resources) {
@@ -53,7 +57,44 @@
     return manifest;
   }
 
-  const API = { buildData, buildManifest };
+  /* Route the base graphics/titles/sounds forks plus any plugin forks into
+   * three merged type-arrays, applying plugin overrides/additions by (type, ID):
+   *   - snd  → sounds
+   *   - spïn → graphics (sprites always render from the graphics set)
+   *   - PICT → titles if that ID exists in base Titles (so a plugin can retheme
+   *            the panel/menu art), else graphics (new sprite / shop / detail art)
+   * Data records + STR# are handled separately by buildData. Pure (no DOM), so
+   * it's Node-testable. */
+  function routeAssets(graphicsFork, titlesFork, soundsFork, pluginForks = []) {
+    const g = EV.parseFork(B.from(graphicsFork));
+    const t = EV.parseFork(B.from(titlesFork));
+    const s = soundsFork ? EV.parseFork(B.from(soundsFork)) : [];
+    const plugins = pluginForks.map(f => EV.parseFork(B.from(f)));
+    const titlePict = EV.findType(t, 'PICT');
+    const titleIds = new Set(titlePict ? titlePict.resources.map(r => r.id) : []);
+    // keep only the resources of a parsed plugin that match a predicate, preserving type shape
+    const pick = (types, fn) => {
+      const out = [];
+      for (const ty of types) {
+        const kept = ty.resources.filter(r => fn(ty.typeName, r));
+        if (kept.length) out.push({ typeBytes: ty.typeBytes, typeName: ty.typeName, typeHex: ty.typeHex, resources: kept });
+      }
+      return out;
+    };
+    const gExtra = [], tExtra = [], sExtra = [];
+    for (const p of plugins) {
+      gExtra.push(pick(p, (tn, r) => tn === 'spïn' || (tn === 'PICT' && !titleIds.has(r.id))));
+      tExtra.push(pick(p, (tn, r) => tn === 'PICT' && titleIds.has(r.id)));
+      sExtra.push(pick(p, (tn) => tn === 'snd '));
+    }
+    return {
+      graphics: EV.mergeTypes(g, ...gExtra),
+      titles: EV.mergeTypes(t, ...tExtra),
+      sounds: EV.mergeTypes(s, ...sExtra),
+    };
+  }
+
+  const API = { buildData, buildManifest, routeAssets };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   if (typeof self !== 'undefined') self.EVBUILD = API;
 })();

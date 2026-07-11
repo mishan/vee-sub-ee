@@ -110,12 +110,17 @@ long as they use the record types and fields the engine already implements.
    override+add plugin (buildFork) in `loader/verify.js` (`plugin: 5/5`), with
    the no-plugin path still byte-identical to before. *(Graphics/sound merge is
    Phase 2 — this phase merges game records + STR#.)*
-2. **Loader plumbing** — route a dropped plugin's resources into the
-   data/graphics/sounds merge; rebuild `flight.html` + assets from the merged
-   set; extend the cache key. *(~1 day)*
-3. **Loader UX** — add-plugins drop target, ordered/toggleable list, a summary
-   of what each plugin overrides/adds and which of its types are unsupported.
-   *(~1 day)*
+2. **Loader plumbing** — ✅ **done.** `evbuild.routeAssets()` splits a plugin
+   fork by type into graphics/titles/sounds buckets (spïn + new PICT → graphics,
+   title-overriding PICT → titles, snd → sounds); `buildData`/`buildManifest`/
+   `produceAssets` take `pluginForks`; `buildAndCache(forks, spinSchema, plugins,
+   …)` threads them through; `evrsrc.unwrapFork()` reads a plugin fork from bytes
+   in the browser. A basic add-plugin file picker + list is wired in the loader.
+   Tests in `verify.js`: `plugin-assets: 7/7` routing + manifest, and the
+   no-plugin build is still byte-identical.
+3. **Loader UX** — drag-to-reorder plugin list (currently add-order), per-plugin
+   remove (done) + toggle, and a clearer summary of what each plugin
+   overrides/adds and which of its types are unsupported.
 4. **Polish** — larger real-plugin testing, `chär` starting-scenario support if
    we want new-start plugins, and a note in loader/README. *(as needed)*
 

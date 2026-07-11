@@ -41,6 +41,14 @@
   #resume { display: none; align-items: center; gap: 14px; flex-wrap: wrap;
     background: #0c1c12; border: 1px solid #2f9c57; border-radius: 12px; padding: 16px 18px; margin: 0 0 18px; }
   #resume .reimport { color: #8aa0bf; font-size: 13px; margin-left: auto; }
+  #plugins { margin: 0 0 18px; }
+  #pluginList { list-style: none; margin: 10px 0 0; padding: 0; }
+  #pluginList li { display: flex; align-items: center; gap: 10px; background: #0a1120;
+    border: 1px solid #1c2740; border-radius: 8px; padding: 7px 12px; margin-bottom: 6px; }
+  #pluginList .idx { color: #6f86a6; font: 12px ui-monospace, monospace; min-width: 1.4em; }
+  #pluginList .pname { color: #cfe3ff; }
+  #pluginList .drop { color: #8aa0bf; font-size: 12px; margin-left: auto; }
+  #pluginList button { background: none; border: 0; color: #ff6b6b; cursor: pointer; font-size: 16px; padding: 0 4px; }
 </style>
 </head>
 <body>
@@ -67,6 +75,17 @@
       <button class="play" id="launch" style="background:#1c6e3a;border-color:#2f9c57;font-size:16px;padding:12px 22px">▶ Launch the game</button>
       <span id="launchNote" style="color:#8aa0bf">builds the engine from your data and plays it here — one-time, ~10 s</span>
     </div>
+
+    <div id="plugins">
+      <div class="row" style="gap:10px">
+        <b style="color:#cfe3ff">Plug-ins <span style="color:#6f86a6;font-weight:400">(optional)</span></b>
+        <button class="play" id="addPlugin" style="padding:6px 12px;font-size:13px">+ Add plug-in</button>
+        <span style="color:#6f86a6;font-size:12px">override or add ships, missions, tuning — applied top to bottom</span>
+        <input id="pluginFile" type="file" multiple hidden>
+      </div>
+      <ul id="pluginList"></ul>
+    </div>
+
     <div class="stats" id="stats"></div>
 
     <h2>Ships</h2>
@@ -115,6 +134,52 @@ fileInput.onchange = e => { if (e.target.files[0]) load(e.target.files[0]); };
 ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('hover'); }));
 ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('hover'); }));
 drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) load(f); });
+
+/* ---- plug-ins (optional): each is a resource fork whose records override/add
+   by (type, ID), applied top to bottom; graphics/sounds fold into the build ---- */
+window.__plugins = [];
+const pluginFile = $('#pluginFile');
+$('#addPlugin').onclick = () => pluginFile.click();
+pluginFile.onchange = e => { for (const f of e.target.files) addPlugin(f); pluginFile.value = ''; };
+
+async function addPlugin(file) {
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let fork;
+    if (String.fromCharCode(...bytes.slice(0, 7)) === 'StuffIt') {   // plugin inside a .sit
+      const res = parseSit(bytes).find(en => en.isResource) || parseSit(bytes)[0];
+      if (!res) throw new Error('no resource fork in archive');
+      fork = extractFork(bytes, res);
+    } else {
+      fork = new Uint8Array(EVRSRC.unwrapFork(Buffer.from(bytes)).fork);   // MacBinary/AppleDouble/raw
+    }
+    EVRSRC.parseFork(Buffer.from(fork));   // validate it's a readable resource fork
+    window.__plugins.push({ name: file.name, fork });
+    renderPlugins();
+  } catch (err) { log('Plug-in "' + file.name + '": ' + err.message, 'err'); }
+}
+
+function renderPlugins() {
+  const ul = $('#pluginList'); ul.innerHTML = '';
+  window.__plugins.forEach((p, i) => {
+    const li = document.createElement('li');
+    const idx = document.createElement('span'); idx.className = 'idx'; idx.textContent = (i + 1) + '.';
+    const name = document.createElement('span'); name.className = 'pname'; name.textContent = p.name;   // textContent: file name is untrusted
+    const drop = document.createElement('span'); drop.className = 'drop'; drop.textContent = summarizePlugin(p.fork);
+    const rm = document.createElement('button'); rm.title = 'Remove'; rm.textContent = '×';
+    rm.onclick = () => { window.__plugins.splice(i, 1); renderPlugins(); };
+    li.append(idx, name, drop, rm); ul.append(li);
+  });
+}
+
+// A short "what does this plug-in touch" summary from its resource types.
+function summarizePlugin(fork) {
+  try {
+    const counts = EVRSRC.parseFork(Buffer.from(fork))
+      .map(t => t.typeName.replace(/[^\x20-\x7e]/g, '') + '×' + t.resources.length);
+    return counts.length ? counts.join(' ') : '(empty)';
+  } catch { return ''; }
+}
 
 const T = (types, name) => EVRSRC.findType(types, name);
 // Essential type or a clear, actionable error (vs a generic "Cannot read
@@ -253,7 +318,7 @@ async function load(file) {
 async function launchGame() {
   const btn = $('#launch'); btn.disabled = true; $('#launchNote').textContent = '';
   try {
-    const url = await VELAUNCH.buildAndCache(window.__forks, window.__spinSchema, (m, cls) => log(m, cls));
+    const url = await VELAUNCH.buildAndCache(window.__forks, window.__spinSchema, window.__plugins.map(p => p.fork), (m, cls) => log(m, cls));
     log('Launching — enjoy!', 'ok');
     setTimeout(() => { location.href = url; }, 200);
   } catch (e) { log('Launch failed: ' + e.message, 'err'); console.error(e); btn.disabled = false; }
