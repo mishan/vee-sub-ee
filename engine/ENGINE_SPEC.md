@@ -49,9 +49,11 @@ the thrust vector is computed (i.e. thrust uses the post-turn heading).
 
 ## AI trader state machine
 
-States: CRUISE → BRAKE → LANDING. Deterministic given a fixed target
+States: CRUISE → BRAKE → LANDED → DEPART. Deterministic given a fixed target
 (spawn-time randomness — dude/ship/target selection — lives outside the
-core; see "Spawning").
+core; see "Spawning"). Ships **never vanish on touchdown** the way the
+original never made them disappear: they sit motionless above the planet,
+then take off and hyperspace out at the system edge.
 
 - `stopDist = |v|²/(2·accel) + |v|·(180/turn) + 40` — kinematic stopping
   distance, **plus the distance coasted while flipping 180° to face
@@ -61,10 +63,17 @@ core; see "Spawning").
 - CRUISE: steer toward target; if `dist > stopDist` and aligned, thrust;
   if `dist ≤ stopDist`, → BRAKE.
 - BRAKE: steer toward retrograde; if `|v| > 0.15`, thrust when aligned;
-  else if `dist < 80` → LANDING, otherwise → CRUISE (overshot; go around).
-- LANDING: fade −= 0.02 per frame (no motion changes); at fade ≤ 0 the
-  entity despawns (shell schedules a respawn). The shell may dock the ship
-  instantly instead of fading — the core only reports arrival.
+  else if `dist < 80` → LANDED (velocity zeroed, `landTimer` set to
+  ~120–300 frames), otherwise → CRUISE (overshot; go around).
+- LANDED: held motionless (`v = 0`) above the planet; `landTimer` counts
+  down. At 0 → DEPART (target cleared for the shell to reassign).
+- DEPART: steer toward the target and thrust — the shell points it at a
+  system-edge exit and removes it once it's flown clear (a hyperspace-out),
+  scheduling a replacement arrival.
+
+`stepTrader` always returns true now; the **shell** owns despawn. Catch-goal
+mission ships and unoffered pers loiter instead of leaving; mission escorts
+complete their arrival on touchdown (see "Spawning").
 
 ## Landing (player)
 
@@ -316,9 +325,27 @@ trade-in); cargo must fit the new hull; fuel arrives full.
 AI count target: `clamp(syst.AvgShips, 2, 8)`. Each spawn: pick düde from
 the system's `DudeTypes1..4` weighted by `Prob1..4`; pick ship from the
 düde's `ShipTypes1..4` weighted by its `Prob1..4`; skip IDs < 128 or
-missing records. Position: angle uniform in [0, 2π), radius 2400 (edge
-spawn) or 400 + rand·1200 (initial population). Target: uniform over the
-system's spobs. Despawned traders respawn after a 2–8 s delay.
+missing records. Position: angle uniform in [0, 2π), radius 1000 + rand·500
+(edge/arrival spawn) or 400 + rand·1200 (initial population). Target:
+uniform over the system's spobs. Departed traders respawn after a 2–8 s
+delay (as a fresh arrival).
+
+**Warp-in** (`warpIntoSystem`, spec: the original never popped ships into
+existence). Arrivals enter from just off-screen moving at ~4× their top
+speed toward the system centre, heading along that vector. The step loop
+**coasts them down**: while `|v| > 1.02·maxSpeed`, scale velocity by
+`max(maxSpeed/|v|, 0.92)` per frame, integrate, and skip AI/shields/fire —
+so the ship decelerates to sub-light before its AI takes the helm, the way
+the player's ship and NPCs arrive in the original. The already-present
+initial population is scattered in-system with no warp-in. Bounty hunters
+warp in bearing on the player's position rather than the centre.
+
+**Escorts arrive with the player.** `spawnEscorts` runs the instant the
+player is placed on arrival (`completeJump`), and each escort **inherits the
+player's velocity**, so the fleet exits hyperspace moving together and
+arrives at the same instant (on takeoff the player is stationary, so escorts
+launch stationary). Launched fighters likewise match the carrier's motion.
+Neither uses a warp-in coast (they're already sub-light).
 
 ## Combat
 

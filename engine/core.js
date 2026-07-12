@@ -242,15 +242,30 @@ const stepShot = (shot, target) => Projectile.prototype.step.call(shot, target);
  * Still free functions over a ship; Phase 3 (docs/OOP_DESIGN.md) turns these
  * into strategy objects. They drive a ship through the wrappers above. */
 
-/* AI trader state machine. s.state: 'cruise' | 'brake' | 'landing'; s.fade for
- * landing. target: {x, y}. Returns false once the entity should despawn. */
+/* AI trader state machine (spec: "AI trader"). States on s.state:
+ *   'cruise' → 'brake' → 'landed' (motionless above the planet) → 'depart'.
+ * Landing no longer despawns the ship the way the original never made ships
+ * vanish on touchdown: it sits still for s.landTimer frames, then takes off and
+ * heads back out. The shell (TraderAI) assigns the depart target (a system edge)
+ * and removes the ship once it's flown clear. target: {x, y}. Always returns
+ * true; the shell owns the despawn decision now. */
 function stepTrader(s, target) {
   s.thrusting = false;
+  if (s.state === undefined) s.state = 'cruise';
+  // Landed: hold position above the planet, counting down to takeoff.
+  if (s.state === 'landed') {
+    s.vx = 0;
+    s.vy = 0;
+    if ((s.landTimer = (s.landTimer ?? 0) - 1) <= 0) {
+      s.state = 'depart';
+      s.target = null; // shell picks an edge to leave through next frame
+    }
+    return true;
+  }
   if (!target) {
     integrate(s);
     return true;
   }
-  if (s.state === undefined) s.state = 'cruise';
   const dx = target.x - s.x,
     dy = target.y - s.y;
   const dist = Math.hypot(dx, dy);
@@ -266,12 +281,18 @@ function stepTrader(s, target) {
     const aligned = steerToward(s, retrograde(s));
     if (speed > 0.15) {
       if (aligned) thrust(s);
-    } else if (dist < 80) s.state = 'landing';
-    else s.state = 'cruise';
-  } else {
-    // landing
-    s.fade = (s.fade ?? 1) - 0.02;
-    if (s.fade <= 0) return false;
+    } else if (dist < 80) {
+      // touchdown: sit motionless above the planet for a few seconds
+      s.state = 'landed';
+      s.landTimer = 120 + Math.floor(Math.random() * 180); // ~4–10s @30Hz
+      s.vx = 0;
+      s.vy = 0;
+      return true;
+    } else s.state = 'cruise';
+  } else if (s.state === 'depart') {
+    // head out to the edge target (set by the shell) and build up speed
+    const aligned = steerToward(s, bearing(dx, dy));
+    if (aligned) thrust(s);
   }
   integrate(s);
   return true;

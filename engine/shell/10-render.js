@@ -384,18 +384,6 @@ export function render() {
     if (x < -100 || x > w + 100 || y < -100 || y > h + 100) continue;
     // disintegration: fade the hull out under the fireball (not a hard flicker)
     if (s.deathT >= 0) ctx.globalAlpha = Math.max(0, s.deathT / Math.max(s.deathDelay, 1));
-    if (s.warpIn > 0) {
-      // hyperspace-in flash
-      const t = s.warpIn / 18,
-        half = spriteHalf(spinOfShip(s.shipId), 24);
-      ctx.strokeStyle = `rgba(150,200,255,${t})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(x, y, half + t * 40, 0, 7);
-      ctx.stroke();
-      ctx.lineWidth = 1;
-      ctx.globalAlpha = 1 - t; // fade the ship IN
-    }
     if (s.fade != null) ctx.globalAlpha = Math.max(s.fade, 0);
     if (s.disabled) ctx.globalAlpha = 0.6;
     drawSpin(ctx, spinOfShip(s.shipId), x, y, s.heading);
