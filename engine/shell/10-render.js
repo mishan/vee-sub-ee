@@ -349,6 +349,45 @@ export function drawPanel(w, h) {
   ctx.restore();
 }
 
+/* Nearest stellar object to the player (by distance), for the off-screen nav
+ * arrow when nothing is explicitly targeted. */
+function nearestSpob() {
+  let best = null,
+    bd = Infinity;
+  for (const p of S.spobs) {
+    const d = (p.x - player.x) ** 2 + (p.y - player.y) ** 2;
+    if (d < bd) {
+      bd = d;
+      best = p;
+    }
+  }
+  return best;
+}
+/* A green arrow from (cx,cy) pointing along `ang` — the off-screen nav pointer. */
+function drawNavArrow(cx, cy, ang) {
+  const dx = Math.cos(ang),
+    dy = Math.sin(ang),
+    nx = -dy,
+    ny = dx;
+  const r0 = 40,
+    r1 = 76,
+    head = 12;
+  ctx.strokeStyle = GREEN;
+  ctx.fillStyle = GREEN;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(cx + dx * r0, cy + dy * r0);
+  ctx.lineTo(cx + dx * r1, cy + dy * r1);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx + dx * (r1 + head), cy + dy * (r1 + head));
+  ctx.lineTo(cx + dx * r1 + nx * head * 0.75, cy + dy * r1 + ny * head * 0.75);
+  ctx.lineTo(cx + dx * r1 - nx * head * 0.75, cy + dy * r1 - ny * head * 0.75);
+  ctx.closePath();
+  ctx.fill();
+  ctx.lineWidth = 1;
+}
+
 export function render() {
   updateTouchUI();
   const w = innerWidth,
@@ -454,6 +493,16 @@ export function render() {
       meta.frameH,
     );
   }
+  // Nav arrow: when the nav target — or, with none set, the nearest stellar
+  // object — is off the viewscreen, blink a green arrow from the player toward it.
+  const navObj = S.navTarget || nearestSpob();
+  if (navObj && !S.landedAt && !S.jump) {
+    const [sx, sy] = toScreen(navObj.x, navObj.y);
+    if ((sx < 0 || sx > w || sy < 0 || sy > h) && Math.floor(Date.now() / 350) % 2 === 0) {
+      drawNavArrow(w / 2, h / 2, Math.atan2(navObj.y - player.y, navObj.x - player.x));
+    }
+  }
+
   drawPanel(w, h);
 
   // System + ship name only — the original HUD shows neither speed nor distance.
