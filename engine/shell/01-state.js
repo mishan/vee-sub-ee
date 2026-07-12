@@ -104,12 +104,13 @@ export const TEST_MODE = [
   'computer',
   'allmissions',
 ].some((k) => params.has(k));
-/* Single source of truth for the pilot save (localStorage 've_pilot').
- * capture() snapshots the live game state into the save schema; fresh() builds a
- * brand-new pilot; load/write/clear own the storage + v-tag handshake. The field
- * list living in one place is why savePilot/createPilot no longer each hand-roll
- * the blob. (Method bodies read state declared below — they only run later, at
- * save/create time, so forward references are fine.) */
+/* Single source of truth for the pilot save (the localStorage roster; see the
+ * "multi-pilot storage" block below). capture() snapshots the live game state
+ * into the save schema; fresh() builds a brand-new pilot; the storage methods own
+ * the roster/slots + v-tag handshake. The field list living in one place is why
+ * savePilot/createPilot no longer each hand-roll the blob. (Method bodies read
+ * state declared below — they only run later, at save/create time, so forward
+ * references are fine.) */
 export const Save = {
   capture(spobId) {
     return {
@@ -207,12 +208,18 @@ export const Save = {
       strict: !!p.strict,
     };
   },
+  // Absorb a stray single `ve_pilot` blob into the roster as a new active slot —
+  // both the old single-save format and a pilot dropped in by `evpilot.js import`
+  // (localStorage.setItem('ve_pilot', …)). Runs on every load, so it doubles as a
+  // simple import drop-box even once you already have a roster.
   _migrateLegacy() {
     const legacy = this._get(this.LEGACY);
-    if (!legacy || this._get(this.ROSTER)) return;
+    if (!legacy) return;
     const id = this._newId();
     if (this._set(this.slot(id), legacy)) {
-      this._set(this.ROSTER, [this._summary(id, legacy)]);
+      const r = this._get(this.ROSTER) || [];
+      r.push(this._summary(id, legacy));
+      this._set(this.ROSTER, r);
       this._set(this.ACTIVE, id);
       try {
         localStorage.removeItem(this.LEGACY);

@@ -101,7 +101,15 @@ if (require.main === module) {
       process.exit(1);
     }
     const key = process.argv[4] ? parseInt(process.argv[4], 16) : KEY_CLASSIC;
+    if (Number.isNaN(key)) {
+      console.error(`invalid keyHex '${process.argv[4]}' — expected a hex number`);
+      process.exit(1);
+    }
     const dumpBytes = process.argv[5] ? parseInt(process.argv[5], 10) : 512;
+    if (Number.isNaN(dumpBytes) || dumpBytes < 0) {
+      console.error(`invalid dumpBytes '${process.argv[5]}' — expected a non-negative integer`);
+      process.exit(1);
+    }
     const types = codec.parseTypes(codec.unwrapFork(bytesOf(file)));
     console.log('resource types found:');
     for (const t of types)
