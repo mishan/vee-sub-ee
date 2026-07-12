@@ -380,10 +380,38 @@ export function toggleMap() {
 }
 
 // --- wiring -----------------------------------------------------------------
+// A press that barely moves is a click (select/route); dragging pans the map.
+let drag = null;
 cv.addEventListener('pointerdown', (e) => {
   if (!S.mapOpen) return;
   const r = cv.getBoundingClientRect();
-  selectAt(e.clientX - r.left, e.clientY - r.top, e.shiftKey);
+  drag = {
+    sx: e.clientX - r.left,
+    sy: e.clientY - r.top,
+    cx: view.cx,
+    cy: view.cy,
+    shift: e.shiftKey,
+    moved: false,
+  };
+  cv.setPointerCapture?.(e.pointerId);
+});
+cv.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const r = cv.getBoundingClientRect();
+  const dx = e.clientX - r.left - drag.sx,
+    dy = e.clientY - r.top - drag.sy;
+  if (!drag.moved && Math.hypot(dx, dy) > 4) drag.moved = true;
+  if (drag.moved) {
+    view.cx = drag.cx - dx / view.scale; // screen delta → system-coord pan
+    view.cy = drag.cy - dy / view.scale;
+    draw();
+  }
+});
+cv.addEventListener('pointerup', (e) => {
+  if (!drag) return;
+  const r = cv.getBoundingClientRect();
+  if (!drag.moved) selectAt(e.clientX - r.left, e.clientY - r.top, drag.shift);
+  drag = null;
 });
 cv.addEventListener(
   'wheel',

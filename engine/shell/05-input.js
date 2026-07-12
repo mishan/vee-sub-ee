@@ -96,6 +96,13 @@ addEventListener('keydown', (e) => {
     e.preventDefault();
     return;
   }
+  // The galaxy map is modal (the sim is paused): only M and Escape close it; all
+  // other hotkeys are swallowed so the ship can't be flown behind it.
+  if (S.mapOpen) {
+    if (k === 'm' || e.key === 'Escape') closeMap();
+    e.preventDefault();
+    return;
+  }
   keys[e.key.toLowerCase()] = true;
   if (k === 'l') tryLand();
   if (k === 'm') toggleMap();
