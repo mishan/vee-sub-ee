@@ -12,11 +12,7 @@ import {
   spinOfShip,
 } from './01-state.js';
 import { applyShipStats, effectiveShip, fuelMax, holds, player } from './04-combat.js';
-import { hireEscort, dismissEscort } from './02-spawning.js';
-import { renderBar, renderComputer, doAcceptMission } from './16-missionboard.js';
-import { renderPlanetScreen } from './14-landing.js';
-import { Dialog } from './ui/dialog.js';
-import { renderExchange, renderOutfitter, renderShipyard } from './ui/shops.js';
+import { refreshView } from './ui/dialog.js';
 
 /*
  * engine/shell/07-trade.js — part of the browser flight shell.
@@ -49,82 +45,11 @@ export function trade(i, qty) {
   refreshView();
 }
 
-/* ---- service dialogs: exchange / outfitter / shipyard ---- */
+/* The service-dialog framework — the `View`/`activeView`/`refreshView` base
+ * (ui/dialog.js) and the concrete `openService`/`closeService`/`SERVICE_VIEWS`
+ * registry (ui/services.js) — used to live here; this module now keeps only the
+ * trade/outfit/shipyard *logic* the dialogs act on. */
 
-/* A modal dialog View: the DOM-only `Dialog` base (render + mount/refresh/hide +
- * data-action delegation) plus `activeView` tracking. `activeView` is whichever
- * View is showing (null = none); the shell reads it to know a dialog is up
- * (pause the sim, swallow keys). */
-export let activeView = null;
-export class View extends Dialog {
-  open() {
-    activeView = this;
-    super.open();
-  }
-  close() {
-    if (activeView === this) activeView = null;
-    super.close();
-  }
-}
-export const refreshView = () => {
-  if (activeView) activeView.refresh();
-};
-
-/* Actions for the mission board / hire dialog (16-missionboard renders its
- * buttons with data-action=…; the Dialog delegation routes them here). */
-const boardActions = {
-  selMisn: (id) => {
-    S.selMisnId = +id;
-    refreshView();
-  },
-  accept: () => doAcceptMission(S.selMisnId),
-  barTab: (k) => {
-    S.barTab = k;
-    refreshView();
-  },
-  close: () => closeService(),
-  hire: (id) => hireEscort(+id),
-  dismiss: (id) => dismissEscort(+id),
-};
-
-/* Actions for the exchange / outfitter / shipyard dialogs. Two-value buttons
- * (trade, buyOutfit) encode data-arg="a:b" and split it here. */
-const pair = (arg) => arg.split(':').map(Number);
-const shopActions = {
-  close: () => closeService(),
-  trade: (arg) => trade(...pair(arg)),
-  selectOutfit: (id) => selectOutfit(+id),
-  buyOutfit: (arg) => buyOutfit(...pair(arg)),
-  selectShip: (id) => selectShip(+id),
-  buyShip: (id) => buyShip(+id),
-};
-
-// The five landing-screen services share the one 'service' panel; each is a View
-// over a pure render function (renderExchange/… below and in 16-missionboard.js).
-export const SERVICE_VIEWS = {
-  exchange: new View('service', 'serviceCard', renderExchange, shopActions),
-  outfitter: new View('service', 'serviceCard', renderOutfitter, shopActions),
-  shipyard: new View('service', 'serviceCard', renderShipyard, shopActions),
-  bar: new View('service', 'serviceCard', renderBar, boardActions),
-  missioncomputer: new View('service', 'serviceCard', renderComputer, boardActions),
-};
-export function openService(kind) {
-  const gate = {
-    exchange: 'commodityExchange',
-    outfitter: 'outfitter',
-    shipyard: 'shipyard',
-    bar: 'bar',
-    missioncomputer: 'canLand',
-  }[kind];
-  if (!S.landedAt || !(S.landedAt.$sem && S.landedAt.$sem[gate])) return;
-  if (kind === 'outfitter' && !outfitterStock(S.landedAt).length) return;
-  if (kind === 'shipyard' && !shipyardStock(S.landedAt).length) return;
-  SERVICE_VIEWS[kind].open();
-}
-export function closeService() {
-  if (activeView) activeView.close();
-  renderPlanetScreen(); // refresh wallet line
-}
 /* tech availability (spec: spöb TechLevel gate + SpecialTech exact match) */
 export function techAvailable(itemTech, p) {
   if (itemTech <= p.TechLevel) return true;
