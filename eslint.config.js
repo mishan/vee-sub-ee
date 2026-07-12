@@ -89,6 +89,7 @@ module.exports = [
   {
     files: [
       'evrsrc.js',
+      'pilot-codec.js',
       'semantics.js',
       'loader/evbuild.js',
       'loader/evpict.js',
