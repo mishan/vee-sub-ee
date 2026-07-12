@@ -233,6 +233,17 @@ export class World {
     maybeSpawnBountyHunter();
     checkHostileAlert(this.ships);
     if (!S.landedAt) {
+      // Hyperspace-ready cue: with a destination armed and the fuel to take it,
+      // light the nav pane and ding once the instant you clear the no-jump ring
+      // (and again if you drift back out and clear it anew).
+      const jumpReady =
+        !S.jump &&
+        S.jumpDest != null &&
+        !!systs[S.jumpDest] &&
+        S.fuel >= EV.JUMP_FUEL &&
+        nearestSpobInfo().dist >= EV.JUMP_MIN_DIST;
+      if (jumpReady && !S.jumpReady) playSnd(150, 0.5); // ding on entering jump range
+      S.jumpReady = jumpReady;
       if (S.jump && this.player.deathT >= 0) abortJump(); // no jumping out of a fireball
       if (S.jump && S.jump.phase === 'engage') {
         const ready = EV.stepJumpEngage(this.player, mapBearingTo(S.jump.destId));

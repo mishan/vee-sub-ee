@@ -348,6 +348,24 @@ export function nearestSpobInfo() {
   }
   return { spob: best, dist: bd };
 }
+
+/* Push the just-arrived player out beyond the hyperspace no-jump ring so a
+ * chained route jump works the instant they arrive — ARRIVE_DIST alone lands
+ * inside the ring. Nudge straight away from the nearest object, iterating so a
+ * crowded system still settles clear of *every* object. */
+export function clearArrivalOfSpobs() {
+  const need = EV.JUMP_MIN_DIST + 200; // ring + a buffer to press J right away
+  for (let i = 0; i < 40; i++) {
+    const n = nearestSpobInfo();
+    if (!n.spob || n.dist >= need) break;
+    const dx = player.x - n.spob.x,
+      dy = player.y - n.spob.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const push = need - n.dist;
+    player.x += (dx / d) * push;
+    player.y += (dy / d) * push;
+  }
+}
 export let warpSnd = null;
 export function beginJump() {
   if (S.jump || S.landedAt) return;
@@ -384,6 +402,7 @@ export function completeJump() {
   // placeAtArrival wants the inbound bearing (origin → dest); from the
   // destination, mapBearingTo(origin) is the reverse bearing, so flip it.
   EV.placeAtArrival(player, EV.norm(mapBearingTo(from) + 180));
+  clearArrivalOfSpobs(); // materialise beyond the no-jump ring (chain-jump ready)
   spawnEscorts(); // fleet jumps in around the now-placed player
   S.fuel -= EV.JUMP_FUEL;
   S.jump = null;
