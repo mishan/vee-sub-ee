@@ -79,8 +79,8 @@ function portsOf(sysId) {
 function systemColor(sysId) {
   const raw = systs[sysId].Govt;
   if (!portsOf(sysId).length) return '#8a93a5'; // uninhabited (no ports) → gray
-  if (raw >= 128 && isPirate(raw)) return '#e06c75'; // pirates hostile on sight → red
-  if (legalOf(sysId) < 0 || isCriminalWith(sysId)) return '#e06c75'; // below clean → red
+  if (raw >= 128 && isPirate(raw)) return '#e70000'; // pirates hostile on sight → red
+  if (legalOf(sysId) < 0 || isCriminalWith(sysId)) return '#e70000'; // below clean → red
   if (raw >= 128 && isRestricted(sysId)) return '#e0a038'; // can't land (MinCoolness) → orange
   return '#0000e7'; // clean or better → blue (matched to the original's map blue)
 }
