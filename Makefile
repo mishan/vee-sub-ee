@@ -41,7 +41,7 @@ engine/core.bundle.js: engine/core.js package.json
 
 ## engine/shell.bundle.js – esbuild the ES-module flight shell (engine/shell/*.js,
 # entry main.js) into one IIFE. Generated (gitignored); injected at /*__SHELL__*/.
-engine/shell.bundle.js: $(wildcard engine/shell/*.js) package.json
+engine/shell.bundle.js: $(wildcard engine/shell/*.js engine/shell/ui/*.js) package.json
 	$(ESBUILD) engine/shell/main.js --bundle --format=iife \
 	  --banner:js='/* GENERATED from engine/shell/*.js by esbuild — do not edit. Rebuild: make engine/shell.bundle.js */' \
 	  --outfile=$@

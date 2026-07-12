@@ -5,7 +5,6 @@ import {
   cargo,
   drawGfxFit,
   drawSpin,
-  explored,
   gfxImg,
   html,
   preloadSprites,
@@ -15,12 +14,10 @@ import {
   sprites,
   systs,
 } from './01-state.js';
-import { fuelMax, holds, linkedSystems, player, poolKey } from './04-combat.js';
-import { TOUCH, updateTouchUI } from './05-input.js';
+import { fuelMax, holds, player, poolKey } from './04-combat.js';
+import { updateTouchUI } from './05-input.js';
 import { distTo } from './06-interaction.js';
 import { cargoNames } from './07-trade.js';
-import { govts } from './08-missions.js';
-import { combatRating, isCriminalWith, legalStatus } from './13-legal.js';
 
 /*
  * engine/shell/10-render.js — part of the browser flight shell.
@@ -352,113 +349,6 @@ export function drawPanel(w, h) {
   ctx.restore();
 }
 
-/* ---- galaxy map overlay ---- */
-
-export let mapHit = []; // clickable {x, y, id} in screen coords
-export function drawMap(w, h) {
-  mapHit = [];
-  const mw = Math.min(w * 0.72, 900),
-    mh = Math.min(h * 0.72, 620);
-  const mx = (w - mw) / 2,
-    my = (h - mh) / 2;
-  ctx.fillStyle = 'rgba(4,6,12,.93)';
-  ctx.strokeStyle = '#2a3550';
-  ctx.fillRect(mx, my, mw, mh);
-  ctx.strokeRect(mx, my, mw, mh);
-
-  const all = Object.entries(systs);
-  const xs = all.map(([, s]) => s.xPos),
-    ys = all.map(([, s]) => s.yPos);
-  const x0 = Math.min(...xs),
-    x1 = Math.max(...xs),
-    y0 = Math.min(...ys),
-    y1 = Math.max(...ys);
-  const sc = Math.min((mw - 60) / (x1 - x0), (mh - 60) / (y1 - y0));
-  const px = (s) => mx + 30 + (s.xPos - x0) * sc,
-    py = (s) => my + 30 + (s.yPos - y0) * sc;
-
-  ctx.lineWidth = 1;
-  for (const [id, s] of all)
-    for (let i = 1; i <= 16; i++) {
-      const c = s['Con' + i];
-      if (c >= 128 && systs[c] && +id < c && (explored.has(+id) || explored.has(c))) {
-        // fog: known links only
-        ctx.strokeStyle = 'rgba(90,110,160,.3)';
-        ctx.beginPath();
-        ctx.moveTo(px(s), py(s));
-        ctx.lineTo(px(systs[c]), py(systs[c]));
-        ctx.stroke();
-      }
-    }
-  const linked = linkedSystems();
-  for (const [id, s] of all) {
-    const x = px(s),
-      y = py(s);
-    const known = explored.has(+id),
-      adjacent = linked.includes(+id);
-    // fog of war (spec: "Map knowledge"): unexplored = dim anonymous dot
-    ctx.fillStyle = known ? radarColor(s.Govt) : 'rgba(120,130,150,.35)';
-    ctx.beginPath();
-    ctx.arc(x, y, known ? 3 : 2, 0, 7);
-    ctx.fill();
-    if (+id === S.SYSTEM_ID) {
-      ctx.strokeStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(x, y, 7, 0, 7);
-      ctx.stroke();
-    }
-    if (+id === S.jumpDest) {
-      ctx.strokeStyle = '#ffd479';
-      ctx.beginPath();
-      ctx.arc(x, y, 7, 0, 7);
-      ctx.stroke();
-    }
-    if (adjacent) mapHit.push({ x, y, id: +id });
-    if (known || adjacent) {
-      ctx.fillStyle = known ? '#cfd6e4' : '#7a869c';
-      ctx.font = '11px system-ui, sans-serif';
-      ctx.fillText(s.name ?? id, x + 8, y + 4);
-    }
-  }
-  // Legal status for the selected system (destination if chosen, else the
-  // current one), plus the player's combat rating.
-  const shownId = S.jumpDest >= 128 && systs[S.jumpDest] ? S.jumpDest : S.SYSTEM_ID;
-  const shownSys = systs[shownId];
-  const statusG = shownSys.Govt >= 128 ? shownSys.Govt : 128; // for the govt name
-  const status = legalStatus(shownId); // per-system record, labelled by its govt
-  const crim = isCriminalWith(shownId);
-  ctx.font = '12px system-ui, sans-serif';
-  ctx.fillStyle = '#8fa3c8';
-  ctx.fillText(
-    `${shownSys.name} (${govts[statusG] ? govts[statusG].name : 'Independent'}) — ` +
-      `legal status: `,
-    mx + 14,
-    my + mh - 30,
-  );
-  const w0 = ctx.measureText(
-    `${shownSys.name} (${govts[statusG] ? govts[statusG].name : 'Independent'}) — legal status: `,
-  ).width;
-  ctx.fillStyle = crim ? '#e06c75' : status === 'Clean' ? '#8fa3c8' : '#98c379';
-  ctx.fillText(status, mx + 14 + w0, my + mh - 30);
-  ctx.fillStyle = '#8fa3c8';
-  ctx.fillText(
-    `Combat rating: ${combatRating()}` +
-      `   ·   click a linked system, then J to jump` +
-      (S.fuel < EV.JUMP_FUEL ? '  (out of fuel!)' : ''),
-    mx + 14,
-    my + mh - 12,
-  );
-}
-canvas.addEventListener('pointerdown', (e) => {
-  if (!S.mapOpen) return;
-  for (const t of mapHit)
-    // generous hit radius so it works with a fingertip too
-    if (Math.hypot(e.clientX - t.x, e.clientY - t.y) < (TOUCH ? 22 : 12)) {
-      S.jumpDest = t.id;
-      return;
-    }
-});
-
 export function render() {
   updateTouchUI();
   const w = innerWidth,
@@ -577,7 +467,6 @@ export function render() {
     );
   }
   drawPanel(w, h);
-  if (S.mapOpen) drawMap(w, h);
 
   const speed = Math.hypot(player.vx, player.vy);
   document.getElementById('hud').innerHTML = html`

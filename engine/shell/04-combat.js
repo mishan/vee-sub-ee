@@ -318,7 +318,8 @@ export function applyShipStats() {
 /* jump state: null | {destId, phase:'engage'|'streak', t} */
 S.jump = null;
 S.mapOpen = false;
-S.jumpDest = null; // selected destination system id
+S.jumpDest = null; // next hyperspace hop (armed from the map's route)
+S.route = []; // planned multi-jump route (contiguous system ids ahead)
 
 export function linkedSystems() {
   const out = [];
@@ -386,7 +387,10 @@ export function completeJump() {
   spawnEscorts(); // fleet jumps in around the now-placed player
   S.fuel -= EV.JUMP_FUEL;
   S.jump = null;
-  S.jumpDest = null;
+  // Advance a planned route one hop at a time: if we just arrived at the next
+  // waypoint, drop it and arm the following one (press J to take it); else clear.
+  if (S.route && S.route.length && S.route[0] === S.SYSTEM_ID) S.route.shift();
+  S.jumpDest = S.route && S.route.length ? S.route[0] : null;
   checkExpiredMissions();
   chargeEscortUpkeep(); // pay the fleet's salaries; the unpaid quit here
   warpSnd = null; // Warp Up ends naturally as the streak completes

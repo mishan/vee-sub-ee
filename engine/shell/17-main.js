@@ -9,6 +9,7 @@ import { landedDialog, tryLand } from './14-landing.js';
 import { loadSystem, step } from './09-step.js';
 import { render } from './10-render.js';
 import { showSplash, showTitle } from './11-title.js';
+import { openMap } from './ui/map.js';
 
 /*
  * engine/shell/16-main.js — part of the browser flight shell.
@@ -45,7 +46,7 @@ if (params.has('fire')) keys[' '] = true; // test affordance: hold the trigger
 // Test/dev affordances (URL params): ?map=1 opens the map,
 // ?dest=<systId> preselects a destination, ?jump=1 engages the jump
 // autopilot, ?ff=N fast-forwards N logic frames before the first render.
-if (params.has('map')) S.mapOpen = true;
+if (params.has('map')) openMap();
 if (params.has('dest')) S.jumpDest = +params.get('dest');
 if (params.has('jump')) beginJump();
 export const FF = +(params.get('ff') || 0);

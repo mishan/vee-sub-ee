@@ -206,8 +206,9 @@ export class World {
 
   step() {
     // dialogs/splash/title pause the sim; landed pauses too — the system is
-    // frozen while docked and rebuilt fresh on takeoff.
-    if (S.gameOver || hailOpen || introUp() || S.landedAt) return;
+    // frozen while docked and rebuilt fresh on takeoff; the galaxy map pauses it
+    // while you plan a route.
+    if (S.gameOver || hailOpen || introUp() || S.landedAt || S.mapOpen) return;
     maybeSpawnBountyHunter();
     checkHostileAlert(this.ships);
     if (!S.landedAt) {
