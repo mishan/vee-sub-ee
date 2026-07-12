@@ -223,26 +223,52 @@ export function drawPanel(w, h) {
     ctx.fillRect(x - sz / 2, y - sz / 2, sz, sz);
     return [x, y];
   };
-  for (const p of S.spobs) blip(p, '#7fd0ff', 3);
+  const blinkOn = Math.floor(Date.now() / 350) % 2 === 0;
+  const RADAR_GREEN = '#5fe25f';
+  // basic radar mode: stellar objects are green circle outlines…
+  ctx.strokeStyle = RADAR_GREEN;
+  ctx.lineWidth = 1;
+  for (const p of S.spobs) {
+    const x = rcx + (p.x - player.x) * scale,
+      y = rcy + (p.y - player.y) * scale;
+    if (x < rx || x > rx + rw || y < ry || y > ry + rh) continue;
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, 7);
+    ctx.stroke();
+  }
+  // …and ships are brighter green dots (the selected target blinks yellow).
   for (const s of S.aiShips) {
-    const at = blip(s, s.playerEscort ? '#67d967' : radarColor(s.govt), 2);
-    if (at && s === S.shipTarget) {
-      ctx.strokeStyle = '#ffd479';
-      ctx.strokeRect(at[0] - 3, at[1] - 3, 6, 6);
-    }
+    const isTarget = s === S.shipTarget;
+    blip(s, isTarget && blinkOn ? '#ffd479' : RADAR_GREEN, isTarget ? 3 : 2);
   }
   ctx.fillStyle = '#fff';
   ctx.fillRect(rcx - 1.5, rcy - 1.5, 3, 3);
+  // Nav arrow on the mini nav screen: when the nav target — or, with none set,
+  // the nearest stellar object — is off the radar, blink a green arrow at the
+  // edge pointing toward it. (Clipped to the radar, so it can't spill out.)
+  const navObj = S.navTarget || nearestSpob();
+  if (navObj && blinkOn) {
+    const bx = rcx + (navObj.x - player.x) * scale,
+      by = rcy + (navObj.y - player.y) * scale;
+    if (bx < rx || bx > rx + rw || by < ry || by > ry + rh) {
+      const ang = Math.atan2(navObj.y - player.y, navObj.x - player.x);
+      drawNavArrow(rcx, rcy, ang, rw / 2 - 22, rw / 2 - 10, 6);
+    }
+  }
   ctx.restore();
 
-  /* shield & fuel bars */
+  /* shield & fuel bars. Once shields are gone the top bar becomes the ARMOR bar:
+   * the panel PICT's baked "Shield:" label is painted over with the panel
+   * background and re-lettered "Armor:", and the bar tracks armour instead. */
+  const shieldsUp = player.shields > 0;
+  if (!shieldsUp) {
+    ctx.fillStyle = '#002200'; // panel background — hide the baked "Shield:" label
+    ctx.fillRect(px + 8, py + 149, 40, 13);
+    panelText(px + 10, py + 160, 'Armor:');
+  }
   ctx.fillStyle = GREEN;
-  ctx.fillRect(
-    px + 60,
-    py + 154,
-    Math.round(74 * Math.max(0, player.shields / player.shieldMax)),
-    6,
-  );
+  const topFrac = shieldsUp ? player.shields / player.shieldMax : player.armor / player.armorMax;
+  ctx.fillRect(px + 60, py + 154, Math.round(74 * Math.max(0, topFrac)), 6);
   ctx.fillRect(px + 60, py + 170, Math.round(74 * (S.fuel / fuelMax)), 6);
 
   /* navigation pane (slot 1, right below shield/fuel — classic panel order): the
@@ -316,20 +342,21 @@ export function drawPanel(w, h) {
       S.shipTarget.bounty ? '#e06c75' : radarColor(S.shipTarget.govt),
       'center',
     );
+    // Status progression: Shields X% → Shields Down (shields gone, armour intact)
+    // → DISABLED (crippled). Down is amber, disabled red. No distance/speed — the
+    // original HUD shows neither.
     const shp = Math.round((100 * Math.max(0, S.shipTarget.shields)) / S.shipTarget.shieldMax);
-    panelText(
-      tb.x + tb.w / 2,
-      tb.y + 110,
-      S.shipTarget.disabled
-        ? 'DISABLED'
-        : `Shields ${shp}% · ${Math.round(distTo(S.shipTarget))}px`,
-      S.shipTarget.disabled ? '#e06c75' : GREEN,
-      'center',
-    );
+    const status = S.shipTarget.disabled
+      ? 'DISABLED'
+      : shp <= 0
+        ? 'Shields Down'
+        : `Shields ${shp}%`;
+    // disabled → gray (helpless), shields down → amber, otherwise green
+    const statusColor = S.shipTarget.disabled ? '#aab2be' : shp <= 0 ? '#e0a038' : GREEN;
+    panelText(tb.x + tb.w / 2, tb.y + 110, status, statusColor, 'center');
   } else if (S.navTarget) {
     drawSpin(ctx, spinOfSpob(S.navTarget), tb.x + tb.w / 2, tb.y + 44, 0);
     panelText(tb.x + tb.w / 2, tb.y + 98, S.navTarget.name, '#fff', 'center');
-    panelText(tb.x + tb.w / 2, tb.y + 110, `${Math.round(distTo(S.navTarget))}px`, GREEN, 'center');
   } else {
     panelText(tb.x + tb.w / 2, tb.y + 62, 'No target', DIMGREEN, 'center');
   }
@@ -347,6 +374,43 @@ export function drawPanel(w, h) {
       cy += 12;
     }
   ctx.restore();
+}
+
+/* Nearest stellar object to the player (by distance), for the off-screen nav
+ * arrow when nothing is explicitly targeted. */
+function nearestSpob() {
+  let best = null,
+    bd = Infinity;
+  for (const p of S.spobs) {
+    const d = (p.x - player.x) ** 2 + (p.y - player.y) ** 2;
+    if (d < bd) {
+      bd = d;
+      best = p;
+    }
+  }
+  return best;
+}
+/* A green arrow centred at (cx,cy) pointing along `ang`: a shaft from radius r0
+ * to r1 with an arrowhead of length `head` — the nav pointer on the radar. */
+function drawNavArrow(cx, cy, ang, r0, r1, head) {
+  const dx = Math.cos(ang),
+    dy = Math.sin(ang),
+    nx = -dy,
+    ny = dx;
+  ctx.strokeStyle = GREEN;
+  ctx.fillStyle = GREEN;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(cx + dx * r0, cy + dy * r0);
+  ctx.lineTo(cx + dx * r1, cy + dy * r1);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx + dx * (r1 + head), cy + dy * (r1 + head));
+  ctx.lineTo(cx + dx * r1 + nx * head * 0.75, cy + dy * r1 + ny * head * 0.75);
+  ctx.lineTo(cx + dx * r1 - nx * head * 0.75, cy + dy * r1 - ny * head * 0.75);
+  ctx.closePath();
+  ctx.fill();
+  ctx.lineWidth = 1;
 }
 
 export function render() {
@@ -385,7 +449,6 @@ export function render() {
     // disintegration: fade the hull out under the fireball (not a hard flicker)
     if (s.deathT >= 0) ctx.globalAlpha = Math.max(0, s.deathT / Math.max(s.deathDelay, 1));
     if (s.fade != null) ctx.globalAlpha = Math.max(s.fade, 0);
-    if (s.disabled) ctx.globalAlpha = 0.6;
     drawSpin(ctx, spinOfShip(s.shipId), x, y, s.heading);
     drawFlame(s, x, y);
     ctx.globalAlpha = 1;
@@ -394,7 +457,12 @@ export function render() {
         x,
         y,
         spriteHalf(spinOfShip(s.shipId), 32),
-        s.hostile ? 'rgba(224,108,117,.9)' : 'rgba(255,212,121,.9)',
+        // disabled → gray (a helpless hull), hostile → red, otherwise amber
+        s.disabled
+          ? 'rgba(170,178,190,.9)'
+          : s.hostile
+            ? 'rgba(224,108,117,.9)'
+            : 'rgba(255,212,121,.9)',
       );
   }
   if (!S.landedAt && !S.gameOver) {
@@ -456,9 +524,9 @@ export function render() {
   }
   drawPanel(w, h);
 
-  const speed = Math.hypot(player.vx, player.vy);
+  // System + ship name only — the original HUD shows neither speed nor distance.
   document.getElementById('hud').innerHTML = html`
-    <b>${S.syst.name}</b><br>${ships[S.playerShipId].name}<br>speed ${(speed * EV.FPS).toFixed(0)} px/s`;
+    <b>${S.syst.name}</b><br>${ships[S.playerShipId].name}`;
 
   // boardable disabled mission ship in range?
   const boardable = S.landedAt
@@ -471,6 +539,7 @@ export function render() {
           (s.misnGoal === 2 || s.misnGoal === 5) &&
           Math.hypot(s.x - player.x, s.y - player.y) < 50,
       );
+  const speed = Math.hypot(player.vx, player.vy); // for the "slow down to land" hint
   const near =
     S.landedAt ||
     S.jump ||
