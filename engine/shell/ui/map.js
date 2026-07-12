@@ -52,18 +52,21 @@ function isRestricted(sysId) {
   const rec = legalOf(sysId);
   return ports.every((p) => (p.MinCoolness || 0) > rec);
 }
+/* Landable spöbs ("ports"). A system with none is uninhabited. */
+function portsOf(sysId) {
+  return spobsOf(sysId).filter((p) => p.$sem && p.$sem.canLand);
+}
 /* Colour a system by the player's legal standing there (spec: "Galaxy map"):
- *   gray  — no governing presence at all (no controlling govt AND no settlement)
- *   red   — a governed/settled system where your status is below Clean, or a
- *           pirate (xenophobic) system, which is hostile on sight
+ *   gray  — uninhabited: no ports at all (no place to land)
+ *   red   — an inhabited system where your status is below Clean, or a pirate
+ *           (xenophobic) system, which is hostile on sight
  *   orange— a restricted system you can't currently land in (MinCoolness)
  *   blue  — Clean or better
- * Independent (Govt −1) systems still get a status (via the govt-128 fallback),
- * so a settled independent world is blue/red like anywhere else, not gray. */
+ * Independent (Govt −1) systems that have ports still get a status (via the
+ * govt-128 fallback), so they're blue/red like any inhabited system, not gray. */
 function systemColor(sysId) {
   const raw = systs[sysId].Govt;
-  const settled = spobsOf(sysId).some((p) => p.$sem && p.$sem.canLand && !p.$sem.uninhabited);
-  if (raw < 128 && !settled) return '#8a93a5'; // no government / no settlement → gray
+  if (!portsOf(sysId).length) return '#8a93a5'; // uninhabited (no ports) → gray
   if (raw >= 128 && isPirate(raw)) return '#e06c75'; // pirates hostile on sight → red
   if (legalOf(sysId) < 0 || isCriminalWith(sysId)) return '#e06c75'; // below clean → red
   if (raw >= 128 && isRestricted(sysId)) return '#e0a038'; // can't land (MinCoolness) → orange
@@ -71,11 +74,29 @@ function systemColor(sysId) {
 }
 
 // --- view helpers -----------------------------------------------------------
+// draw() applies a devicePixelRatio transform, so all map coordinates are in CSS
+// pixels — matching the pointer coordinates used for hit-testing. Compute from
+// the CSS size (cv.width is in device pixels).
+const cssW = () => cv.width / (devicePixelRatio || 1);
+const cssH = () => cv.height / (devicePixelRatio || 1);
 function px(s) {
-  return cv.width / 2 + (s.xPos - view.cx) * view.scale;
+  return cssW() / 2 + (s.xPos - view.cx) * view.scale;
 }
 function py(s) {
-  return cv.height / 2 + (s.yPos - view.cy) * view.scale;
+  return cssH() / 2 + (s.yPos - view.cy) * view.scale;
+}
+// Systems on the map: explored ones plus their direct neighbours (the only ones
+// rendered — and thus the only ones you can click). Route contiguity is still
+// enforced in selectAt().
+function visibleSystems() {
+  const vis = new Set();
+  for (const [id, s] of Object.entries(systs)) {
+    if (!explored.has(+id)) continue;
+    vis.add(+id);
+    for (let i = 1; i <= 16; i++)
+      if (s['Con' + i] >= 128 && systs[s['Con' + i]]) vis.add(s['Con' + i]);
+  }
+  return vis;
 }
 /* Centre on the player's system at a comfortable zoom that shows the neighbours. */
 function resetView() {
@@ -112,6 +133,10 @@ export function draw() {
   const routeSet = new Set(route);
   const linked = linkedSystems();
 
+  // Only explored systems and their direct neighbours are on the map at all;
+  // deeper unknown systems aren't shown (fog of war).
+  const visible = visibleSystems();
+
   // links (fog: only where an endpoint is explored)
   for (const [id, s] of Object.entries(systs)) {
     for (let i = 1; i <= 16; i++) {
@@ -140,6 +165,7 @@ export function draw() {
   const missionDest = missionDestSystems();
   for (const [idStr, s] of Object.entries(systs)) {
     const id = +idStr;
+    if (!visible.has(id)) continue; // fog: hide deep-unknown systems entirely
     const x = px(s),
       y = py(s);
     if (x < -20 || x > W + 20 || y < -20 || y > H + 20) continue;
@@ -215,8 +241,9 @@ function goodsOf(sysId) {
 function hazardsOf(sysId) {
   const s = systs[sysId];
   const hz = [];
-  if (s.Asteroids > 0) hz.push('Asteroids');
-  if (s.Interference > 0) hz.push('Interference');
+  const a = s.Asteroids; // 0–10 density
+  if (a > 0) hz.push(`${a <= 3 ? 'Light' : a <= 6 ? 'Moderate' : 'Heavy'} asteroid field`);
+  if (s.Interference > 0) hz.push(`${s.Interference >= 50 ? 'Heavy ' : ''}sensor interference`);
   return hz.length ? hz.join(', ') : 'None';
 }
 function fmtDate() {
@@ -233,28 +260,37 @@ function renderPanels() {
   const id = sel != null ? sel : S.SYSTEM_ID;
   const s = systs[id];
   const known = explored.has(id);
-  const g = govtOf(id);
-  const govtName = systs[id].Govt >= 128 && govts[g] ? govts[g].name : 'Independent';
-  const status = legalStatus(id);
-  const crim = isCriminalWith(id) || legalOf(id) < 0;
-  const goods = known ? goodsOf(id) : [];
-  const svc = known ? servicesOf(id) : [];
+  const ports = known ? portsOf(id).map((p) => p.name) : [];
+  // "Destination System" when it's a reachable jump target (adjacent / on the
+  // route); "Selected System" when you're just inspecting one.
+  const isDest = linkedSystems().includes(id) || (S.route || []).includes(id);
   const row = (label, val, color) =>
     html`<div class="mrow">
       <div class="mlabel">${label}</div>
       <div class="mval" style="${color ? `color:${color}` : ''}">${val}</div>
     </div>`;
-  infoEl.innerHTML = html`
-    ${row('Destination System', s.name ?? id)} ${row('Government', known ? govtName : 'Unknown')}
-    ${row('Legal Status', known ? status : 'Unknown', crim ? '#e06c75' : status === 'Clean' ? '' : '#98c379')}
-    ${row('Goods Traded', goods.length ? goods.join('\n') : '—')}
-    ${row('Services', svc.length ? svc.join(', ') : '—')}
-  `;
-  const ports = known
-    ? spobsOf(id)
-        .filter((p) => p.$sem && p.$sem.canLand)
-        .map((p) => p.name)
-    : [];
+  const title = row(isDest ? 'Destination System' : 'Selected System', s.name ?? id);
+  if (!known) {
+    infoEl.innerHTML = html`${title}
+      <div class="mrow"><div class="mval">Unexplored</div></div>`;
+  } else if (!ports.length) {
+    // no ports → uninhabited; no government/legal/trade to show
+    infoEl.innerHTML = html`${title}
+      <div class="mrow"><div class="mval">Uninhabited System</div></div>`;
+  } else {
+    const g = govtOf(id);
+    const govtName = s.Govt >= 128 && govts[g] ? govts[g].name : 'Independent';
+    const status = legalStatus(id);
+    const crim = isCriminalWith(id) || legalOf(id) < 0;
+    const goods = goodsOf(id);
+    const svc = servicesOf(id);
+    infoEl.innerHTML = html`
+      ${title} ${row('Government', govtName)}
+      ${row('Legal Status', status, crim ? '#e06c75' : status === 'Clean' ? '' : '#98c379')}
+      ${row('Goods Traded', goods.length ? goods.join('\n') : '—')}
+      ${row('Services', svc.length ? svc.join(', ') : '—')}
+    `;
+  }
   footEl.innerHTML = html`
     <div><b>Ports:</b> ${ports.length ? ports.join(', ') : 'None'}</div>
     <div><b>Navigation Hazards:</b> ${known ? hazardsOf(id) : 'Unknown'}</div>
@@ -266,8 +302,9 @@ function renderPanels() {
 function pickSystem(mx, my) {
   let best = null,
     bd = 18;
+  const visible = visibleSystems(); // any dot on the map is selectable/routable
   for (const [id, s] of Object.entries(systs)) {
-    if (!explored.has(+id) && !linkedSystems().includes(+id)) continue;
+    if (!visible.has(+id)) continue;
     const d = Math.hypot(mx - px(s), my - py(s));
     if (d < bd) {
       bd = d;
@@ -321,10 +358,12 @@ export function clearRoute() {
 // --- open / close -----------------------------------------------------------
 export function openMap() {
   S.mapOpen = true;
-  sel = S.jumpDest != null ? S.jumpDest : S.SYSTEM_ID;
   resetView();
   panel.style.display = 'flex';
   requestAnimationFrame(() => {
+    // set the selected system at first render, so a jumpDest a caller sets right
+    // after openMap() (e.g. 17-main's URL params) is reflected in the panel
+    sel = S.jumpDest != null ? S.jumpDest : S.SYSTEM_ID;
     draw();
     renderPanels();
   });
