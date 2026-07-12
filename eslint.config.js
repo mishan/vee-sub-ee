@@ -72,6 +72,10 @@ module.exports = [
       'evexport.js',
       'evatlas.js',
       'evpilot.js',
+      // pilot-codec is a CommonJS module consumed by require() (evpilot) and by a
+      // default import bundled into the shell (pilot-import); it isn't published
+      // as a browser-loader global, so it lints as a plain Node CJS module.
+      'pilot-codec.js',
       'tmpl2schema.js',
       'eslint.config.js',
       'loader/verify.js',
@@ -89,7 +93,6 @@ module.exports = [
   {
     files: [
       'evrsrc.js',
-      'pilot-codec.js',
       'semantics.js',
       'loader/evbuild.js',
       'loader/evpict.js',

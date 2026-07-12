@@ -81,8 +81,13 @@ function unwrapFork(a) {
     const n = d.getUint16(24);
     for (let i = 0; i < n; i++) {
       const e = 26 + i * 12;
-      if (d.getUint32(e) === 2)
-        return a.subarray(d.getUint32(e + 4), d.getUint32(e + 4) + d.getUint32(e + 8));
+      if (e + 12 > a.length) break; // entry count lies — stop rather than overrun
+      if (d.getUint32(e) === 2) {
+        const off = d.getUint32(e + 4),
+          len = d.getUint32(e + 8);
+        if (off + len <= a.length) return a.subarray(off, off + len);
+        break; // bogus offset/length — fall through to the clean error below
+      }
     }
   }
   if (looksLikeFork(a)) return a;
@@ -140,8 +145,10 @@ function parseTypes(fork) {
 // Returns { d: DataView of decrypted MpïL 128, shipName } or throws.
 function parsePilot(bytes) {
   const types = parseTypes(unwrapFork(bytes));
-  // MpïL = [0x4d,0x70,0x95,0x4c]; Nova (NpïL) swaps the first byte to 0x4e.
-  const is = (ty, b0) => ty.bytes[0] === b0 && ty.bytes[1] === 0x70 && ty.bytes[3] === 0x4c;
+  // MpïL = [0x4d,0x70,0x95,0x4c]; Nova (NpïL) swaps the first byte to 0x4e. Match
+  // all four bytes (incl. the MacRoman 'ï' 0x95) so a stray _p_L type can't hit.
+  const is = (ty, b0) =>
+    ty.bytes[0] === b0 && ty.bytes[1] === 0x70 && ty.bytes[2] === 0x95 && ty.bytes[3] === 0x4c;
   if (types.some((ty) => is(ty, 0x4e)))
     throw new Error('Nova (NpïL) pilots are not supported — only EV Classic / Override.');
   const mp = types.find((ty) => is(ty, 0x4d));
