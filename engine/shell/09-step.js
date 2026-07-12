@@ -1,6 +1,7 @@
 import {
   missionLog,
   S,
+  Save,
   TEST_MODE,
   escorts,
   explored,
@@ -232,13 +233,10 @@ export class World {
           playSnd(303);
           stopAllLoops();
           S.gameOver = true;
-          if (strictPlay)
-            try {
-              localStorage.removeItem('ve_pilot');
-            } catch {} // permadeath — the pilot is gone
+          if (strictPlay) Save.remove(Save.activeId()); // permadeath — pilot gone
           let hasPilot = false;
           try {
-            hasPilot = !TEST_MODE && !!localStorage.getItem('ve_pilot');
+            hasPilot = !TEST_MODE && !!Save.load();
           } catch {}
           document.getElementById('deadHint').textContent = strictPlay
             ? 'Strict Play: this pilot is gone for good. N: new pilot'

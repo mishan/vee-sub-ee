@@ -104,14 +104,14 @@ export const TEST_MODE = [
   'computer',
   'allmissions',
 ].some((k) => params.has(k));
-/* Single source of truth for the pilot save (localStorage 've_pilot').
- * capture() snapshots the live game state into the save schema; fresh() builds a
- * brand-new pilot; load/write/clear own the storage + v-tag handshake. The field
- * list living in one place is why savePilot/createPilot no longer each hand-roll
- * the blob. (Method bodies read state declared below — they only run later, at
- * save/create time, so forward references are fine.) */
+/* Single source of truth for the pilot save (the localStorage roster; see the
+ * "multi-pilot storage" block below). capture() snapshots the live game state
+ * into the save schema; fresh() builds a brand-new pilot; the storage methods own
+ * the roster/slots + v-tag handshake. The field list living in one place is why
+ * savePilot/createPilot no longer each hand-roll the blob. (Method bodies read
+ * state declared below — they only run later, at save/create time, so forward
+ * references are fine.) */
 export const Save = {
-  KEY: 've_pilot',
   capture(spobId) {
     return {
       v: 2,
@@ -160,26 +160,6 @@ export const Save = {
       strict: !!strict,
     };
   },
-  write(obj) {
-    const blob = JSON.stringify(obj);
-    try {
-      localStorage.setItem(this.KEY, blob);
-      return localStorage.getItem(this.KEY) === blob;
-    } catch {
-      return false;
-    } // trust nothing on file://
-  },
-  load() {
-    try {
-      const p = JSON.parse(localStorage.getItem(this.KEY));
-      if (!p) return null;
-      if (p.v === 2) return p;
-      if (p.v === 1) return this.migrateV1(p); // legal record went govt→system
-      return null;
-    } catch {
-      return null;
-    }
-  },
   // v1 stored the legal record per government; v2 stores it per system. Expand
   // each govt's value onto the systems it controls so an old pilot keeps its
   // standing under the per-system model.
@@ -192,10 +172,120 @@ export const Save = {
     }
     return { ...p, v: 2, rep };
   },
-  clear() {
+
+  /* ---- multi-pilot storage ----
+   * Each pilot lives under its own key `ve_pilot:<id>`; `ve_roster` is the index
+   * (light summaries for the Open Pilot list) and `ve_active` names the loaded
+   * pilot. The old single `ve_pilot` blob is migrated into a roster slot once. */
+  ROSTER: 've_roster',
+  ACTIVE: 've_active',
+  LEGACY: 've_pilot',
+  slot: (id) => 've_pilot:' + id,
+  _get(k) {
     try {
-      localStorage.removeItem(this.KEY);
+      return JSON.parse(localStorage.getItem(k));
+    } catch {
+      return null;
+    }
+  },
+  _set(k, v) {
+    try {
+      const b = JSON.stringify(v);
+      localStorage.setItem(k, b);
+      return localStorage.getItem(k) === b;
+    } catch {
+      return false; // trust nothing on file://
+    }
+  },
+  _summary(id, p) {
+    return {
+      id,
+      name: p.name || 'Pilot',
+      shipName: p.shipName || '',
+      ship: p.ship,
+      credits: p.credits,
+      day: p.day || 0,
+      strict: !!p.strict,
+    };
+  },
+  // Absorb a stray single `ve_pilot` blob into the roster as a new active slot —
+  // both the old single-save format and a pilot dropped in by `evpilot.js import`
+  // (localStorage.setItem('ve_pilot', …)). Runs on every load, so it doubles as a
+  // simple import drop-box even once you already have a roster.
+  _migrateLegacy() {
+    const legacy = this._get(this.LEGACY);
+    if (!legacy) return;
+    const id = this._newId();
+    if (this._set(this.slot(id), legacy)) {
+      const r = this._get(this.ROSTER) || [];
+      r.push(this._summary(id, legacy));
+      this._set(this.ROSTER, r);
+      this._set(this.ACTIVE, id);
+      try {
+        localStorage.removeItem(this.LEGACY);
+      } catch {}
+    }
+  },
+  _newId() {
+    return 'p' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+  },
+  roster() {
+    this._migrateLegacy();
+    return this._get(this.ROSTER) || [];
+  },
+  activeId() {
+    this._migrateLegacy();
+    return this._get(this.ACTIVE);
+  },
+  // Load the currently active pilot (v1→v2 migrated), or null.
+  load() {
+    this._migrateLegacy();
+    const id = this._get(this.ACTIVE);
+    if (!id) return null;
+    let p = this._get(this.slot(id));
+    if (!p) return null;
+    if (p.v === 1) p = this.migrateV1(p);
+    return p && p.v === 2 ? p : null;
+  },
+  // Save the active pilot in place (used by savePilot). With no active pilot
+  // yet, fall back to creating a slot.
+  write(obj) {
+    const id = this._get(this.ACTIVE);
+    if (!id) return this.create(obj) != null;
+    const ok = this._set(this.slot(id), obj);
+    if (ok) {
+      const r = this._get(this.ROSTER) || [];
+      const i = r.findIndex((e) => e.id === id);
+      if (i >= 0) r[i] = this._summary(id, obj);
+      else r.push(this._summary(id, obj));
+      this._set(this.ROSTER, r);
+    }
+    return ok;
+  },
+  // Add a new pilot slot and make it active (New Pilot / import). Returns its id.
+  create(obj) {
+    const id = this._newId();
+    if (!this._set(this.slot(id), obj)) return null;
+    const r = this._get(this.ROSTER) || [];
+    r.push(this._summary(id, obj));
+    this._set(this.ROSTER, r);
+    this._set(this.ACTIVE, id);
+    return id;
+  },
+  select(id) {
+    this._set(this.ACTIVE, id);
+  },
+  remove(id) {
+    try {
+      localStorage.removeItem(this.slot(id));
     } catch {}
+    const r = (this._get(this.ROSTER) || []).filter((e) => e.id !== id);
+    this._set(this.ROSTER, r);
+    if (this._get(this.ACTIVE) === id) this._set(this.ACTIVE, r.length ? r[r.length - 1].id : null);
+  },
+  // Abandon the active pilot (deselect, keep the roster) → back to the title.
+  clear() {
+    this._set(this.ACTIVE, null);
   },
 };
 
@@ -301,7 +391,7 @@ export function startNewPilot() {
   });
 }
 export function createPilot(name, ship, strict) {
-  if (!Save.write(Save.fresh(name, ship, strict))) {
+  if (!Save.create(Save.fresh(name, ship, strict))) {
     showMsg('Could not create the pilot — browser storage is unavailable.');
     return;
   }

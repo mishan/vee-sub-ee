@@ -135,14 +135,15 @@
   #hotAbout { left: 60%; top: 73%;  width: 27%; height: 8%; }
   #titleHint { position: fixed; bottom: 10px; width: 100%; text-align: center;
     color: #4d5b76; font-size: 12px; }
-  #about { position: fixed; inset: 0; display: none; align-items: center;
+  #about, #openpilot { position: fixed; inset: 0; display: none; align-items: center;
     justify-content: center; background: rgba(0,0,0,.8); z-index: 60; }
-  #about .card { width: 520px; max-height: 80vh; overflow-y: auto; background: #0c1120;
+  #about .card, #openpilot .card { width: 520px; max-height: 80vh; overflow-y: auto; background: #0c1120;
     border: 1px solid #2a3550; border-radius: 8px; padding: 22px 26px; }
-  #about h2 { margin: 0 0 8px; color: #7fff9a; }
+  #about h2, #openpilot h2 { margin: 0 0 8px; color: #7fff9a; }
   #about p { color: #aab6cc; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
-  #about button { margin-top: 14px; background: #1a2338; color: #cfd6e4;
+  #about button, #openpilot button { margin-top: 14px; background: #1a2338; color: #cfd6e4;
     border: 1px solid #2a3550; border-radius: 4px; padding: 6px 14px; cursor: pointer; }
+  #openpilot button.svc { margin-top: 0; }
   /* New Pilot dialogs — a classic light system-dialog look over the title */
   #npilot { display: none; position: fixed; inset: 0; z-index: 65; align-items: center;
     justify-content: center; background: rgba(0,0,0,.45); }
@@ -271,6 +272,8 @@
   <div id="titleHint">select a menu option · original EV title theme</div>
 </div>
 <div id="about"><div class="card" id="aboutCard"></div></div>
+<div id="openpilot"><div class="card" id="openPilotCard"></div></div>
+<input id="pilotFile" type="file" accept=".rsrc,.bin" style="display:none">
 <div id="npilot"><div class="card"></div></div>
 <div id="ff" role="button" tabindex="0" title="Toggle double speed (or Caps Lock)" onclick="toggleFastForward()">» 2×</div>
 <div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · K recall fighters · L land · B board · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · 2× speed · Esc</div>
