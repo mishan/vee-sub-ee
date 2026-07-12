@@ -203,7 +203,26 @@ export function beginDestruction(v) {
 }
 
 export function grudge(victim, attacker) {
-  if (attacker !== player || !victim.aiType) return;
+  // Friendly fire between AI ships (spec: "AI vs AI"): a ship damaged by another
+  // AI turns on it — warships/brave traders fight the foe, wimpy traders flee it
+  // — even against its own govt. The player's own side is immune: an escort's or
+  // the player's fire never makes an AI take one of them as a foe.
+  if (attacker !== player) {
+    if (
+      attacker &&
+      attacker.aiType &&
+      !attacker.playerEscort &&
+      victim.aiType &&
+      !victim.playerEscort &&
+      attacker !== victim &&
+      victim.deathT < 0
+    ) {
+      victim.foe = attacker;
+      if (victim.aiType < 2) victim.fleeing = true; // wimpy → run from the attacker
+    }
+    return;
+  }
+  if (!victim.aiType) return;
   const react = (s) => {
     if (s.aiType >= 3 || s.aiType === 2) s.hostile = true;
     else s.fleeing = true;

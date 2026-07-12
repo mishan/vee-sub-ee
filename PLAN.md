@@ -86,12 +86,13 @@ flight core is DOM-free JavaScript.
   loadouts + outfitter weapons/ammo, Impact knockback, ExplodType
   explosions (spïns 400-402), DeathDelay disintegration, warship AI
   (charge/fly-by/fire-in-range), trader flee/brave reactions, govt
-  hostility (xenophobic/alwaysAttacksPlayer) + player grudges, player
-  death + restart. Panel: real shield bar, target shields %/DISABLED,
-  secondary weapon pane (name + ammo available/capacity — classic
-  behavior, replacing an incorrect message mirror).
-  Deferred: BlastRadius area damage, friendly-fire between AI ships,
-  bööm/öops sounds. (Fighter bays landed later — see below.)
+  hostility (xenophobic/alwaysAttacksPlayer) + player grudges, AI-vs-AI
+  combat (warships engage govt-enemies within range; friendly fire earns
+  a foe), player death + restart. Panel: real shield bar, target shields
+  %/DISABLED, secondary weapon pane (name + ammo available/capacity —
+  classic behavior, replacing an incorrect message mirror).
+  Deferred: BlastRadius area damage, bööm/öops sounds. (Fighter bays
+  landed later — see below.)
 
 - **Milestone: audio** (browser). Spec'd
   ("Audio"): weapon fire snd 200+Sound per volley w/ distance attenuation

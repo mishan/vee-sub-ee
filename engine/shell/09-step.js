@@ -28,6 +28,9 @@ import {
 import { keys, touchCtl } from './05-input.js';
 import { hailOpen, onShipDestroyed } from './06-interaction.js';
 import {
+  govtAllies,
+  govtEnemies,
+  govts,
   maybeSpawnMissionShips,
   misnName,
   misns,
@@ -119,18 +122,74 @@ class EscortAI extends AI {
   }
 }
 
-/* A ship hostile to the player: close in and fire when aligned and in range. */
-class HunterAI extends AI {
+/* Govt hostility between two AI ships (spec: "AI vs AI"). True when `s` should
+ * attack `o` on sight: o's govt is s's govt's Enemy, or s's govt is xenophobic
+ * (attacks any non-ally — e.g. the Pirates). Same govt or allies never. */
+const ENGAGE_RANGE = 1600; // ambient warships only chase govt-enemies this close
+const govtFlags = (g) => (govts[g] && govts[g].$sem ? govts[g].$sem.flags : []);
+function aiEnemies(s, o) {
+  const sg = s.govt,
+    og = o.govt;
+  if (sg < 128 || og < 128 || sg === og) return false;
+  // Ally/Enemy are read in both directions, like legal relation() in 13-legal:
+  // either govt naming the other settles it, so the two sides can't disagree.
+  if (govtAllies(sg).includes(og) || govtAllies(og).includes(sg)) return false;
+  if (govtEnemies(sg).includes(og) || govtEnemies(og).includes(sg)) return true;
+  return govtFlags(sg).includes('xenophobic');
+}
+const foeValid = (s, world) =>
+  s.foe && s.foe.deathT < 0 && !s.foe.disabled && world.ships.includes(s.foe);
+
+/* The ship a combat AI should fight this frame, or null: the nearest of the
+ * player (only if hostile to it), a foe that has damaged it (any range), and —
+ * for ambient warships — the nearest govt-enemy within ENGAGE_RANGE. Mission and
+ * pers ships and the player's escorts are left out of ambient targeting. */
+function combatTarget(s, world) {
+  let best = null,
+    bd = Infinity;
+  const p = world.player;
+  if (s.hostile && p.deathT < 0 && !S.gameOver && !S.landedAt) {
+    best = p;
+    bd = Math.hypot(p.x - s.x, p.y - s.y);
+  }
+  const foe = foeValid(s, world) ? s.foe : (s.foe = null);
+  const hunts = s.aiType >= 3 && s.misnId == null && !s.isPers; // ambient warship
+  for (const o of world.ships) {
+    if (o === s || o.deathT >= 0 || o.disabled || o.playerEscort) continue;
+    let elig = o === foe;
+    if (!elig && hunts && o.misnId == null && !o.isPers && aiEnemies(s, o))
+      elig = Math.hypot(o.x - s.x, o.y - s.y) <= ENGAGE_RANGE;
+    if (!elig) continue;
+    const d = Math.hypot(o.x - s.x, o.y - s.y);
+    if (d < bd) {
+      bd = d;
+      best = o;
+    }
+  }
+  return best;
+}
+
+/* A warship (or brave trader with a grudge): fight the nearest hostile — the
+ * player, a foe, or an ambient govt-enemy — else cruise like a trader. */
+class WarshipAI extends AI {
   step(s, world) {
-    const r = EV.stepWarship(s, world.player.x, world.player.y);
-    if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, world.player, true);
+    const t = combatTarget(s, world);
+    if (!t) {
+      traderAI.step(s, world); // nothing to fight → cruise / loiter
+      return;
+    }
+    const r = EV.stepWarship(s, t.x, t.y);
+    if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, t, true);
   }
 }
 
-/* A frightened ship: turn tail to the player and run. */
+/* A frightened ship: turn tail and run — from the AI that shot it if it has one
+ * (keep fleeing it even after it's disabled/gone, not switch to the player),
+ * otherwise from the player. */
 class FleeAI extends AI {
   step(s, world) {
-    EV.stepFlee(s, world.player.x, world.player.y);
+    const from = s.foe || world.player;
+    EV.stepFlee(s, from.x, from.y);
   }
 }
 
@@ -190,18 +249,21 @@ class TraderAI extends AI {
 }
 
 const escortAI = new EscortAI(),
-  hunterAI = new HunterAI(),
+  warshipAI = new WarshipAI(),
   fleeAI = new FleeAI(),
   traderAI = new TraderAI();
 
-/* Pick the strategy for a ship this frame. The order and conditions match the
- * original if/else-if chain exactly: a hostile ship only hunts while the player
- * is alive and in flight; otherwise (and when not fleeing) it behaves as a
- * trader. */
+/* Pick the strategy for a ship this frame: escorts guard the player; a fleeing
+ * ship runs; warships (and brave traders with a grudge) fight via WarshipAI,
+ * which resolves whether there's actually a target (player / foe / govt-enemy)
+ * and otherwise cruises; everything else trades. */
 function aiFor(s, world) {
   if (s.playerEscort) return escortAI;
-  if (s.hostile && world.player.deathT < 0 && !S.gameOver && !S.landedAt) return hunterAI;
-  if (s.fleeing) return fleeAI;
+  if (s.fleeing) return fleeAI; // surrender / begged-off / wimpy trader running
+  // Warships fight (WarshipAI picks the target: player, foe, or govt-enemy); a
+  // brave trader turns warship once it's hostile to the player (grudge) or
+  // something has become its foe.
+  if (s.aiType >= 3 || (s.aiType === 2 && (s.hostile || foeValid(s, world)))) return warshipAI;
   return traderAI;
 }
 

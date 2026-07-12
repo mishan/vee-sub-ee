@@ -440,6 +440,20 @@ hostile to the player on sight; `xenophobic` → hostile to everyone
 except allies (approximated: everyone); any ship the player damages —
 and every same-govt ship in the system — holds a grudge for the session.
 
+**AI vs AI.** A warship (AIType 3/4) fights the nearest thing it should be
+fighting: the player (only when hostile to the player), a `foe` that has damaged
+it, or — ambient warships only — the nearest *other* ship it is govt-hostile to
+within an engagement range (≈1600 px). Govt-hostile means the target's govt is
+this govt's `Enemy`, or this govt is `xenophobic` (attacks any non-ally, e.g.
+the Pirates) — so pirates prey on traders and rival governments fight on sight,
+while a `Militia`/`Merchants`-style govt with no enemies stays peaceful. Mission
+and pers ships are kept out of this ambient targeting. With nothing to fight, a
+warship reverts to trader cruising. **Friendly fire between AI:** a ship damaged
+by another AI ship takes it as a `foe` — warships and brave (2) traders fight
+the foe (even one of their own govt); wimpy (1) traders flee it. The player and
+their escorts stay one friendly-fire-immune side: their shots pass through each
+other and never make an AI take one of them as a foe.
+
 **Player loadout**: the shïp record's stock `WeapType/WeapCount/AmmoLoad
 1–4` plus outfitter weapons (ModType 1; ModType 3 adds ammo to the
 matching weapon). Space fires all primary weapons; Q cycles secondary
