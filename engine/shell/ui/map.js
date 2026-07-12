@@ -56,14 +56,17 @@ function isPirate(g) {
 /* Can't land anywhere in a system because every inhabited spöb wants a higher
  * legal record than you hold there → "restricted" (orange). */
 function isRestricted(sysId) {
-  const ports = spobsOf(sysId).filter((p) => p.$sem && p.$sem.canLand && !p.$sem.uninhabited);
+  const ports = portsOf(sysId);
   if (!ports.length) return false;
   const rec = legalOf(sysId);
   return ports.every((p) => (p.MinCoolness || 0) > rec);
 }
-/* Landable spöbs ("ports"). A system with none is uninhabited. */
+/* Inhabited landable spöbs ("ports"). A system with none is uninhabited — a
+ * planet you can land on but that has no population/services (e.g. a barren
+ * `uninhabited` world) doesn't count, so systems whose only spöb is one of those
+ * read as uninhabited, matching the original. */
 function portsOf(sysId) {
-  return spobsOf(sysId).filter((p) => p.$sem && p.$sem.canLand);
+  return spobsOf(sysId).filter((p) => p.$sem && p.$sem.canLand && !p.$sem.uninhabited);
 }
 /* Colour a system by the player's legal standing there (spec: "Galaxy map"):
  *   gray  — uninhabited: no ports at all (no place to land)
