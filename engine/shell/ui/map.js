@@ -97,6 +97,38 @@ function px(s) {
 function py(s) {
   return cssH() / 2 + (s.yPos - view.cy) * view.scale;
 }
+// Convert raw map coordinates (not a system object) to screen space.
+const pxRaw = (mx) => cssW() / 2 + (mx - view.cx) * view.scale;
+const pyRaw = (my) => cssH() / 2 + (my - view.cy) * view.scale;
+
+/* Background nebulae / space phenomena (spec: nëbu). Each nëbu i uses PICT
+ * 9501+3i — the normal-zoom variant of its three (9500/9502 are the zoomed
+ * out/in ones). Positioned by XPos/YPos (top-left) and sized by XSize/YSize in
+ * map coordinates, the same space as the systems. Drawn additively so the black
+ * image background adds nothing and the cloud glows over the star field. */
+const nebImgs = {};
+function nebImg(nebuId) {
+  if (!nebImgs[nebuId]) {
+    const img = new Image();
+    img.onload = draw; // repaint once it arrives (the map may be idle)
+    img.src = 'evassets/graphics/PICT_' + (9501 + 3 * (nebuId - 128)) + '.png';
+    nebImgs[nebuId] = img;
+  }
+  return nebImgs[nebuId];
+}
+function drawNebulae(g) {
+  const nebu = typeof DATA !== 'undefined' && DATA.types.nebu;
+  if (!nebu) return;
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  g.globalAlpha = 0.9;
+  for (const [id, n] of Object.entries(nebu)) {
+    const img = nebImg(+id);
+    if (!img.complete || !img.naturalWidth) continue;
+    g.drawImage(img, pxRaw(n.XPos), pyRaw(n.YPos), n.XSize * view.scale, n.YSize * view.scale);
+  }
+  g.restore();
+}
 // Systems on the map: explored ones plus their direct neighbours (the only ones
 // rendered — and thus the only ones you can click). Route contiguity is still
 // enforced in selectAt().
@@ -140,6 +172,7 @@ export function draw() {
   g.clearRect(0, 0, W, H);
   g.fillStyle = '#04060c';
   g.fillRect(0, 0, W, H);
+  drawNebulae(g); // background phenomena (nëbu) behind the systems
 
   const route = S.route || [];
   const routeSet = new Set(route);

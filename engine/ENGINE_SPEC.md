@@ -166,7 +166,11 @@ system is inhabited (has a landable spöb = a "port"):
   record (`MinCoolness`) than you hold, so you can't currently land.
 - **blue** — Clean or better.
 
-Independent (Govt −1) systems that *have* ports still carry a legal standing (via
+Background **nebulae** (nëbu resources) are drawn behind the systems: each is
+positioned by XPos/YPos (top-left) and sized by XSize/YSize in map coordinates,
+using PICT `9501+3i` (the normal-zoom variant of nëbu i's three), composited
+additively so the cloud glows over the star field. Independent (Govt −1) systems
+that *have* ports still carry a legal standing (via
 the govt-128 fallback), so they're blue/red like any inhabited system — **not**
 gray. The system you're **currently in** gets a filled green dot inside its
 ring; the **selected** system gets a green square targeting reticle; a routed /
