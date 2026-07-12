@@ -233,6 +233,18 @@ export function drawPanel(w, h) {
   }
   ctx.fillStyle = '#fff';
   ctx.fillRect(rcx - 1.5, rcy - 1.5, 3, 3);
+  // Nav arrow on the mini nav screen: when the nav target — or, with none set,
+  // the nearest stellar object — is off the radar, blink a green arrow at the
+  // edge pointing toward it. (Clipped to the radar, so it can't spill out.)
+  const navObj = S.navTarget || nearestSpob();
+  if (navObj && Math.floor(Date.now() / 350) % 2 === 0) {
+    const bx = rcx + (navObj.x - player.x) * scale,
+      by = rcy + (navObj.y - player.y) * scale;
+    if (bx < rx || bx > rx + rw || by < ry || by > ry + rh) {
+      const ang = Math.atan2(navObj.y - player.y, navObj.x - player.x);
+      drawNavArrow(rcx, rcy, ang, rw / 2 - 22, rw / 2 - 10, 6);
+    }
+  }
   ctx.restore();
 
   /* shield & fuel bars. Once shields are gone the top bar becomes the ARMOR bar:
@@ -364,15 +376,13 @@ function nearestSpob() {
   }
   return best;
 }
-/* A green arrow from (cx,cy) pointing along `ang` — the off-screen nav pointer. */
-function drawNavArrow(cx, cy, ang) {
+/* A green arrow centred at (cx,cy) pointing along `ang`: a shaft from radius r0
+ * to r1 with an arrowhead of length `head` — the nav pointer on the radar. */
+function drawNavArrow(cx, cy, ang, r0, r1, head) {
   const dx = Math.cos(ang),
     dy = Math.sin(ang),
     nx = -dy,
     ny = dx;
-  const r0 = 40,
-    r1 = 76,
-    head = 12;
   ctx.strokeStyle = GREEN;
   ctx.fillStyle = GREEN;
   ctx.lineWidth = 3;
@@ -498,16 +508,6 @@ export function render() {
       meta.frameH,
     );
   }
-  // Nav arrow: when the nav target — or, with none set, the nearest stellar
-  // object — is off the viewscreen, blink a green arrow from the player toward it.
-  const navObj = S.navTarget || nearestSpob();
-  if (navObj && !S.landedAt && !S.jump) {
-    const [sx, sy] = toScreen(navObj.x, navObj.y);
-    if ((sx < 0 || sx > w || sy < 0 || sy > h) && Math.floor(Date.now() / 350) % 2 === 0) {
-      drawNavArrow(w / 2, h / 2, Math.atan2(navObj.y - player.y, navObj.x - player.x));
-    }
-  }
-
   drawPanel(w, h);
 
   // System + ship name only — the original HUD shows neither speed nor distance.
