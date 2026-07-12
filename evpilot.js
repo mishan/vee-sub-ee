@@ -107,11 +107,15 @@ function readPilotSummary(file) {
   const path = require('path');
   const { loadFork, parseFork } = require('./evrsrc.js');
   const types = parseFork(loadFork(file).fork);
-  // MpïL (Classic/Override) or NpïL (Nova): anchor the match so it can't hit an
-  // unrelated 4-char type. The `.` stands in for the MacRoman 'ï' (0x95) so we
-  // don't depend on how the decoder renders that byte.
-  const t = types.find((x) => /^[MN]p.L$/.test(x.typeName));
-  if (!t) throw new Error('no MpïL/NpïL pilot resource in ' + file);
+  // Only MpïL — the EV Classic/Override pilot resource. Nova (NpïL) uses a
+  // different seed key and struct and isn't supported, so reject it outright
+  // rather than decrypt it with the Classic key and emit garbage. The anchored
+  // match can't hit an unrelated 4-char type; `.` stands in for the MacRoman
+  // 'ï' (0x95) so we don't depend on how the decoder renders that byte.
+  if (types.some((x) => /^Np.L$/.test(x.typeName)))
+    throw new Error('Nova (NpïL) pilots are not supported — only EV Classic/Override');
+  const t = types.find((x) => /^Mp.L$/.test(x.typeName));
+  if (!t) throw new Error('no MpïL (Classic/Override) pilot resource in ' + file);
   const r128 = t.resources.find((r) => r.id === 128);
   const r129 = t.resources.find((r) => r.id === 129);
   if (!r128) throw new Error('no pilot-data (id 128) resource');
@@ -195,8 +199,13 @@ function toVeSave(file, DATA) {
   });
   // per-system legal record maps directly (keys are system ids in both)
   const rep = { ...s.legalBySystem };
-  // escorts: Vₑ stores live objects; the minimum a save needs is id + shipId
-  const escorts = s.escorts.map((shipId, i) => ({ id: i + 1, shipId }));
+  // escorts: Vₑ stores live objects; give each an id, hull, and a name (the UI
+  // renders escort.name), defaulting to the ship type's name like addEscort does
+  const escorts = s.escorts.map((shipId, i) => ({
+    id: i + 1,
+    shipId,
+    name: (DATA.types.ship[shipId] && DATA.types.ship[shipId].name) || 'Escort',
+  }));
   // Back-date the creation epoch so the in-game date (born + 250y at gameDay 0)
   // reads as the pilot's saved date.
   const born = new Date(s.date.year - 250, s.date.month - 1, s.date.day).getTime();
