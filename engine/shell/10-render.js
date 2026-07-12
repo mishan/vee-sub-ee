@@ -192,8 +192,12 @@ export function drawPanel(w, h) {
   // Shrink the fixed 144×480 sidebar to fit short (mobile landscape) screens;
   // no-op on desktop where the viewport is taller than the panel.
   const psc = Math.min(1, h / ph);
+  // Snap the panel origin to a whole device pixel. Vertical-centering with an
+  // odd window height (or a fractional DPR) otherwise lands it on a half pixel,
+  // smearing the bitmap's 1px beveled separators into wavy lines.
+  const snap = (v) => Math.round(v * devicePixelRatio) / devicePixelRatio;
   ctx.save();
-  ctx.translate(w - pw * psc, Math.max(0, (h - ph * psc) / 2));
+  ctx.translate(snap(w - pw * psc), snap(Math.max(0, (h - ph * psc) / 2)));
   ctx.scale(psc, psc);
   const px = 0,
     py = 0;
