@@ -134,31 +134,52 @@ class FleeAI extends AI {
   }
 }
 
-/* An ambient/mission trader: cruise to its target and land, then despawn (and
- * schedule a replacement) — or loiter if it's a catch-goal or an unoffered pers. */
+function despawnAI(s, world) {
+  world.ships.splice(world.ships.indexOf(s), 1);
+  if (S.shipTarget === s) S.shipTarget = null;
+}
+const randomSpob = () =>
+  S.spobs.length ? S.spobs[Math.floor(Math.random() * S.spobs.length)] : null;
+
+/* An ambient/mission trader: cruise to a planet, sit there a while, then take
+ * off and hyperspace out at the system edge (spec: "AI trader"). Catch-goal
+ * mission ships and unoffered pers loiter instead (they mustn't slip away);
+ * mission escorts complete their arrival on touchdown. */
 class TraderAI extends AI {
   step(s, world) {
-    const alive = EV.stepTrader(s, s.target);
-    // A plain trader that reaches its planet docks instantly (clean
-    // disappearance at the spob — no drawn-out ghost fade).
-    const docked = alive && !s.misnId && s.state === 'landing';
-    if (!alive || docked) {
-      if ((s.misnId != null && !s.escort) || (s.isPers && !s.offered)) {
-        // A catch-goal target (board/disable/destroy), or a named character
-        // still carrying an unaccepted job, mustn't slip away by landing —
-        // loiter near the spob instead of despawning.
-        s.target = S.spobs.length ? S.spobs[Math.floor(Math.random() * S.spobs.length)] : null;
+    EV.stepTrader(s, s.target);
+    const catchGoal = (s.misnId != null && !s.escort) || (s.isPers && !s.offered);
+    if (catchGoal) {
+      // Don't let it leave: if it lands or tries to depart, send it back to a
+      // planet and keep loitering in-system.
+      if (s.state === 'landed' || s.state === 'depart') {
         s.state = 'cruise';
-        s.fade = 1;
-      } else {
-        if (s.misnId != null && s.escort) onMissionEscortArrived(s);
-        world.ships.splice(world.ships.indexOf(s), 1);
-        if (S.shipTarget === s) S.shipTarget = null;
+        s.departing = false;
+        s.target = randomSpob();
+      }
+      return;
+    }
+    // A mission escort reaching its destination completes the mission arrival.
+    if (s.misnId != null && s.escort && s.state === 'landed') {
+      onMissionEscortArrived(s);
+      despawnAI(s, world);
+      return;
+    }
+    // Plain trader taking off: aim it at the system edge, then remove it once
+    // it's flown clear (a hyperspace-out) and schedule a replacement arrival.
+    if (s.state === 'depart') {
+      if (!s.departing) {
+        const a = Math.random() * Math.PI * 2;
+        s.target = { x: Math.cos(a) * 3000, y: Math.sin(a) * 3000 };
+        s.departing = true;
+      }
+      if (Math.hypot(s.x, s.y) > 2600) {
+        despawnAI(s, world);
         if (s.misnId == null) {
           const epoch = S.systEpoch;
           setTimeout(
             () => {
-              if (epoch === S.systEpoch) spawnAI(Math.random() < 0.5);
+              if (epoch === S.systEpoch) spawnAI(true);
             },
             2000 + Math.random() * 6000,
           );
@@ -318,7 +339,21 @@ export class World {
         }
         continue;
       }
-      if (s.warpIn > 0) s.warpIn--;
+      if (s.warpIn > 0) {
+        // Warp-in coast: the ship exits hyperspace above its top speed and
+        // decelerates to sub-light before its AI takes the helm. No steering,
+        // shields or fire yet — it's still slowing from the jump.
+        const sp = Math.hypot(s.vx, s.vy);
+        if (sp > s.maxSpeed * 1.02) {
+          const k = Math.max(s.maxSpeed / sp, 0.92);
+          s.vx *= k;
+          s.vy *= k;
+          EV.integrate(s);
+          s.warpIn--;
+          continue;
+        }
+        s.warpIn = 0; // dropped to sub-light (or entered at rest) → hand to AI
+      }
       if (s.disabled) {
         EV.integrate(s);
         continue;

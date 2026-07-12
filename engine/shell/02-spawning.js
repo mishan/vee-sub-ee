@@ -33,6 +33,23 @@ export function weighted(pairs) {
   }
   return pairs[0][0];
 }
+
+/* Arrive from hyperspace like the player does (spec: "Warp-in"): enter moving
+ * fast toward the interior point (tx,ty) and let the step loop decelerate the
+ * ship down to its sub-light top speed. Replaces the old pop-in ring — the ship
+ * comes in from off-screen and slows, the way ships and the player do in the
+ * original. */
+export function warpIntoSystem(e, tx = 0, ty = 0) {
+  const dx = tx - e.x,
+    dy = ty - e.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const entry = e.maxSpeed * 4; // hyperspace exit speed; coasts down to maxSpeed
+  e.vx = (dx / len) * entry;
+  e.vy = (dy / len) * entry;
+  e.heading = EV.bearing(dx, dy);
+  e.warpIn = 60; // safety cap; the coast ends as soon as it drops sub-light
+  playSnd(130, attenuate(e.x, e.y) * 0.7); // Warp In boom (faint when far off)
+}
 export function spawnAI(atEdge) {
   const pairsD = [];
   for (let i = 1; i <= 4; i++) {
@@ -51,8 +68,12 @@ export function spawnAI(atEdge) {
   const shipId = weighted(pairsS);
   if (shipId == null) return;
   const a = Math.random() * Math.PI * 2;
-  const r = atEdge ? 2400 : 400 + Math.random() * 1200;
-  const e = EV.makeShip(ships[shipId], Math.cos(a) * r, Math.sin(a) * r, Math.random() * 360);
+  // Arrivals appear just off-screen and warp in; the ambient population that's
+  // already here when you enter is scattered in-system.
+  const r = atEdge ? 1000 + Math.random() * 500 : 400 + Math.random() * 1200;
+  const ex = Math.cos(a) * r,
+    ey = Math.sin(a) * r;
+  const e = EV.makeShip(ships[shipId], ex, ey, Math.random() * 360);
   e.shipId = shipId;
   e.govt = dudes[dudeId].Govt;
   e.aiType = dudes[dudeId].AIType;
@@ -69,10 +90,9 @@ export function spawnAI(atEdge) {
   // a warship attacks on sight if you're a criminal in THIS system and its govt
   // enforces here — the local government, an ally, or a "laws everywhere" govt
   if (e.aiType >= 3 && enforcesHere(e.govt)) e.hostile = true;
-  // Warp-in: ships hyperspace into the system (a brief flash) rather than
-  // popping into existence. Arrivals near the player get the warp sound.
-  e.warpIn = 18;
-  if (atEdge) playSnd(130, attenuate(e.x, e.y) * 0.7); // Warp Out (arrival boom)
+  // Arrivals warp in from off-screen at speed and decelerate; the already-present
+  // ambient population is just there (no warp-in).
+  if (atEdge) warpIntoSystem(e, 0, 0);
   S.aiShips.push(e);
 }
 
@@ -97,7 +117,12 @@ export function makeEscort(esc) {
   e.escId = esc.id;
   e.misnName = esc.name;
   e.target = null;
-  e.warpIn = 12;
+  // Escorts warp with the player and arrive at the same instant: they inherit
+  // the player's velocity, so on a jump-in they exit hyperspace moving together
+  // (and on takeoff, when the player is stationary, they launch stationary too).
+  e.vx = player.vx;
+  e.vy = player.vy;
+  e.warpIn = 0;
   armShip(e, rec);
   preloadSprites([spinOfShip(esc.shipId)]);
   S.aiShips.push(e);
@@ -143,7 +168,10 @@ export function launchFighter(w) {
   e.bayWeapId = w.id;
   e.misnName = rec.name;
   e.target = null;
-  e.warpIn = 8;
+  // Fighters launch from the carrier, matching its motion (no warp-in).
+  e.vx = player.vx;
+  e.vy = player.vy;
+  e.warpIn = 0;
   armShip(e, rec);
   preloadSprites([spinOfShip(e.shipId)]);
   S.aiShips.push(e);
@@ -306,13 +334,13 @@ export function maybeSpawnBountyHunter() {
   e.booty = dude.Booty || 0;
   e.hostile = true;
   e.bounty = true;
-  e.warpIn = 18;
   e.target = S.spobs.length ? S.spobs[Math.floor(Math.random() * S.spobs.length)] : null;
   armShip(e, ships[shipId]);
   const names = DATA.strings[10008] && DATA.strings[10008].list;
   e.misnName =
     names && names.length ? names[Math.floor(Math.random() * names.length)] : 'Bounty Hunter';
-  playSnd(130, attenuate(e.x, e.y) * 0.6);
+  // A bounty hunter hyperspaces in after you, bearing down from off-screen.
+  warpIntoSystem(e, player.x, player.y);
   S.aiShips.push(e);
   showMsg('A bounty hunter has jumped in!');
 }
