@@ -8,6 +8,7 @@ import { showMissionBriefing } from './08-missions.js';
 import { takeOff, tryLand } from './14-landing.js';
 import { boardTarget } from './12-boarding.js';
 import { advanceSplash, introUp, splashShown, titleShown } from './11-title.js';
+import { closeMap, toggleMap } from './ui/map.js';
 
 /*
  * engine/shell/05-input.js — part of the browser flight shell.
@@ -97,13 +98,9 @@ addEventListener('keydown', (e) => {
   }
   keys[e.key.toLowerCase()] = true;
   if (k === 'l') tryLand();
-  if (k === 'm') {
-    S.mapOpen = !S.mapOpen;
-  }
-  if (k === 'j') {
-    if (S.mapOpen) S.mapOpen = false;
-    beginJump();
-  }
+  if (k === 'm') toggleMap();
+  // Jump only from flight — you plan on the map, then exit (Done/Esc) and press J.
+  if (k === 'j' && !S.mapOpen) beginJump();
   if (k === 'n' && S.gameOver) {
     newPilot();
     return;
@@ -145,7 +142,7 @@ addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (hailOpen) closeHail();
     else if (activeView) closeService();
-    else if (S.mapOpen) S.mapOpen = false;
+    else if (S.mapOpen) closeMap();
     else if (S.jump && S.jump.phase === 'engage') abortJump();
     else if (S.landedAt) takeOff();
     else if (S.shipTarget) {
@@ -220,11 +217,10 @@ export function touchAction(act) {
       hail();
       break;
     case 'map':
-      S.mapOpen = !S.mapOpen;
+      toggleMap();
       break;
     case 'jump':
-      if (S.mapOpen) S.mapOpen = false;
-      beginJump();
+      if (!S.mapOpen) beginJump();
       break;
     case 'missions':
       showMissionBriefing();

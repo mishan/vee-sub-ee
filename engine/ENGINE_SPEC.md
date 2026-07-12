@@ -135,6 +135,27 @@ are labeled and clickable (you can jump into the unknown); everything else
 is a dim, unlabeled dot (position only). Links render when either endpoint
 is explored. (Classic's `VisBit` conditional visibility: deferred.)
 
+## Galaxy map (shell; browser leg)
+
+`M` opens the galaxy map — a DOM overlay (canvas star map + info panels + Done/
+±/Clear Route buttons; `engine/shell/ui/map.js`), not the flight canvas. It opens
+centred on the player's system; `+`/`−` and the mouse wheel zoom. Systems are
+coloured by the player's standing **there** (per-system legal record): blue at
+Clean or better, red below Clean, red for pirate (xenophobic) govts (hostile on
+sight), gray for independent (no-govt) systems, and orange when the system is
+*restricted* — every inhabited spöb wants a higher record (`MinCoolness`) than
+you hold. Unexplored systems stay dim (fog). Active-mission destination systems
+get a red ✕. The right panel shows the selected system's Destination System,
+Government, Legal Status, Goods Traded and Services; the bottom bar shows Ports,
+Navigation Hazards, combat rating and the (4-digit-year) date.
+
+**Routing.** Clicking a system adjacent to the current one starts a jump route
+(its link lights green). Shift-clicking a system adjacent to the route's end
+appends a waypoint; a multi-hop route draws wider. Clear Route empties it. You
+plan on the map, then leave (Done/Esc) and press `J` to fly it — **one hop at a
+time**: exiting arms the route's next system as the jump target, and on arrival
+the following waypoint is armed. `J` does nothing while the map is open.
+
 ## Trading (game rules, not flight core)
 
 Six commodities, in flag-nibble order: food, industrial, medical, luxury,

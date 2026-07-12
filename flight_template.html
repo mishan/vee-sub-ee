@@ -144,6 +144,28 @@
   #about button, #openpilot button { margin-top: 14px; background: #1a2338; color: #cfd6e4;
     border: 1px solid #2a3550; border-radius: 4px; padding: 6px 14px; cursor: pointer; }
   #openpilot button.svc { margin-top: 0; }
+  /* Galaxy map — DOM overlay: framed star map + info/side panels + buttons */
+  #map { position: fixed; inset: 0; display: none; z-index: 65; background: #05070d;
+    flex-direction: row; padding: 14px; gap: 12px; box-sizing: border-box;
+    font: 13px Geneva, Verdana, sans-serif; }
+  #mapMain { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #mapCanvas { flex: 1; width: 100%; min-height: 0; border: 1px solid #2e6b3a;
+    border-radius: 4px; background: #04060c; display: block; }
+  #mapControls { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: #7fdf8f; }
+  #mapControls button { background: #12331a; color: #9fe8ac; border: 1px solid #2e6b3a;
+    border-radius: 4px; padding: 4px 12px; cursor: pointer; font: inherit; }
+  #mapControls button:hover { background: #1a4a26; }
+  #mapFooter { margin-left: auto; text-align: right; color: #7fdf8f; line-height: 1.35; font-size: 12px; }
+  #mapFooter .mrating { color: #4f8f63; font-size: 11px; }
+  #mapSide { width: 232px; display: flex; flex-direction: column; gap: 12px; }
+  #mapInfo { flex: 1; background: #071a0e; border: 1px solid #2e6b3a; border-radius: 6px;
+    padding: 14px 16px; color: #9fe8ac; overflow-y: auto; }
+  #mapInfo .mrow { margin-bottom: 12px; }
+  #mapInfo .mlabel { color: #4f8f63; font-size: 11px; }
+  #mapInfo .mval { color: #cfeecd; white-space: pre-line; }
+  #mapDone { background: #12331a; color: #cfeecd; border: 1px solid #2e6b3a; border-radius: 6px;
+    padding: 11px; font-size: 14px; cursor: pointer; }
+  #mapDone:hover { background: #1a4a26; }
   /* New Pilot dialogs — a classic light system-dialog look over the title */
   #npilot { display: none; position: fixed; inset: 0; z-index: 65; align-items: center;
     justify-content: center; background: rgba(0,0,0,.45); }
@@ -275,6 +297,21 @@
 <div id="openpilot"><div class="card" id="openPilotCard"></div></div>
 <input id="pilotFile" type="file" accept=".rsrc,.bin" style="display:none">
 <div id="npilot"><div class="card"></div></div>
+<div id="map">
+  <div id="mapMain">
+    <canvas id="mapCanvas"></canvas>
+    <div id="mapControls">
+      <button id="mapZoomOut" title="Zoom out">−</button>
+      <button id="mapZoomIn" title="Zoom in">+</button>
+      <button id="mapClearRoute">Clear Route</button>
+      <div id="mapFooter"></div>
+    </div>
+  </div>
+  <div id="mapSide">
+    <div id="mapInfo"></div>
+    <button id="mapDone">Done</button>
+  </div>
+</div>
 <div id="ff" role="button" tabindex="0" title="Toggle double speed (or Caps Lock)" onclick="toggleFastForward()">» 2×</div>
 <div id="help">← → ↑ ↓ fly · Space fire · Q/X secondary · K recall fighters · L land · B board · N/Tab target · Y hail · I missions · M map · J jump · V sound · [ ] volume · 2× speed · Esc</div>
 <script>/*__ENGINE__*/</script>
