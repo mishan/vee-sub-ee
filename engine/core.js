@@ -18,7 +18,11 @@
  * ES modules) — see test/core.test.mjs, run by `npm test`.
  */
 
-const FPS = 30;
+// Sim tick rate. The per-frame physics below are unchanged; the wall-clock pace
+// is (px/frame)·FPS, so running at 60 Hz makes the whole game move at the
+// original's real-time speed — our old 30 Hz was half that (it matched the
+// original only with the 2× pill held down). The 2× pill still doubles this.
+const FPS = 60;
 
 /* ---- unit conversions (spec: "Ship stat conversions") ---- */
 const maxSpeedOf = (rec) => rec.Speed / 100; // px/frame
@@ -38,9 +42,11 @@ const LAND_DIST = 60,
 
 /* ---- hyperjump (spec: "Hyperjump") ---- */
 const JUMP_FUEL = 100,
-  JUMP_STREAK_FRAMES = 30,
+  JUMP_STREAK_FRAMES = 60, // 1s at 60 Hz
   ARRIVE_DIST = 700;
-const JUMP_WARMUP_FRAMES = 220; // hyperdrive spin-up before the streak
+const JUMP_WARMUP_FRAMES = 440; // ~7.3s hyperdrive spin-up before the streak;
+// warmup + streak = 500 frames / 60 Hz = 8.3s, matching the Warp Up sound (these
+// are doubled from the old 30 Hz values so the cinematic keeps its real duration)
 const JUMP_MIN_DIST = 800; // no jumping this close to a spöb (approx.)
 
 /* ---- combat (spec: "Combat") ---- */

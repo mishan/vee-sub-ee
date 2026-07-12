@@ -97,7 +97,10 @@ README "Legal shape of the project" and "Distribution".
 ## Known approximations (flagged for verification)
 
 - Physics conversions (Speed/100 px/frame, Accel/9000 px/frame², Maneuver
-  °/frame @30Hz) are tuned for feel, not measured against the original.
+  °/frame) are tuned for feel, not measured against the original. The sim
+  runs at 60Hz: per-frame values were tuned at 30Hz, but the tick rate was
+  doubled so real-time pace matches the original (30Hz was half-speed — it
+  only matched with the 2× pill held).
 - Commodity price multipliers 0.80/1.00/1.25 are community values; the
   bible names levels only. Ship trade-in (25% of hull+upgrades) IS from
   the bible.

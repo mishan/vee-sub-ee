@@ -17,7 +17,7 @@ test('ship stat conversions (spec table)', () => {
   close(EV.maxSpeedOf(SHUTTLE), 2.75); // Speed / 100 px/frame
   close(EV.accelOf(SHUTTLE), 435 / 9000); // Accel / 9000 px/frame²
   assert.equal(EV.turnOf(SHUTTLE), 4); // Maneuver deg/frame
-  assert.equal(EV.FPS, 30);
+  assert.equal(EV.FPS, 60); // 60 Hz tick rate (2× the old 30 Hz) for real-time pace
 });
 
 test('angle helpers', () => {
@@ -109,8 +109,8 @@ test('Ship.placeAtTakeoff parks the ship stationary above the spob', () => {
 
 test('hyperjump constants match the spec', () => {
   assert.equal(EV.JUMP_FUEL, 100);
-  assert.equal(EV.JUMP_WARMUP_FRAMES, 220);
-  assert.equal(EV.JUMP_STREAK_FRAMES, 30); // 220 + 30 = 250 ≈ 8.3s Warp Up
+  assert.equal(EV.JUMP_WARMUP_FRAMES, 440);
+  assert.equal(EV.JUMP_STREAK_FRAMES, 60); // 440 + 60 = 500 / 60 Hz = 8.3s Warp Up
   assert.equal(EV.ARRIVE_DIST, 700);
   assert.equal(EV.JUMP_MIN_DIST, 800);
 });
