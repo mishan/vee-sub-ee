@@ -224,12 +224,22 @@ export function drawPanel(w, h) {
     return [x, y];
   };
   const blinkOn = Math.floor(Date.now() / 350) % 2 === 0;
-  for (const p of S.spobs) blip(p, '#7fd0ff', 3);
+  const RADAR_GREEN = '#5fe25f';
+  // basic radar mode: stellar objects are green circle outlines…
+  ctx.strokeStyle = RADAR_GREEN;
+  ctx.lineWidth = 1;
+  for (const p of S.spobs) {
+    const x = rcx + (p.x - player.x) * scale,
+      y = rcy + (p.y - player.y) * scale;
+    if (x < rx || x > rx + rw || y < ry || y > ry + rh) continue;
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, 7);
+    ctx.stroke();
+  }
+  // …and ships are brighter green dots (the selected target blinks yellow).
   for (const s of S.aiShips) {
-    const base = s.playerEscort ? '#67d967' : radarColor(s.govt);
-    // the selected target blinks yellow (no box around it)
     const isTarget = s === S.shipTarget;
-    blip(s, isTarget && blinkOn ? '#ffd479' : base, isTarget ? 3 : 2);
+    blip(s, isTarget && blinkOn ? '#ffd479' : RADAR_GREEN, isTarget ? 3 : 2);
   }
   ctx.fillStyle = '#fff';
   ctx.fillRect(rcx - 1.5, rcy - 1.5, 3, 3);
@@ -336,7 +346,11 @@ export function drawPanel(w, h) {
     // → DISABLED (crippled). Down is amber, disabled red. No distance/speed — the
     // original HUD shows neither.
     const shp = Math.round((100 * Math.max(0, S.shipTarget.shields)) / S.shipTarget.shieldMax);
-    const status = S.shipTarget.disabled ? 'DISABLED' : shp <= 0 ? 'Shields Down' : `Shields ${shp}%`;
+    const status = S.shipTarget.disabled
+      ? 'DISABLED'
+      : shp <= 0
+        ? 'Shields Down'
+        : `Shields ${shp}%`;
     // disabled → gray (helpless), shields down → amber, otherwise green
     const statusColor = S.shipTarget.disabled ? '#aab2be' : shp <= 0 ? '#e0a038' : GREEN;
     panelText(tb.x + tb.w / 2, tb.y + 110, status, statusColor, 'center');
