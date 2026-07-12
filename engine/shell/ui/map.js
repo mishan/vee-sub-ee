@@ -82,7 +82,7 @@ function systemColor(sysId) {
   if (raw >= 128 && isPirate(raw)) return '#e06c75'; // pirates hostile on sight → red
   if (legalOf(sysId) < 0 || isCriminalWith(sysId)) return '#e06c75'; // below clean → red
   if (raw >= 128 && isRestricted(sysId)) return '#e0a038'; // can't land (MinCoolness) → orange
-  return '#5c88ee'; // clean or better → blue (matched to the original's map blue)
+  return '#0000e7'; // clean or better → blue (matched to the original's map blue)
 }
 
 // --- view helpers -----------------------------------------------------------
