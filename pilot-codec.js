@@ -12,9 +12,12 @@
  *   0x0000 i16   docked spöb (−128)        0x0014 i16   date month
  *   0x0002 i16   ship type (−128)          0x0016 i16   date day
  *   0x0004 i16×6 cargo tons/commodity      0x0018 i16   date year
- *   0x08ea i16×108 legal record per system 0x11ba u32   credits
- *   0x124e misn×6 (382B each; see MISN)    0x251a i16×72 escorts (−1 empty, else −128)
- *   0x25ac i16   kills → combat rating
+ *   0x001a i16×108 exploration per system  0x08ea i16×108 legal record per system
+ *   0x11ba u32   credits                   0x124e misn×6 (382B each; see MISN)
+ *   0x251a i16×72 escorts (−1 empty…)      0x25ac i16   kills → combat rating
+ * Exploration values: ≤0 unexplored, 1 visited, 2 visited+landed (per the EV Nova
+ * pilot-format doc, whose PlayerFileDataStruct field order EV Classic shares:
+ * https://andrews05.github.io/evstuff/guides/pilotformat.txt).
  * The ship name is the name of MpïL resource 129; the pilot name is the file name.
  */
 'use strict';
@@ -27,6 +30,7 @@ const u32 = (x) => x >>> 0;
 const COMMODITIES = ['Food', 'Industrial', 'Medical', 'Luxury Goods', 'Metal', 'Equipment'];
 const VE_COMMODITIES = ['food', 'industrial', 'medical', 'luxury', 'metal', 'equipment'];
 const OFF = { spob: 0x00, ship: 0x02, cargo: 0x04, month: 0x14, day: 0x16, year: 0x18 };
+const EXPLORE = { off: 0x1a, count: 108 }; // per-system exploration: ≤0 none, 1 seen, 2 landed
 const LEGAL = { off: 0x08ea, count: 108 };
 const ESCORTS = { off: 0x251a, count: 72 };
 const CREDITS = 0x11ba;
@@ -231,6 +235,14 @@ function toSave(bytes, filename, DATA) {
     const v = d.getInt16(LEGAL.off + 2 * i);
     if (v !== 0) rep[128 + i] = v;
   }
+  // Explored systems come from the real per-system exploration array — NOT from
+  // which systems have a legal record. The two diverge both ways: legal changes
+  // spread to systems you've never visited, and systems you visited cleanly keep
+  // a 0 record. exploration[i] ≥ 1 means the player has been to system 128+i.
+  const explored = [syst];
+  for (let i = 0; i < EXPLORE.count; i++) {
+    if (d.getInt16(EXPLORE.off + 2 * i) >= 1) explored.push(128 + i);
+  }
   const escorts = [];
   for (let i = 0; i < ESCORTS.count; i++) {
     const v = d.getInt16(ESCORTS.off + 2 * i);
@@ -252,7 +264,7 @@ function toSave(bytes, filename, DATA) {
     credits: d.getUint32(CREDITS),
     cargo,
     outfits: {},
-    explored: [...new Set([syst, ...Object.keys(rep).map(Number)])],
+    explored: [...new Set(explored)],
     bits: [],
     day: 0,
     born: new Date(year - 250, month - 1, day).getTime(),

@@ -168,7 +168,10 @@ system is inhabited (has a landable spöb = a "port"):
 
 Independent (Govt −1) systems that *have* ports still carry a legal standing (via
 the govt-128 fallback), so they're blue/red like any inhabited system — **not**
-gray. Active-mission destination systems get a red ✕. The right panel shows the
+gray. The system you're **currently in** gets a filled green dot inside its
+ring; the **selected** system gets a green square targeting reticle; a routed /
+armed jump target gets a green ring. Active-mission destination systems get a
+red ✕. The right panel shows the
 selected system's name (titled "Destination System" when it's a reachable jump
 target, else "Selected System"), and — for an inhabited, explored system —
 Government, Legal Status, Goods Traded and Services; the bottom bar shows Ports,
