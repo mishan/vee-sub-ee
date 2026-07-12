@@ -220,7 +220,10 @@ Independent of the class work; each is one branch, verified with lint,
 `npm test`, and headless-boot screenshots of the affected screen:
 
 1. `ui/shops.js` — extract the three shop renderers from `07-trade` (mirrors
-   the mission-board split). **Recommended first slice.**
+   the mission-board split). **Done** — `renderExchange`/`renderOutfitter`/
+   `renderShipyard` + `shopGrid`/`walletHtml` moved; shop selection (`selOutfitId`/
+   `selShipId`) folded onto `S`; `07-trade` keeps the trade/buy logic and imports
+   the renderers back for `SERVICE_VIEWS`.
 2. `ui/dialog.js` — lift the `View`/`openService` framework out of `07-trade`;
    move `16-missionboard.js` under `ui/`.
 3. `ui/hail.js` — the hardest one (most inline handlers); extract from
