@@ -12,8 +12,9 @@
  *   0x0000 i16   docked spöb (−128)        0x0014 i16   date month
  *   0x0002 i16   ship type (−128)          0x0016 i16   date day
  *   0x0004 i16×6 cargo tons/commodity      0x0018 i16   date year
- *   0x001a i16×108 exploration per system  0x08ea i16×108 legal record per system
- *   0x11ba u32   credits                   0x124e misn×6 (382B each; see MISN)
+ *   0x001a i16×108 exploration per system  0x07ea i16×128 outfit counts (ID−128)
+ *   0x08ea i16×108 legal record per system 0x11ba u32   credits
+ *   0x124e misn×6 (382B each; see MISN)
  *   0x251a i16×72 escorts (−1 empty…)      0x25ac i16   kills → combat rating
  * Exploration values: ≤0 unexplored, 1 visited, 2 visited+landed (per the EV Nova
  * pilot-format doc, whose PlayerFileDataStruct field order EV Classic shares:
@@ -31,6 +32,11 @@ const COMMODITIES = ['Food', 'Industrial', 'Medical', 'Luxury Goods', 'Metal', '
 const VE_COMMODITIES = ['food', 'industrial', 'medical', 'luxury', 'metal', 'equipment'];
 const OFF = { spob: 0x00, ship: 0x02, cargo: 0x04, month: 0x14, day: 0x16, year: 0x18 };
 const EXPLORE = { off: 0x1a, count: 108 }; // per-system exploration: ≤0 none, 1 seen, 2 landed
+// Outfit inventory: how many of each outfit the ship carries, indexed by outf
+// ID−128. Unlike EV Nova (which splits itemCount/weapCount/ammo), Classic keeps
+// weapons AND ammo in this one array too — a weapon's count sits at its outf ID,
+// its ammo at the ammo outfit's ID (verified against real pilots).
+const OUTFITS = { off: 0x07ea, count: 128 };
 const LEGAL = { off: 0x08ea, count: 108 };
 const ESCORTS = { off: 0x251a, count: 72 };
 const CREDITS = 0x11ba;
@@ -184,6 +190,11 @@ function readSummary(bytes, filename) {
     const v = d.getInt16(ESCORTS.off + 2 * i);
     if (v >= 0) escorts.push(v + 128);
   }
+  const outfits = {};
+  for (let i = 0; i < OUTFITS.count; i++) {
+    const v = d.getInt16(OUTFITS.off + 2 * i);
+    if (v) outfits[128 + i] = v;
+  }
   const legalBySystem = {};
   for (let i = 0; i < LEGAL.count; i++) {
     const v = d.getInt16(LEGAL.off + 2 * i);
@@ -212,6 +223,7 @@ function readSummary(bytes, filename) {
     credits: d.getUint32(CREDITS),
     kills: d.getInt16(KILLS),
     cargo,
+    outfits,
     escorts,
     missions,
     legalBySystem,
@@ -220,9 +232,9 @@ function readSummary(bytes, filename) {
 
 /* Convert a pilot file into a Vₑ save (the v2 localStorage blob). `DATA` is the
  * game DB (require('./evdata.json')): resolves the docked spöb to its system and
- * names escort hulls. Outfits/active-missions/plot-bits aren't mapped, so they
- * import empty — the pilot arrives with its stock hull, cargo, credits, standing,
- * combat record and escorts, docked where it was saved. */
+ * names escort hulls. Active-missions/plot-bits aren't mapped, so they import
+ * empty — but the pilot arrives with its real hull, outfits, cargo, credits,
+ * standing, combat record and escorts, docked where it was saved. */
 function toSave(bytes, filename, DATA) {
   const { d, shipName } = parsePilot(bytes);
   const dockedSpob = d.getInt16(OFF.spob) + 128;
@@ -230,6 +242,13 @@ function toSave(bytes, filename, DATA) {
   const syst = spob && spob.System >= 128 ? spob.System : 128;
   const cargo = Object.fromEntries(VE_COMMODITIES.map((k) => [k, 0]));
   for (let i = 0; i < 6; i++) cargo[VE_COMMODITIES[i]] = d.getInt16(OFF.cargo + 2 * i);
+  // Outfit inventory: outf id -> count (the shell's `outfits` shape). Weapons and
+  // ammo live in the same Classic array, so they carry over as their outf ids too.
+  const outfits = {};
+  for (let i = 0; i < OUTFITS.count; i++) {
+    const v = d.getInt16(OUTFITS.off + 2 * i);
+    if (v) outfits[128 + i] = v;
+  }
   const rep = {};
   for (let i = 0; i < LEGAL.count; i++) {
     const v = d.getInt16(LEGAL.off + 2 * i);
@@ -263,7 +282,7 @@ function toSave(bytes, filename, DATA) {
     ship: d.getInt16(OFF.ship) + 128,
     credits: d.getUint32(CREDITS),
     cargo,
-    outfits: {},
+    outfits,
     explored: [...new Set(explored)],
     bits: [],
     day: 0,
