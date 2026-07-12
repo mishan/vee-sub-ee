@@ -6,8 +6,11 @@ file, the code is wrong; if this file is wrong, fix both in the same commit.
 
 ## Units and coordinate system
 
-- Logic runs at a fixed **30 Hz** (classic EV's frame rate). All rates are
-  per logic frame unless noted.
+- Logic runs at a fixed **60 Hz**. All rates are per logic frame unless
+  noted. (The per-frame stat conversions were originally tuned at 30 Hz; the
+  tick rate was later doubled to 60 Hz to match the original's real-time pace —
+  our 30 Hz only matched it with the 2× pill held. The 2× pill doubles this
+  again. Per-frame values are unchanged; only the wall-clock speed scales.)
 - Positions are pixels. **y grows downward** (screen space).
 - **Heading 0° points up (−y); degrees increase clockwise.** Stored
   normalized to [0, 360).

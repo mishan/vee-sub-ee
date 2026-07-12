@@ -29,7 +29,7 @@ data (see [Building](#building-from-source)).
 
 It's a real game, not a tech demo. From a fresh pilot in **Levo** you can:
 
-- **Fly and fight** — 30 Hz inertial flight from the ship's own stats, warship
+- **Fly and fight** — 60 Hz inertial flight from the ship's own stats, warship
   and trader AI, the bible-exact damage model, projectiles/beams/ammo, escape
   pods and disintegration.
 - **Explore** — a galaxy map with fog of war, hyperjump with fuel, and landing
