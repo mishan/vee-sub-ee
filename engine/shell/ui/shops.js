@@ -1,7 +1,7 @@
 /*
  * engine/shell/ui/shops.js — the landed service dialogs' presentation: the
- * commodity exchange, outfitter and shipyard render functions (pure
- * `render() → SafeHtml`), plus the shared shop grid and wallet-line helpers.
+ * commodity exchange, outfitter and shipyard `render() → SafeHtml` functions,
+ * plus the shared shop grid and wallet-line helpers.
  *
  * Logic (prices, buy/sell, stock/tech gating, trade-in) stays in 07-trade.js;
  * these read it and lay it out. Buttons carry `data-action` for the Dialog
@@ -9,7 +9,9 @@
  * bundled by esbuild (entry: main.js); the logic/UI split is OOP_DESIGN.md's
  * "Separating UI from logic" (slice 1). Selection state lives on S
  * (S.selOutfitId / S.selShipId) so the select actions and these renderers share
- * it without a mutable cross-module binding.
+ * it without a mutable cross-module binding — the outfitter/shipyard renderers
+ * normalize it (clamp a stale/empty selection to the first item), so they are
+ * not side-effect-free.
  */
 import { S, cargo, COMMODITIES, html, outfits, ships, wallet } from '../01-state.js';
 import { effectiveShip, holds } from '../04-combat.js';
@@ -40,7 +42,9 @@ export function renderExchange() {
     const price = priceAt(p, i);
     const held = cargo[COMMODITIES[i]];
     if (price == null && !held) continue;
-    const lvl = m.prices[COMMODITIES[i]];
+    // A spöb without price semantics still lists commodities the player is
+    // carrying (price "—"); guard m.prices the way priceAt does so it can't throw.
+    const lvl = m.prices && m.prices[COMMODITIES[i]];
     rows.push(html`<tr><td>${cargoNames[i]}${lvl ? html` <span class="meta" style="margin:0">(${lvl})</span>` : ''}</td>
       <td class="num">${price != null ? price + ' cr' : '—'}</td>
       <td class="num">${held}</td><td style="text-align:right">${
