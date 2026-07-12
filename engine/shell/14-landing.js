@@ -97,6 +97,9 @@ export const landedDialog = new Dialog('landed', 'landedCard', landedBody, lande
 export function renderPlanetScreen() {
   landedDialog.refresh();
 }
+// Closing a landed service (ui/services.closeService) fires this so the hub
+// refreshes without ui/services having to import — and depend on — this module.
+document.addEventListener('ve:serviceclosed', () => renderPlanetScreen());
 
 /* L: select the nearest landable planet (brackets show it), or — if it's
  * already the target and we're in range and slow — land. Denials explain

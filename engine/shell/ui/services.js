@@ -23,7 +23,6 @@ import {
   shipyardStock,
 } from '../07-trade.js';
 import { hireEscort, dismissEscort } from '../02-spawning.js';
-import { renderPlanetScreen } from '../14-landing.js';
 
 /* Actions for the mission board / hire dialog (ui/missionboard renders its
  * buttons with data-action=…; the Dialog delegation routes them here). */
@@ -78,5 +77,8 @@ export function openService(kind) {
 }
 export function closeService() {
   if (activeView) activeView.close();
-  renderPlanetScreen(); // refresh wallet line
+  // Notify the landing screen to refresh (its wallet line may have changed).
+  // A DOM event instead of importing 14-landing keeps this module free of a
+  // cycle with the landing screen (14-landing imports open/closeService).
+  document.dispatchEvent(new Event('ve:serviceclosed'));
 }
