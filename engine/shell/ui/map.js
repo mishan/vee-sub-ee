@@ -52,13 +52,21 @@ function isRestricted(sysId) {
   const rec = legalOf(sysId);
   return ports.every((p) => (p.MinCoolness || 0) > rec);
 }
-/* Colour a system dot by the player's standing there (spec: "Galaxy map"). */
+/* Colour a system by the player's legal standing there (spec: "Galaxy map"):
+ *   gray  — no governing presence at all (no controlling govt AND no settlement)
+ *   red   — a governed/settled system where your status is below Clean, or a
+ *           pirate (xenophobic) system, which is hostile on sight
+ *   orange— a restricted system you can't currently land in (MinCoolness)
+ *   blue  — Clean or better
+ * Independent (Govt −1) systems still get a status (via the govt-128 fallback),
+ * so a settled independent world is blue/red like anywhere else, not gray. */
 function systemColor(sysId) {
   const raw = systs[sysId].Govt;
-  if (raw < 128) return '#8a93a5'; // independent / no govt → gray
-  if (isPirate(raw)) return '#e06c75'; // pirates are hostile on sight → red
+  const settled = spobsOf(sysId).some((p) => p.$sem && p.$sem.canLand && !p.$sem.uninhabited);
+  if (raw < 128 && !settled) return '#8a93a5'; // no government / no settlement → gray
+  if (raw >= 128 && isPirate(raw)) return '#e06c75'; // pirates hostile on sight → red
   if (legalOf(sysId) < 0 || isCriminalWith(sysId)) return '#e06c75'; // below clean → red
-  if (isRestricted(sysId)) return '#e0a038'; // can't land (MinCoolness) → orange
+  if (raw >= 128 && isRestricted(sysId)) return '#e0a038'; // can't land (MinCoolness) → orange
   return '#5aa0e5'; // clean or better → blue
 }
 
@@ -136,10 +144,12 @@ export function draw() {
       y = py(s);
     if (x < -20 || x > W + 20 || y < -20 || y > H + 20) continue;
     const known = explored.has(id);
-    g.fillStyle = known ? systemColor(id) : 'rgba(120,130,150,.35)';
+    // systems are drawn as circle OUTLINES coloured by legal status
+    g.strokeStyle = known ? systemColor(id) : 'rgba(120,130,150,.4)';
+    g.lineWidth = 1.5;
     g.beginPath();
     g.arc(x, y, known ? 4 : 2.5, 0, 7);
-    g.fill();
+    g.stroke();
     if (id === S.SYSTEM_ID) ring(g, x, y, 8, '#ffffff'); // you are here
     if (routeSet.has(id) || id === S.jumpDest) ring(g, x, y, 7, '#4fd06a');
     if (id === sel) ring(g, x, y, 10, '#ffd479');
