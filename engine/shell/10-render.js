@@ -215,8 +215,6 @@ export function drawPanel(w, h) {
   ctx.beginPath();
   ctx.rect(rx, ry, rw, rh);
   ctx.clip();
-  ctx.fillStyle = '#000'; // radar screen background: black, not the panel's green
-  ctx.fillRect(rx, ry, rw, rh);
   const blip = (o, color, sz) => {
     const x = rcx + (o.x - player.x) * scale,
       y = rcy + (o.y - player.y) * scale;
