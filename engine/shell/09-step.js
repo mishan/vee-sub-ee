@@ -131,8 +131,10 @@ function aiEnemies(s, o) {
   const sg = s.govt,
     og = o.govt;
   if (sg < 128 || og < 128 || sg === og) return false;
-  if (govtAllies(sg).includes(og)) return false;
-  if (govtEnemies(sg).includes(og)) return true;
+  // Ally/Enemy are read in both directions, like legal relation() in 13-legal:
+  // either govt naming the other settles it, so the two sides can't disagree.
+  if (govtAllies(sg).includes(og) || govtAllies(og).includes(sg)) return false;
+  if (govtEnemies(sg).includes(og) || govtEnemies(og).includes(sg)) return true;
   return govtFlags(sg).includes('xenophobic');
 }
 const foeValid = (s, world) =>
@@ -181,11 +183,12 @@ class WarshipAI extends AI {
   }
 }
 
-/* A frightened ship: turn tail and run — from the AI that shot it if it has one,
+/* A frightened ship: turn tail and run — from the AI that shot it if it has one
+ * (keep fleeing it even after it's disabled/gone, not switch to the player),
  * otherwise from the player. */
 class FleeAI extends AI {
   step(s, world) {
-    const from = foeValid(s, world) ? s.foe : world.player;
+    const from = s.foe || world.player;
     EV.stepFlee(s, from.x, from.y);
   }
 }
@@ -257,9 +260,10 @@ const escortAI = new EscortAI(),
 function aiFor(s, world) {
   if (s.playerEscort) return escortAI;
   if (s.fleeing) return fleeAI; // surrender / begged-off / wimpy trader running
-  // Warships fight (WarshipAI picks the target: player, foe, or govt-enemy);
-  // a brave trader only turns warship once something has become its foe.
-  if (s.aiType >= 3 || (s.aiType === 2 && foeValid(s, world))) return warshipAI;
+  // Warships fight (WarshipAI picks the target: player, foe, or govt-enemy); a
+  // brave trader turns warship once it's hostile to the player (grudge) or
+  // something has become its foe.
+  if (s.aiType >= 3 || (s.aiType === 2 && (s.hostile || foeValid(s, world)))) return warshipAI;
   return traderAI;
 }
 
