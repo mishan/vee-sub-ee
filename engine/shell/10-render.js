@@ -215,6 +215,8 @@ export function drawPanel(w, h) {
   ctx.beginPath();
   ctx.rect(rx, ry, rw, rh);
   ctx.clip();
+  ctx.fillStyle = '#000'; // radar screen background: black, not the panel's green
+  ctx.fillRect(rx, ry, rw, rh);
   const blip = (o, color, sz) => {
     const x = rcx + (o.x - player.x) * scale,
       y = rcy + (o.y - player.y) * scale;
@@ -223,13 +225,13 @@ export function drawPanel(w, h) {
     ctx.fillRect(x - sz / 2, y - sz / 2, sz, sz);
     return [x, y];
   };
+  const blinkOn = Math.floor(Date.now() / 350) % 2 === 0;
   for (const p of S.spobs) blip(p, '#7fd0ff', 3);
   for (const s of S.aiShips) {
-    const at = blip(s, s.playerEscort ? '#67d967' : radarColor(s.govt), 2);
-    if (at && s === S.shipTarget) {
-      ctx.strokeStyle = '#ffd479';
-      ctx.strokeRect(at[0] - 3, at[1] - 3, 6, 6);
-    }
+    const base = s.playerEscort ? '#67d967' : radarColor(s.govt);
+    // the selected target blinks yellow (no box around it)
+    const isTarget = s === S.shipTarget;
+    blip(s, isTarget && blinkOn ? '#ffd479' : base, isTarget ? 3 : 2);
   }
   ctx.fillStyle = '#fff';
   ctx.fillRect(rcx - 1.5, rcy - 1.5, 3, 3);
@@ -237,7 +239,7 @@ export function drawPanel(w, h) {
   // the nearest stellar object — is off the radar, blink a green arrow at the
   // edge pointing toward it. (Clipped to the radar, so it can't spill out.)
   const navObj = S.navTarget || nearestSpob();
-  if (navObj && Math.floor(Date.now() / 350) % 2 === 0) {
+  if (navObj && blinkOn) {
     const bx = rcx + (navObj.x - player.x) * scale,
       by = rcy + (navObj.y - player.y) * scale;
     if (bx < rx || bx > rx + rw || by < ry || by > ry + rh) {
