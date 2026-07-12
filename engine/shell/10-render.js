@@ -354,10 +354,10 @@ export function drawPanel(w, h) {
     // disabled → gray (helpless), shields down → amber, otherwise green
     const statusColor = S.shipTarget.disabled ? '#aab2be' : shp <= 0 ? '#e0a038' : GREEN;
     panelText(tb.x + tb.w / 2, tb.y + 110, status, statusColor, 'center');
-  } else if (S.navTarget) {
-    drawSpin(ctx, spinOfSpob(S.navTarget), tb.x + tb.w / 2, tb.y + 44, 0);
-    panelText(tb.x + tb.w / 2, tb.y + 98, S.navTarget.name, '#fff', 'center');
   } else {
+    // A landing/nav target is NOT a combat target: it belongs to the Nav pane
+    // above ("Stellar Navigation"), so the target box stays "No target" until a
+    // ship is targeted — matching the original HUD.
     panelText(tb.x + tb.w / 2, tb.y + 62, 'No target', DIMGREEN, 'center');
   }
 
