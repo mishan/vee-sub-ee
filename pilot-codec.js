@@ -41,7 +41,28 @@ const LEGAL = { off: 0x08ea, count: 108 };
 const ESCORTS = { off: 0x251a, count: 72 };
 const CREDITS = 0x11ba;
 const KILLS = 0x25ac;
-const MISN = { off: 0x124e, size: 0x17e, max: 6, dest: 0, reward: 0x26, active: 0x36, desc: 0x7e };
+// Per-mission slot (382B). Classic denormalizes the whole mission into the
+// pilot — it never stores the misn resource id — so we fingerprint the id back
+// (see reconstructMissions) from the copied fields and read the *rolled* dynamic
+// values (dest/cargo) straight from the slot, exactly as the original engine
+// runs off these copies. Offsets verified against real pilots + the misn schema:
+//   dest 0x00 (travelStel−128)  cargoType 0x10 (resolved)  cargoQty 0x12 (rolled)
+//   reward 0x26  active 0x36 (u8)  qk 0x3a (QuickBrief id)  comp 0x40 (CompText id)
+//   flags 0x50 (Flags)  desc 0x7e (Pascal name string)
+const MISN = {
+  off: 0x124e,
+  size: 0x17e,
+  max: 6,
+  dest: 0,
+  cargoType: 0x10,
+  cargoQty: 0x12,
+  reward: 0x26,
+  active: 0x36,
+  qk: 0x3a,
+  comp: 0x40,
+  flags: 0x50,
+  desc: 0x7e,
+};
 const MIN_LEN = KILLS + 2; // highest fixed offset read
 
 // Andrew Welch's SimpleCrypt — symmetric XOR stream, in place over a Uint8Array.
@@ -177,6 +198,95 @@ function parsePilot(bytes) {
 
 const pilotNameOf = (filename) => filename.replace(/^\._/, '').replace(/\.(rsrc|bin)$/i, '');
 
+// Pascal string (length byte + bytes) at `off`, MacRoman treated as latin1.
+const pascalStr = (d, off) => {
+  const n = d.getUint8(off);
+  let s = '';
+  for (let j = 0; j < n; j++) s += String.fromCharCode(d.getUint8(off + 1 + j));
+  return s;
+};
+
+/* Recover a mission's resource id from the denormalized copy in its pilot slot.
+ * Classic doesn't store the id, so we match the copied fields back to the misn
+ * DB. Duplicate template resources (e.g. the three identical "Ferry Passengers"
+ * missions) are interchangeable, so any match is correct. Tiers relax from a
+ * strict all-fields match down to name-only, taking the first hit. */
+function fingerprintMisn(misns, fp) {
+  const ids = Object.keys(misns);
+  const tiers = [
+    (m) =>
+      m.name === fp.name &&
+      m.QuickBrief === fp.qk &&
+      m.CompText === fp.comp &&
+      m.Flags === fp.flags,
+    (m) => m.name === fp.name && m.QuickBrief === fp.qk && m.CompText === fp.comp,
+    (m) => m.QuickBrief === fp.qk && m.CompText === fp.comp && m.Flags === fp.flags,
+    (m) => m.name === fp.name && m.Flags === fp.flags,
+    (m) => m.name === fp.name,
+  ];
+  for (const test of tiers) {
+    const hit = ids.filter((id) => test(misns[id]));
+    if (hit.length) return +hit[0];
+  }
+  return null;
+}
+
+/* Rebuild the shell's live-mission objects (the `A` shape from 08-missions.js
+ * acceptMission) from the pilot's active slots. Static gameplay fields come from
+ * the recovered misn resource; the rolled/dynamic ones (destination, cargo) come
+ * from the slot copy. Needs the game DB for the misn table + cargo names.
+ *
+ * Known approximations (not stored in the Classic slot, or offset not yet
+ * mapped): `accepted` day, `deadline` (timed missions get a fresh full timer at
+ * load), in-progress `cargoLoaded`/`shipsLeft`/`observed`, and `returnStel` for
+ * return-here missions. Simple ferry/cargo/freight deliveries reconstruct fully;
+ * combat/timed missions carry the right identity + payoff but reset their
+ * progress counters. */
+function reconstructMissions(d, DATA) {
+  const misns = (DATA && DATA.types && DATA.types.misn) || {};
+  const cargoNames = (DATA && DATA.strings && DATA.strings[4000] && DATA.strings[4000].list) || [];
+  const out = [];
+  for (let i = 0; i < MISN.max; i++) {
+    const s = MISN.off + i * MISN.size;
+    if (d.getUint8(s + MISN.active) !== 1) continue;
+    const id = fingerprintMisn(misns, {
+      name: pascalStr(d, s + MISN.desc),
+      qk: d.getInt16(s + MISN.qk),
+      comp: d.getInt16(s + MISN.comp),
+      flags: d.getInt16(s + MISN.flags),
+    });
+    if (id == null) continue; // unidentifiable — skip rather than import a broken mission
+    const m = misns[id];
+    const dest = d.getInt16(s + MISN.dest) + 128;
+    const cargoType = d.getInt16(s + MISN.cargoType);
+    const cargoName = cargoType >= 0 ? cargoNames[cargoType] || 'cargo' : null;
+    const hasShips = m.ShipCount > 0;
+    out.push({
+      id,
+      name: m.name,
+      accepted: 0,
+      travelStel: dest >= 128 ? dest : null,
+      returnStel: m.ReturnStel >= 128 ? m.ReturnStel : null,
+      cargoName,
+      cargoQty: d.getInt16(s + MISN.cargoQty),
+      cargoLoaded: !!cargoName && m.PickupMode === 0,
+      pickupMode: m.PickupMode,
+      dropoffMode: m.DropoffMode,
+      shipGoal: hasShips ? m.ShipGoal : -1,
+      shipsLeft: hasShips ? m.ShipCount : 0,
+      shipTotal: hasShips ? m.ShipCount : 0,
+      shipSyst: m.ShipSyst,
+      shipDude: m.ShipDude,
+      shipBehav: m.ShipBehav,
+      shipNameID: m.ShipNameID,
+      observed: false,
+      timeLimit: m.TimeLimit,
+      deadline: null,
+    });
+  }
+  return out;
+}
+
 /* Rich, human-readable decode of the mapped fields (used by the CLI `summary`). */
 function readSummary(bytes, filename) {
   const { d, shipName } = parsePilot(bytes);
@@ -204,14 +314,10 @@ function readSummary(bytes, filename) {
   for (let i = 0; i < MISN.max; i++) {
     const slot = MISN.off + i * MISN.size;
     if (d.getUint8(slot + MISN.active) !== 1) continue;
-    const dlen = d.getUint8(slot + MISN.desc);
-    let desc = '';
-    for (let j = 0; j < dlen; j++)
-      desc += String.fromCharCode(d.getUint8(slot + MISN.desc + 1 + j));
     missions.push({
       destSpob: d.getInt16(slot + MISN.dest) + 128,
       reward: d.getInt16(slot + MISN.reward),
-      desc,
+      desc: pascalStr(d, slot + MISN.desc),
     });
   }
   return {
@@ -232,9 +338,10 @@ function readSummary(bytes, filename) {
 
 /* Convert a pilot file into a Vₑ save (the v2 localStorage blob). `DATA` is the
  * game DB (require('./evdata.json')): resolves the docked spöb to its system and
- * names escort hulls. Active-missions/plot-bits aren't mapped, so they import
- * empty — but the pilot arrives with its real hull, outfits, cargo, credits,
- * standing, combat record and escorts, docked where it was saved. */
+ * names escort hulls and reconstructs in-flight missions. Plot-bits and the
+ * përs/domination flags (resource 129) aren't mapped yet, so they import empty —
+ * but the pilot arrives with its real hull, outfits, cargo, credits, standing,
+ * combat record, escorts and active missions, docked where it was saved. */
 function toSave(bytes, filename, DATA) {
   const { d, shipName } = parsePilot(bytes);
   const dockedSpob = d.getInt16(OFF.spob) + 128;
@@ -289,7 +396,7 @@ function toSave(bytes, filename, DATA) {
     born: new Date(year - 250, month - 1, day).getTime(),
     rep,
     kills: d.getInt16(KILLS),
-    missions: [],
+    missions: reconstructMissions(d, DATA),
     dominated: [],
     name: pilotNameOf(filename),
     shipName,
@@ -306,6 +413,7 @@ const API = {
   parseTypes,
   parsePilot,
   readSummary,
+  reconstructMissions,
   toSave,
   COMMODITIES,
   VE_COMMODITIES,
