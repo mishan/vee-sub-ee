@@ -325,7 +325,8 @@ export function drawPanel(w, h) {
     // original HUD shows neither.
     const shp = Math.round((100 * Math.max(0, S.shipTarget.shields)) / S.shipTarget.shieldMax);
     const status = S.shipTarget.disabled ? 'DISABLED' : shp <= 0 ? 'Shields Down' : `Shields ${shp}%`;
-    const statusColor = S.shipTarget.disabled ? '#e06c75' : shp <= 0 ? '#e0a038' : GREEN;
+    // disabled → gray (helpless), shields down → amber, otherwise green
+    const statusColor = S.shipTarget.disabled ? '#aab2be' : shp <= 0 ? '#e0a038' : GREEN;
     panelText(tb.x + tb.w / 2, tb.y + 110, status, statusColor, 'center');
   } else if (S.navTarget) {
     drawSpin(ctx, spinOfSpob(S.navTarget), tb.x + tb.w / 2, tb.y + 44, 0);
@@ -424,7 +425,6 @@ export function render() {
     // disintegration: fade the hull out under the fireball (not a hard flicker)
     if (s.deathT >= 0) ctx.globalAlpha = Math.max(0, s.deathT / Math.max(s.deathDelay, 1));
     if (s.fade != null) ctx.globalAlpha = Math.max(s.fade, 0);
-    if (s.disabled) ctx.globalAlpha = 0.6;
     drawSpin(ctx, spinOfShip(s.shipId), x, y, s.heading);
     drawFlame(s, x, y);
     ctx.globalAlpha = 1;
@@ -433,7 +433,12 @@ export function render() {
         x,
         y,
         spriteHalf(spinOfShip(s.shipId), 32),
-        s.hostile ? 'rgba(224,108,117,.9)' : 'rgba(255,212,121,.9)',
+        // disabled → gray (a helpless hull), hostile → red, otherwise amber
+        s.disabled
+          ? 'rgba(170,178,190,.9)'
+          : s.hostile
+            ? 'rgba(224,108,117,.9)'
+            : 'rgba(255,212,121,.9)',
       );
   }
   if (!S.landedAt && !S.gameOver) {

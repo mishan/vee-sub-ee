@@ -60,8 +60,10 @@ export function boardTarget() {
     showMsg('No disabled ship in boarding range.');
     return;
   }
-  if (Math.hypot(player.vx, player.vy) > EV.LAND_SPEED * 2) {
-    showMsg('Slow down to board.');
+  // Boarding needs a low speed RELATIVE to the target: a disabled ship keeps its
+  // drift, so match its velocity (not come to a dead stop) to dock.
+  if (Math.hypot(player.vx - best.vx, player.vy - best.vy) > EV.LAND_SPEED * 2) {
+    showMsg("Match the disabled ship's speed to board.");
     return;
   }
   const A = best.misnGoal === 2 || best.misnGoal === 5 ? missionLog.find(best.misnId) : null;
