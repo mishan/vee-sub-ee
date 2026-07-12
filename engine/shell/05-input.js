@@ -4,7 +4,7 @@ import { setVolume, stopAllLoops } from './03-sound.js';
 import { abortJump, beginJump, player } from './04-combat.js';
 import { closeHail, cyclePlanetTarget, cycleShipTarget, hail, hailOpen } from './06-interaction.js';
 import { activeView, closeService } from './07-trade.js';
-import { showMissionBriefing } from './08-missions.js';
+import { openActiveMissions, closeActiveMissions } from './ui/active-missions.js';
 import { takeOff, tryLand } from './14-landing.js';
 import { boardTarget } from './12-boarding.js';
 import { advanceSplash, introUp, splashShown, titleShown } from './11-title.js';
@@ -103,6 +103,13 @@ addEventListener('keydown', (e) => {
     e.preventDefault();
     return;
   }
+  // The Active Missions dialog is modal too (sim paused): only I and Escape
+  // close it; everything else is swallowed so the ship can't be flown behind it.
+  if (S.missionsOpen) {
+    if (k === 'i' || e.key === 'Escape') closeActiveMissions();
+    e.preventDefault();
+    return;
+  }
   keys[e.key.toLowerCase()] = true;
   if (k === 'l') tryLand();
   if (k === 'm') toggleMap();
@@ -115,7 +122,7 @@ addEventListener('keydown', (e) => {
   if (k === 'n' && !S.landedAt) cyclePlanetTarget();
   if (k === 'y' && !S.landedAt && !hailOpen) hail();
   if (k === 'b' && !S.landedAt) boardTarget();
-  if (k === 'i' && !S.landedAt) showMissionBriefing();
+  if (k === 'i' && !S.landedAt) openActiveMissions();
   if (k === 'r' && S.gameOver) {
     // restart: reload straight back into the game, not the title
     try {
@@ -230,7 +237,7 @@ export function touchAction(act) {
       if (!S.mapOpen) beginJump();
       break;
     case 'missions':
-      showMissionBriefing();
+      openActiveMissions();
       break;
     case 'ff':
       toggleFastForward();

@@ -21,6 +21,7 @@ import * as m15 from './15-pers.js';
 import * as m16 from './16-missionboard.js';
 import * as m17 from './17-main.js';
 import * as mMap from './ui/map.js';
+import * as mMisnDlg from './ui/active-missions.js';
 
 // Inline HTML event handlers (onclick="closeService()", the 2x pill's
 // toggleFastForward(), dialog buttons, …) can only reach GLOBAL names, but the
@@ -49,4 +50,5 @@ Object.assign(
   m16,
   m17,
   mMap,
+  mMisnDlg,
 );
