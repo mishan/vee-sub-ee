@@ -321,20 +321,15 @@ export function drawPanel(w, h) {
       'center',
     );
     // Status progression: Shields X% → Shields Down (shields gone, armour intact)
-    // → DISABLED (crippled). Down is amber, disabled red.
+    // → DISABLED (crippled). Down is amber, disabled red. No distance/speed — the
+    // original HUD shows neither.
     const shp = Math.round((100 * Math.max(0, S.shipTarget.shields)) / S.shipTarget.shieldMax);
-    const dist = Math.round(distTo(S.shipTarget));
-    const status = S.shipTarget.disabled
-      ? 'DISABLED'
-      : shp <= 0
-        ? `Shields Down · ${dist}px`
-        : `Shields ${shp}% · ${dist}px`;
+    const status = S.shipTarget.disabled ? 'DISABLED' : shp <= 0 ? 'Shields Down' : `Shields ${shp}%`;
     const statusColor = S.shipTarget.disabled ? '#e06c75' : shp <= 0 ? '#e0a038' : GREEN;
     panelText(tb.x + tb.w / 2, tb.y + 110, status, statusColor, 'center');
   } else if (S.navTarget) {
     drawSpin(ctx, spinOfSpob(S.navTarget), tb.x + tb.w / 2, tb.y + 44, 0);
     panelText(tb.x + tb.w / 2, tb.y + 98, S.navTarget.name, '#fff', 'center');
-    panelText(tb.x + tb.w / 2, tb.y + 110, `${Math.round(distTo(S.navTarget))}px`, GREEN, 'center');
   } else {
     panelText(tb.x + tb.w / 2, tb.y + 62, 'No target', DIMGREEN, 'center');
   }
@@ -461,9 +456,9 @@ export function render() {
   }
   drawPanel(w, h);
 
-  const speed = Math.hypot(player.vx, player.vy);
+  // System + ship name only — the original HUD shows neither speed nor distance.
   document.getElementById('hud').innerHTML = html`
-    <b>${S.syst.name}</b><br>${ships[S.playerShipId].name}<br>speed ${(speed * EV.FPS).toFixed(0)} px/s`;
+    <b>${S.syst.name}</b><br>${ships[S.playerShipId].name}`;
 
   // boardable disabled mission ship in range?
   const boardable = S.landedAt
