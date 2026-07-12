@@ -262,7 +262,8 @@ export function drawPanel(w, h) {
     panelText(navC, py + 200, 'Stellar Navigation', DIMGREEN, 'center');
     panelText(navC, py + 214, S.navTarget.name, '#fff', 'center');
   } else {
-    panelText(navC, py + 207, 'Navigation', DIMGREEN, 'center');
+    // no destination or landing target — muted, like the original
+    panelText(navC, py + 207, 'Nav System Off', DIMGREEN, 'center');
   }
 
   /* secondary weapon pane (slot 2): name + a compact ammo / fighter count */
