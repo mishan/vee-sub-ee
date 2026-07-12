@@ -10,7 +10,8 @@
  * "Separating UI from logic" (slice 3). Part of the flight shell bundled by
  * esbuild (entry: main.js).
  */
-import { S, html, raw, ships, escorts, dominated } from '../01-state.js';
+import { S, ships, escorts, dominated } from '../01-state.js';
+import { html, raw } from './html.js';
 import { MAX_ESCORTS } from '../02-spawning.js';
 import { govts, misns, getOffer, descText, subst, stelName } from '../08-missions.js';
 import { systemSpob } from '../15-pers.js';

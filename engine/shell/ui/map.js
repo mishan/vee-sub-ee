@@ -5,7 +5,8 @@
  * of contiguous jumps, then exit (Done/Esc) and press J to fly it one hop at a
  * time. Normative behaviour: engine/ENGINE_SPEC.md ("Galaxy map").
  */
-import { S, explored, html, missionLog, pilotBorn, systs } from '../01-state.js';
+import { S, explored, missionLog, pilotBorn, systs } from '../01-state.js';
+import { html } from './html.js';
 import { linkedSystems } from '../04-combat.js';
 import { govts } from '../08-missions.js';
 import { combatRating, govtOf, isCriminalWith, legalOf, legalStatus } from '../13-legal.js';

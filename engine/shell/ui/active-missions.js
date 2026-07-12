@@ -10,7 +10,8 @@
  * like the galaxy map.
  */
 import { Dialog } from './dialog.js';
-import { html, missionLog, S, showMsg } from '../01-state.js';
+import { missionLog, S, showMsg } from '../01-state.js';
+import { html } from './html.js';
 import {
   misns,
   misnName,

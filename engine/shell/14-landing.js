@@ -6,7 +6,8 @@
  * esbuild bundles the shell modules (entry: main.js). Normative: ENGINE_SPEC.md.
  */
 
-import { missionLog, wallet, S, html, savePilot, showMsg } from './01-state.js';
+import { missionLog, wallet, S, savePilot, showMsg } from './01-state.js';
+import { html } from './ui/html.js';
 import { spawnEscorts } from './02-spawning.js';
 import { loopSnd, playSnd, stopAllLoops } from './03-sound.js';
 import { fuelMax, holds, player, rebuildPlayerWeapons } from './04-combat.js';

@@ -1,14 +1,5 @@
-import {
-  S,
-  SAVED,
-  Save,
-  html,
-  pilotName,
-  shipName,
-  ships,
-  showMsg,
-  startNewPilot,
-} from './01-state.js';
+import { S, SAVED, Save, pilotName, shipName, ships, showMsg, startNewPilot } from './01-state.js';
+import { html } from './ui/html.js';
 import { armAudioUnlock, startTitleMusic, stopTitleMusic } from './03-sound.js';
 import { combatRating, legalStatus } from './13-legal.js';
 import { formatDate } from './08-missions.js';
