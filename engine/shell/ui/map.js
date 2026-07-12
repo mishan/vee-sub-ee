@@ -185,9 +185,15 @@ export function draw() {
     g.beginPath();
     g.arc(x, y, known ? 4 : 2.5, 0, 7);
     g.stroke();
-    if (id === S.SYSTEM_ID) ring(g, x, y, 8, '#ffffff'); // you are here
+    if (id === S.SYSTEM_ID) {
+      // you are here: a filled green dot inside the legal-status ring
+      g.fillStyle = '#4fd06a';
+      g.beginPath();
+      g.arc(x, y, 2.4, 0, 7);
+      g.fill();
+    }
     if (routeSet.has(id) || id === S.jumpDest) ring(g, x, y, 7, '#4fd06a');
-    if (id === sel) ring(g, x, y, 10, '#ffd479');
+    if (id === sel) reticle(g, x, y, 9, '#4fd06a'); // selection: green targeting reticle
     if (missionDest.has(id) && known) missionMark(g, x, y);
     if (known || linked.includes(id)) {
       g.fillStyle = known ? '#cfd6e4' : '#7a869c';
@@ -201,6 +207,25 @@ function ring(g, x, y, r, color) {
   g.lineWidth = 1.5;
   g.beginPath();
   g.arc(x, y, r, 0, 7);
+  g.stroke();
+}
+// Four L-shaped corner brackets forming a square targeting reticle (the selected
+// system marker, like the original's map).
+function reticle(g, x, y, r, color) {
+  g.strokeStyle = color;
+  g.lineWidth = 1.5;
+  const t = r * 0.55; // arm length of each corner
+  g.beginPath();
+  for (const [sx, sy] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ]) {
+    g.moveTo(x + sx * r, y + sy * r - sy * t);
+    g.lineTo(x + sx * r, y + sy * r);
+    g.lineTo(x + sx * r - sx * t, y + sy * r);
+  }
   g.stroke();
 }
 function missionMark(g, x, y) {
