@@ -24,11 +24,20 @@ let sel = null; // selected system id (right-panel subject)
 
 export const mapIsOpen = () => S.mapOpen;
 
-/* All spöbs physically in a system (independent of fog). */
+/* All spöbs physically in a system (independent of fog). Spöbs never change at
+ * runtime, so index them by system once and reuse it — draw() calls this per
+ * system (via portsOf/systemColor/…), which would otherwise be O(systems×spöbs). */
+let _spobsBySystem = null;
 function spobsOf(sysId) {
-  const out = [];
-  for (const p of Object.values(DATA.types.spob)) if (p && p.System === sysId) out.push(p);
-  return out;
+  if (!_spobsBySystem) {
+    _spobsBySystem = new Map();
+    for (const p of Object.values(DATA.types.spob)) {
+      if (!p) continue;
+      if (!_spobsBySystem.has(p.System)) _spobsBySystem.set(p.System, []);
+      _spobsBySystem.get(p.System).push(p);
+    }
+  }
+  return _spobsBySystem.get(sysId) || [];
 }
 /* System ids that host an active mission's destination (travel or return). */
 function missionDestSystems() {

@@ -129,25 +129,39 @@ warping and resumes 2× on arrival (the toggle state is preserved, not cleared).
 ## Map knowledge (fog of war)
 
 The player starts in **Levo (sÿst 128)** knowing only that system. Each
-arrival adds the system to the explored set. On the map: explored systems
-render with govt color and full detail; systems linked to the current one
-are labeled and clickable (you can jump into the unknown); everything else
-is a dim, unlabeled dot (position only). Links render when either endpoint
-is explored. (Classic's `VisBit` conditional visibility: deferred.)
+arrival adds the system to the explored set. On the map, **only explored
+systems and their direct neighbours are shown at all** — deeper unknown systems
+aren't drawn (you see one jump into the fog, no further). Explored systems get
+their legal-status colour (see "Galaxy map") and full detail; a neighbour of an
+explored system is a dimmer, labelled dot you can select and jump to. Links
+render when either endpoint is explored. (Classic's `VisBit` conditional
+visibility: deferred.)
 
 ## Galaxy map (shell; browser leg)
 
 `M` opens the galaxy map — a DOM overlay (canvas star map + info panels + Done/
-±/Clear Route buttons; `engine/shell/ui/map.js`), not the flight canvas. It opens
-centred on the player's system; `+`/`−` and the mouse wheel zoom. Systems are
-coloured by the player's standing **there** (per-system legal record): blue at
-Clean or better, red below Clean, red for pirate (xenophobic) govts (hostile on
-sight), gray for independent (no-govt) systems, and orange when the system is
-*restricted* — every inhabited spöb wants a higher record (`MinCoolness`) than
-you hold. Unexplored systems stay dim (fog). Active-mission destination systems
-get a red ✕. The right panel shows the selected system's Destination System,
+±/Clear Route buttons; `engine/shell/ui/map.js`), not the flight canvas. **It
+pauses the sim** while open (like the landing/hail overlays; only `M`/`Esc`
+close it). It opens centred on the player's system; `+`/`−` and the mouse wheel
+zoom, and click-drag pans. Systems render as **circle outlines** coloured by the
+player's standing **there** (per-system legal record), keyed off whether the
+system is inhabited (has a landable spöb = a "port"):
+
+- **gray** — uninhabited (no ports; the info panel reads "Uninhabited System").
+- **red** — an inhabited system where your status is below Clean, or a pirate
+  (xenophobic) govt, which is hostile on sight.
+- **orange** — restricted: an inhabited system where every port wants a higher
+  record (`MinCoolness`) than you hold, so you can't currently land.
+- **blue** — Clean or better.
+
+Independent (Govt −1) systems that *have* ports still carry a legal standing (via
+the govt-128 fallback), so they're blue/red like any inhabited system — **not**
+gray. Active-mission destination systems get a red ✕. The right panel shows the
+selected system's name (titled "Destination System" when it's a reachable jump
+target, else "Selected System"), and — for an inhabited, explored system —
 Government, Legal Status, Goods Traded and Services; the bottom bar shows Ports,
-Navigation Hazards, combat rating and the (4-digit-year) date.
+Navigation Hazards (asteroid-field density / sensor interference) and the
+combat rating + (4-digit-year) date.
 
 **Routing.** Clicking a system adjacent to the current one starts a jump route
 (its link lights green). Shift-clicking a system adjacent to the route's end
