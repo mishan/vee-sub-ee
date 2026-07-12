@@ -248,40 +248,43 @@ export function drawPanel(w, h) {
   );
   ctx.fillRect(px + 60, py + 170, Math.round(74 * (S.fuel / fuelMax)), 6);
 
-  /* secondary weapon display (classic behavior — not a message mirror) */
+  /* navigation pane (slot 1, right below shield/fuel — classic panel order): the
+   * hyperspace jump target, or the stellar-navigation (landing) target, with the
+   * mode named on the first line the way the original does. */
+  const navC = px + 72; // panel content centre
+  if (S.jump) {
+    panelText(navC, py + 200, 'Hyperspace', GREEN, 'center');
+    panelText(navC, py + 214, systs[S.jump.destId].name, '#fff', 'center');
+  } else if (S.jumpDest != null && systs[S.jumpDest]) {
+    panelText(navC, py + 200, 'Hyperspace', DIMGREEN, 'center');
+    panelText(navC, py + 214, `${systs[S.jumpDest].name} (J)`, '#fff', 'center');
+  } else if (S.navTarget) {
+    panelText(navC, py + 200, 'Stellar Navigation', DIMGREEN, 'center');
+    panelText(navC, py + 214, S.navTarget.name, '#fff', 'center');
+  } else {
+    panelText(navC, py + 207, 'Navigation', DIMGREEN, 'center');
+  }
+
+  /* secondary weapon pane (slot 2): name + a compact ammo / fighter count */
   const sw = player.selSecondary;
   if (sw) {
     const pk = poolKey(sw.rec);
-    panelText(px + 9, py + 202, sw.rec.name ?? 'weapon ' + sw.id);
+    let label = sw.rec.name ?? 'weapon ' + sw.id;
+    let color = GREEN;
     if (sw.rec.Guidance === 99) {
-      // fighter bay: docked / capacity
       const have = sw.have || 0;
-      panelText(px + 9, py + 214, `Fighters: ${have}/${sw.n}`, have > 0 ? GREEN : '#e06c75');
+      label += ` ${have}/${sw.n}`;
+      color = have > 0 ? GREEN : '#e06c75';
     } else if (pk != null) {
       const cur = player.pools[pk] || 0,
         cap = player.poolCap[pk] || 0;
-      panelText(
-        px + 9,
-        py + 214,
-        `Ammo: ${cur}${cap > 0 ? '/' + cap : ''}`,
-        cur > 0 ? GREEN : '#e06c75',
-      );
-    } else panelText(px + 9, py + 214, 'Ready', DIMGREEN);
+      label += ` ${cur}${cap > 0 ? '/' + cap : ''}`;
+      color = cur > 0 ? GREEN : '#e06c75';
+    }
+    panelText(navC, py + 250, label, color, 'center');
   } else {
-    panelText(px + 9, py + 202, 'No secondary', DIMGREEN);
+    panelText(navC, py + 250, 'No Secondary Weapon', DIMGREEN, 'center');
   }
-
-  /* status strip: hyperspace destination */
-  const destName = S.jumpDest != null && systs[S.jumpDest] ? systs[S.jumpDest].name : null;
-  panelText(
-    px + 9,
-    py + 248,
-    S.jump
-      ? `Hyperspace: ${systs[S.jump.destId].name}`
-      : destName
-        ? `Dest: ${destName} (J)`
-        : S.syst.name,
-  );
 
   /* target display */
   const tb = { x: px + 5, y: py + 262, w: 134, h: 117 };
