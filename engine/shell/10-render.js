@@ -280,7 +280,9 @@ export function drawPanel(w, h) {
     panelText(navC, py + 214, systs[S.jump.destId].name, '#fff', 'center');
   } else if (S.jumpDest != null && systs[S.jumpDest]) {
     panelText(navC, py + 200, 'Hyperspace', DIMGREEN, 'center');
-    panelText(navC, py + 214, `${systs[S.jumpDest].name} (J)`, '#fff', 'center');
+    // Destination name stays dim until you're clear of the no-jump ring, then
+    // lights to white to signal the hyperdrive is ready (paired with the ding).
+    panelText(navC, py + 214, systs[S.jumpDest].name, S.jumpReady ? '#fff' : DIMGREEN, 'center');
   } else if (S.navTarget) {
     panelText(navC, py + 200, 'Stellar Navigation', DIMGREEN, 'center');
     panelText(navC, py + 214, S.navTarget.name, '#fff', 'center');
