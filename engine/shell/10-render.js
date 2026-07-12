@@ -471,6 +471,7 @@ export function render() {
           (s.misnGoal === 2 || s.misnGoal === 5) &&
           Math.hypot(s.x - player.x, s.y - player.y) < 50,
       );
+  const speed = Math.hypot(player.vx, player.vy); // for the "slow down to land" hint
   const near =
     S.landedAt ||
     S.jump ||
