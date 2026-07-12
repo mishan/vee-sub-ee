@@ -22,6 +22,9 @@ function readPilotSummary(file) {
 function toVeSave(file, DATA) {
   return codec.toSave(bytesOf(file), nameOf(file), DATA);
 }
+function fromVeSave(saveJsonFile, DATA) {
+  return codec.fromSave(JSON.parse(fs.readFileSync(saveJsonFile, 'utf8')), DATA);
+}
 
 module.exports = { ...codec, readPilotSummary, toVeSave };
 
@@ -37,9 +40,12 @@ module.exports = { ...codec, readPilotSummary, toVeSave };
  *   node evpilot.js import <pilot-file> [out.json]
  *       — convert the pilot into a Vₑ save (writes out.json, or prints it).
  *         Load it into the browser with:
- *           localStorage.setItem('ve_pilot', <contents>)  then reload flight.html */
+ *           localStorage.setItem('ve_pilot', <contents>)  then reload flight.html
+ *   node evpilot.js export <save.json> <out.rsrc>
+ *       — convert a Vₑ save back into an original-EV pilot file. If the save was
+ *         made from an imported pilot it is patched back byte-faithfully. */
 const USAGE =
-  'usage: node evpilot.js selftest | summary <pilot-file> | inspect <pilot-file> [keyHex] [dumpBytes] | import <pilot-file> [out.json]';
+  'usage: node evpilot.js selftest | summary <pilot-file> | inspect <pilot-file> [keyHex] [dumpBytes] | import <pilot-file> [out.json] | export <save.json> <out.rsrc>';
 if (require.main === module) {
   const cmd = process.argv[2];
 
@@ -91,6 +97,19 @@ if (require.main === module) {
     } else {
       console.log(save);
     }
+    process.exit(0);
+  }
+
+  if (cmd === 'export') {
+    const saveFile = process.argv[3];
+    const out = process.argv[4];
+    if (!saveFile || !out) {
+      console.error('usage: node evpilot.js export <save.json> <out.rsrc>');
+      process.exit(1);
+    }
+    const DATA = require('./evdata.json');
+    fs.writeFileSync(out, fromVeSave(saveFile, DATA));
+    console.error(`wrote ${out} — an original-EV pilot file (AppleDouble)`);
     process.exit(0);
   }
 

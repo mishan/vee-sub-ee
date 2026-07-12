@@ -5,7 +5,12 @@ import { combatRating, legalStatus } from './13-legal.js';
 import { formatDate } from './08-missions.js';
 import { render } from './ui/render.js';
 import { Dialog } from './ui/dialog.js';
-import { decodePilotFile, looksLikeJSON, parsePilotJSON } from './ui/pilot-import.js';
+import {
+  decodePilotFile,
+  downloadPilotFile,
+  looksLikeJSON,
+  parsePilotJSON,
+} from './ui/pilot-import.js';
 
 /*
  * engine/shell/11-title.js — part of the browser flight shell.
@@ -236,6 +241,13 @@ function openPilotBody() {
             style="float:right;color:#6bb6ff;margin-right:12px;font-size:0.85em"
             >⤓ JSON</span
           >
+          <span
+            data-action="export"
+            data-arg="${p.id}"
+            title="Export to an original-EV pilot file"
+            style="float:right;color:#7aa;margin-right:10px"
+            >⤓</span
+          >
         </button>`,
       )
     : html`<p style="color:#6f7c94">No saved pilots yet — start a New Pilot or import one.</p>`;
@@ -282,6 +294,15 @@ const openPilotActions = {
     }
   },
   json: (id) => exportPilotJSON(id),
+  export: (id) => {
+    const save = Save._get(Save.slot(id));
+    if (!save) return showMsg('Could not read that pilot.');
+    try {
+      downloadPilotFile(save, DATA);
+    } catch (err) {
+      showMsg('Export failed: ' + err.message);
+    }
+  },
   import: () => document.getElementById('pilotFile').click(),
   close: () => openPilotDialog.close(),
 };

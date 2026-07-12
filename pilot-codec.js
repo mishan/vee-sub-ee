@@ -404,7 +404,241 @@ function toSave(bytes, filename, DATA) {
     escorts,
     persDone: [],
     persGrudge: [],
+    // Stash the whole source file so the pilot can be re-exported byte-faithfully
+    // (fromSave patches the mapped fields back onto this and keeps the rest —
+    // resource 129, unmapped 128 regions, the AppleDouble wrapper — untouched).
+    origin: b64encode(bytes),
   };
+}
+
+/* ================================================================== *
+ *  Pilot-file WRITING (export) — the inverse of toSave.
+ *
+ *  EV Classic pilot files are AppleDouble-wrapped: a 32-byte Finder-info entry
+ *  (file type 'MpïL', creator 'Mïrc') + the resource fork holding MpïL 128
+ *  ("Pilot Data", the player struct) and MpïL 129 (named with the ship name).
+ *
+ *  For a pilot imported from a real file we patch the mapped fields back onto
+ *  the stashed original (`save.origin`) and leave everything else byte-for-byte
+ *  intact — resource 129, the unmapped 128 regions, the wrapper — so the file
+ *  the original game reads back is identical except for what the player changed.
+ *  A pilot born in Vₑ has no origin, so we synthesize resource 129 from scratch
+ *  (EXPERIMENTAL: its universe-state defaults aren't yet verified against the
+ *  original game — prefer round-tripping imported pilots for now).
+ * ================================================================== */
+
+const MPIL_TYPE = [0x4d, 0x70, 0x95, 0x4c]; // 'MpïL'
+const R128_NAME = 'Pilot Data';
+// Finder info of a pilot file: type 'MpïL', creator 'Mïrc', flags 0x0100, rest 0.
+const PILOT_FINDER = Uint8Array.from([
+  0x4d, 0x70, 0x95, 0x4c, 0x4d, 0x91, 0x72, 0x63, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0,
+]);
+
+// --- base64 (env-agnostic; no Buffer/btoa) so the source pilot can ride along
+// in the JSON save under `origin` and enable byte-faithful re-export ---
+const B64C = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+function b64encode(u8) {
+  let s = '';
+  for (let i = 0; i < u8.length; i += 3) {
+    const a = u8[i],
+      b = i + 1 < u8.length ? u8[i + 1] : 0,
+      c = i + 2 < u8.length ? u8[i + 2] : 0;
+    s += B64C[a >> 2] + B64C[((a & 3) << 4) | (b >> 4)];
+    s += i + 1 < u8.length ? B64C[((b & 15) << 2) | (c >> 6)] : '=';
+    s += i + 2 < u8.length ? B64C[c & 63] : '=';
+  }
+  return s;
+}
+function b64decode(str) {
+  const clean = str.replace(/[^A-Za-z0-9+/]/g, '');
+  const out = new Uint8Array((clean.length * 3) >> 2);
+  let o = 0,
+    buf = 0,
+    bits = 0;
+  for (const ch of clean) {
+    buf = (buf << 6) | B64C.indexOf(ch);
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out[o++] = (buf >> bits) & 0xff;
+    }
+  }
+  return out.subarray(0, o);
+}
+
+// --- resource-fork writer: the Uint8Array twin of parseTypes' reader. Handles a
+// single resource type (MpïL is all a pilot needs). entries: [{id, name, data}].
+function buildFork(entries) {
+  const nameBytes = (name) => {
+    const b = new Uint8Array(name.length);
+    for (let i = 0; i < name.length; i++) b[i] = name.charCodeAt(i) & 0xff;
+    return b;
+  };
+  let dataLen = 0;
+  for (const e of entries) {
+    e._dataOff = dataLen;
+    dataLen += 4 + e.data.length;
+  }
+  let nameLen = 0;
+  const names = [];
+  for (const e of entries) {
+    if (e.name != null) {
+      const nb = nameBytes(e.name);
+      e._nameOff = nameLen;
+      names.push(nb);
+      nameLen += 1 + nb.length;
+    } else e._nameOff = 0xffff;
+  }
+  const typeListLen = 2 + 8 + entries.length * 12; // 1 type
+  const mapLen = 28 + typeListLen + nameLen;
+  const dataOffset = 256;
+  const fork = new Uint8Array(dataOffset + dataLen + mapLen);
+  const dv = new DataView(fork.buffer);
+  // resource data area
+  for (const e of entries) {
+    const at = dataOffset + e._dataOff;
+    dv.setUint32(at, e.data.length);
+    fork.set(e.data, at + 4);
+  }
+  const mapStart = dataOffset + dataLen;
+  dv.setUint32(0, dataOffset);
+  dv.setUint32(4, mapStart);
+  dv.setUint32(8, dataLen);
+  dv.setUint32(12, mapLen);
+  dv.setUint16(mapStart + 24, 28); // type-list offset (from map start)
+  dv.setUint16(mapStart + 26, 28 + typeListLen); // name-list offset
+  const tl = mapStart + 28;
+  dv.setUint16(tl, 0); // (type count) − 1
+  for (let i = 0; i < 4; i++) fork[tl + 2 + i] = MPIL_TYPE[i];
+  dv.setUint16(tl + 6, entries.length - 1); // (resource count) − 1
+  dv.setUint16(tl + 8, 2 + 8); // ref-list offset (from type-list start)
+  const rl = tl + 10;
+  entries.forEach((e, i) => {
+    const re = rl + i * 12;
+    dv.setInt16(re, e.id);
+    dv.setUint16(re + 2, e._nameOff);
+    fork[re + 4] = 0; // attributes
+    fork[re + 5] = (e._dataOff >> 16) & 0xff;
+    fork[re + 6] = (e._dataOff >> 8) & 0xff;
+    fork[re + 7] = e._dataOff & 0xff;
+  });
+  let nOff = mapStart + 28 + typeListLen;
+  for (const nb of names) {
+    fork[nOff] = nb.length;
+    fork.set(nb, nOff + 1);
+    nOff += 1 + nb.length;
+  }
+  fork.copy ? fork.copy(fork, mapStart, 0, 16) : fork.set(fork.subarray(0, 16), mapStart);
+  return fork;
+}
+
+// AppleDouble wrap: magic, one Finder-info entry (id 9) + the resource fork (id 2).
+function wrapAppleDouble(fork, finder) {
+  const finderOff = 26 + 2 * 12; // 50
+  const forkOff = finderOff + finder.length; // 82
+  const out = new Uint8Array(forkOff + fork.length);
+  const dv = new DataView(out.buffer);
+  dv.setUint32(0, 0x00051607); // magic
+  dv.setUint32(4, 0x00020000); // version
+  dv.setUint16(24, 2); // entry count
+  dv.setUint32(26, 9); // entry: Finder info
+  dv.setUint32(30, finderOff);
+  dv.setUint32(34, finder.length);
+  dv.setUint32(38, 2); // entry: resource fork
+  dv.setUint32(42, forkOff);
+  dv.setUint32(46, fork.length);
+  out.set(finder, finderOff);
+  out.set(fork, forkOff);
+  return out;
+}
+
+// Write the fields we map onto a decrypted MpïL-128 struct, surgically: only the
+// exact windows we understand are touched, so an imported pilot's unmapped bytes
+// survive untouched. `d` is a DataView over the (mutable) decrypted 128 buffer.
+function writeStruct(d, save) {
+  const put = (o, v) => d.setInt16(o, v);
+  put(OFF.spob, (save.spob != null ? save.spob : 128) - 128);
+  put(OFF.ship, (save.ship != null ? save.ship : 128) - 128);
+  for (let i = 0; i < 6; i++)
+    put(OFF.cargo + 2 * i, (save.cargo && save.cargo[VE_COMMODITIES[i]]) || 0);
+  const born = new Date(save.born || Date.now());
+  put(OFF.year, born.getFullYear() + 250);
+  put(OFF.month, born.getMonth() + 1);
+  put(OFF.day, born.getDate());
+  d.setUint32(CREDITS, (save.credits || 0) >>> 0);
+  put(KILLS, save.kills || 0);
+  // exploration: merge (keep original 1/2 markers, add newly-seen as "visited")
+  for (const id of save.explored || []) {
+    const i = id - 128;
+    if (i >= 0 && i < EXPLORE.count && d.getInt16(EXPLORE.off + 2 * i) < 1)
+      put(EXPLORE.off + 2 * i, 1);
+  }
+  // outfits / legal / escorts are authoritative in the save → clear the window, refill
+  for (let i = 0; i < OUTFITS.count; i++) put(OUTFITS.off + 2 * i, 0);
+  for (const [id, n] of Object.entries(save.outfits || {})) {
+    const i = +id - 128;
+    if (i >= 0 && i < OUTFITS.count) put(OUTFITS.off + 2 * i, n);
+  }
+  for (let i = 0; i < LEGAL.count; i++) put(LEGAL.off + 2 * i, 0);
+  for (const [id, v] of Object.entries(save.rep || {})) {
+    const i = +id - 128;
+    if (i >= 0 && i < LEGAL.count) put(LEGAL.off + 2 * i, v);
+  }
+  for (let i = 0; i < ESCORTS.count; i++) put(ESCORTS.off + 2 * i, -1);
+  (save.escorts || []).forEach((e, i) => {
+    if (i < ESCORTS.count && e && e.shipId != null) put(ESCORTS.off + 2 * i, e.shipId - 128);
+  });
+}
+
+/* Turn a Vₑ save back into an original-EV pilot file (AppleDouble bytes). With
+ * `save.origin` (set by toSave on import) the result is byte-identical to the
+ * source except for the fields the player changed; without it, resource 129 is
+ * synthesized (see the header note). `_DATA` is unused today but kept in the
+ * signature for symmetry with toSave and future mission write-back. */
+function fromSave(save, _DATA) {
+  const patch128 = (buf) => {
+    // buf: decrypted MpïL-128. Apply the save's fields, return re-encrypted bytes.
+    writeStruct(new DataView(buf.buffer, buf.byteOffset, buf.byteLength), save);
+    const enc = buf.slice();
+    simpleCrypt(enc);
+    return enc;
+  };
+  if (save && save.origin) {
+    // Template path: patch the new 128 into a clone of the source file in place,
+    // leaving resource 129, the map, and the AppleDouble wrapper byte-for-byte
+    // untouched. Only the fields the player changed move.
+    const file = b64decode(save.origin);
+    const types = parseTypes(unwrapFork(file));
+    const mp = types.find(
+      (t) =>
+        t.bytes[0] === 0x4d && t.bytes[1] === 0x70 && t.bytes[2] === 0x95 && t.bytes[3] === 0x4c,
+    );
+    const r128 = mp && mp.resources.find((r) => r.id === 128);
+    if (!r128) throw new Error('Stashed pilot is missing MpïL 128.');
+    const dec = new Uint8Array(r128.data);
+    simpleCrypt(dec);
+    const enc128 = patch128(dec);
+    const out = file.slice();
+    out.set(enc128, r128.data.byteOffset - file.byteOffset); // r128's spot in the file
+    return out;
+  }
+  // Synth path: no source file — build a fresh fork with a synthesized 129.
+  const enc128 = patch128(new Uint8Array(MIN_LEN));
+  const fork = buildFork([
+    { id: 128, name: R128_NAME, data: enc128 },
+    { id: 129, name: save.shipName || 'Ship', data: synthAltData() },
+  ]);
+  return wrapAppleDouble(fork, PILOT_FINDER);
+}
+
+// EXPERIMENTAL clean-slate resource 129 for a pilot with no source file. Encrypted
+// so it drops straight into buildFork. Universe-state defaults here are not yet
+// verified against the original game; see the export header note.
+function synthAltData() {
+  const b = new Uint8Array(8958);
+  simpleCrypt(b);
+  return b;
 }
 
 const API = {
@@ -415,6 +649,10 @@ const API = {
   readSummary,
   reconstructMissions,
   toSave,
+  fromSave,
+  buildFork,
+  b64encode,
+  b64decode,
   COMMODITIES,
   VE_COMMODITIES,
   MISN,
