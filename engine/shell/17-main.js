@@ -4,7 +4,7 @@ import { loopSnd } from './03-sound.js';
 import { applyShipStats, beginJump, fuelMax, player } from './04-combat.js';
 import { fastForward, keys } from './05-input.js';
 import { cyclePlanetTarget, cycleShipTarget } from './06-interaction.js';
-import { openService } from './07-trade.js';
+import { openService } from './ui/services.js';
 import { landedDialog, tryLand } from './14-landing.js';
 import { loadSystem, step } from './09-step.js';
 import { render } from './10-render.js';

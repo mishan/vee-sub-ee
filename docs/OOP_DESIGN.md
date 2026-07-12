@@ -225,7 +225,13 @@ Independent of the class work; each is one branch, verified with lint,
    `selShipId`) folded onto `S`; `07-trade` keeps the trade/buy logic and imports
    the renderers back for `SERVICE_VIEWS`.
 2. `ui/dialog.js` — lift the `View`/`openService` framework out of `07-trade`;
-   move `16-missionboard.js` under `ui/`.
+   move `16-missionboard.js` under `ui/`. **Done** — the base (`View`/
+   `activeView`/`refreshView`) went into the import-free leaf `ui/dialog.js` so
+   any dialog can construct at init; the concrete registry (`openService`/
+   `closeService`/`SERVICE_VIEWS` + the button actions, which need the renderers
+   and their logic) went into a new `ui/services.js`; `16-missionboard.js` moved
+   to `ui/missionboard.js`. `07-trade` now holds only trade/outfit/shipyard
+   logic.
 3. `ui/hail.js` — the hardest one (most inline handlers); extract from
    `06-interaction`.
 4. `ui/html.js` — relocate the template primitive; rewire every importer.

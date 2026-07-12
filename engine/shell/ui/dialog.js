@@ -57,3 +57,23 @@ export class Dialog {
     document.getElementById(this.panelId).style.display = 'none';
   }
 }
+
+/* A `View` is the landed-service flavour of `Dialog`: it also tracks which one is
+ * showing. `activeView` is whichever View is up (null = none); the shell reads it
+ * to know a service dialog is open (pause the sim, swallow keys, Esc closes it).
+ * Kept here in the DOM-only base — no game imports — so it stays a leaf that the
+ * concrete registry (ui/services.js) and every dialog can construct at init. */
+export let activeView = null;
+export class View extends Dialog {
+  open() {
+    activeView = this;
+    super.open();
+  }
+  close() {
+    if (activeView === this) activeView = null;
+    super.close();
+  }
+}
+export const refreshView = () => {
+  if (activeView) activeView.refresh();
+};

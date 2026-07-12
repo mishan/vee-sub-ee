@@ -11,14 +11,9 @@ import { spawnEscorts } from './02-spawning.js';
 import { loopSnd, playSnd, stopAllLoops } from './03-sound.js';
 import { fuelMax, holds, player, rebuildPlayerWeapons } from './04-combat.js';
 import { distTo, nearestLandable } from './06-interaction.js';
-import {
-  activeView,
-  cargoUsed,
-  closeService,
-  openService,
-  outfitterStock,
-  shipyardStock,
-} from './07-trade.js';
+import { cargoUsed, outfitterStock, shipyardStock } from './07-trade.js';
+import { activeView } from './ui/dialog.js';
+import { closeService, openService } from './ui/services.js';
 import { missionLandingEvents, offeredMissions } from './08-missions.js';
 import { loadSystem } from './09-step.js';
 import { Dialog } from './ui/dialog.js';
@@ -102,6 +97,9 @@ export const landedDialog = new Dialog('landed', 'landedCard', landedBody, lande
 export function renderPlanetScreen() {
   landedDialog.refresh();
 }
+// Closing a landed service (ui/services.closeService) fires this so the hub
+// refreshes without ui/services having to import — and depend on — this module.
+document.addEventListener('ve:serviceclosed', () => renderPlanetScreen());
 
 /* L: select the nearest landable planet (brackets show it), or — if it's
  * already the target and we're in range and slow — land. Denials explain

@@ -1,7 +1,8 @@
-import { missionLog, wallet, S, html, escorts, ships, savePilot, showMsg } from './01-state.js';
-import { HIRE_ROSTER, MAX_ESCORTS, hireFee, shipClassDesc, upkeepOf } from './02-spawning.js';
-import { holds } from './04-combat.js';
-import { cargoUsed, refreshView } from './07-trade.js';
+import { missionLog, wallet, S, html, escorts, ships, savePilot, showMsg } from '../01-state.js';
+import { HIRE_ROSTER, MAX_ESCORTS, hireFee, shipClassDesc, upkeepOf } from '../02-spawning.js';
+import { holds } from '../04-combat.js';
+import { cargoUsed } from '../07-trade.js';
+import { refreshView } from './dialog.js';
 import {
   offeredMissions,
   misns,
@@ -13,14 +14,14 @@ import {
   spobById,
   stelName,
   acceptMission,
-} from './08-missions.js';
+} from '../08-missions.js';
 
 /*
- * engine/shell/16-missionboard.js — spaceport bar / mission computer board and
- * the hire-escorts dialog. The service-dialog View registry (07-trade) points
- * `bar`/`missioncomputer` at renderBar/renderComputer here; mission *logic*
- * (availability, accept, goals) stays in 08-missions.js. Part of the flight
- * shell bundled by esbuild (entry: main.js); 01-state holds the shared state S.
+ * engine/shell/ui/missionboard.js — spaceport bar / mission computer board and
+ * the hire-escorts dialog (presentation). The service-dialog registry in
+ * ui/services.js points `bar`/`missioncomputer` at renderBar/renderComputer
+ * here; mission *logic* (availability, accept, goals) stays in 08-missions.js.
+ * Part of the flight shell bundled by esbuild (entry: main.js).
  */
 
 S.selMisnId = null;
