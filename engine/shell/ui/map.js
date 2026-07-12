@@ -79,10 +79,10 @@ function portsOf(sysId) {
 function systemColor(sysId) {
   const raw = systs[sysId].Govt;
   if (!portsOf(sysId).length) return '#8a93a5'; // uninhabited (no ports) → gray
-  if (raw >= 128 && isPirate(raw)) return '#e06c75'; // pirates hostile on sight → red
-  if (legalOf(sysId) < 0 || isCriminalWith(sysId)) return '#e06c75'; // below clean → red
+  if (raw >= 128 && isPirate(raw)) return '#e70000'; // pirates hostile on sight → red
+  if (legalOf(sysId) < 0 || isCriminalWith(sysId)) return '#e70000'; // below clean → red
   if (raw >= 128 && isRestricted(sysId)) return '#e0a038'; // can't land (MinCoolness) → orange
-  return '#5aa0e5'; // clean or better → blue
+  return '#0000e7'; // clean or better → blue (matched to the original's map blue)
 }
 
 // --- view helpers -----------------------------------------------------------
@@ -276,16 +276,18 @@ function reticle(g, x, y, r, color) {
   }
   g.stroke();
 }
+// Mission destination: a small red pointer (arrowhead) sitting to the left of
+// the system and aimed at it — beside the system, not on top of it, like the
+// original.
 function missionMark(g, x, y) {
-  g.strokeStyle = '#ff4d4d';
-  g.lineWidth = 2;
-  const d = 5;
+  g.fillStyle = '#ff4d4d';
+  const tipX = x - 6; // just off the system's left edge
   g.beginPath();
-  g.moveTo(x - d, y - d);
-  g.lineTo(x + d, y + d);
-  g.moveTo(x + d, y - d);
-  g.lineTo(x - d, y + d);
-  g.stroke();
+  g.moveTo(tipX, y);
+  g.lineTo(tipX - 8, y - 5);
+  g.lineTo(tipX - 8, y + 5);
+  g.closePath();
+  g.fill();
 }
 // Is the link a–b part of the planned route (current system → route[0] → …)?
 function onRoute(a, b, route) {
