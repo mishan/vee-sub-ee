@@ -235,14 +235,18 @@ export function drawPanel(w, h) {
   ctx.fillRect(rcx - 1.5, rcy - 1.5, 3, 3);
   ctx.restore();
 
-  /* shield & fuel bars */
+  /* shield & fuel bars. Once shields are gone the top bar becomes the ARMOR bar:
+   * the panel PICT's baked "Shield:" label is painted over with the panel
+   * background and re-lettered "Armor:", and the bar tracks armour instead. */
+  const shieldsUp = player.shields > 0;
+  if (!shieldsUp) {
+    ctx.fillStyle = '#002200'; // panel background — hide the baked "Shield:" label
+    ctx.fillRect(px + 8, py + 149, 40, 13);
+    panelText(px + 10, py + 160, 'Armor:');
+  }
   ctx.fillStyle = GREEN;
-  ctx.fillRect(
-    px + 60,
-    py + 154,
-    Math.round(74 * Math.max(0, player.shields / player.shieldMax)),
-    6,
-  );
+  const topFrac = shieldsUp ? player.shields / player.shieldMax : player.armor / player.armorMax;
+  ctx.fillRect(px + 60, py + 154, Math.round(74 * Math.max(0, topFrac)), 6);
   ctx.fillRect(px + 60, py + 170, Math.round(74 * (S.fuel / fuelMax)), 6);
 
   /* navigation pane (slot 1, right below shield/fuel — classic panel order): the
@@ -316,16 +320,17 @@ export function drawPanel(w, h) {
       S.shipTarget.bounty ? '#e06c75' : radarColor(S.shipTarget.govt),
       'center',
     );
+    // Status progression: Shields X% → Shields Down (shields gone, armour intact)
+    // → DISABLED (crippled). Down is amber, disabled red.
     const shp = Math.round((100 * Math.max(0, S.shipTarget.shields)) / S.shipTarget.shieldMax);
-    panelText(
-      tb.x + tb.w / 2,
-      tb.y + 110,
-      S.shipTarget.disabled
-        ? 'DISABLED'
-        : `Shields ${shp}% · ${Math.round(distTo(S.shipTarget))}px`,
-      S.shipTarget.disabled ? '#e06c75' : GREEN,
-      'center',
-    );
+    const dist = Math.round(distTo(S.shipTarget));
+    const status = S.shipTarget.disabled
+      ? 'DISABLED'
+      : shp <= 0
+        ? `Shields Down · ${dist}px`
+        : `Shields ${shp}% · ${dist}px`;
+    const statusColor = S.shipTarget.disabled ? '#e06c75' : shp <= 0 ? '#e0a038' : GREEN;
+    panelText(tb.x + tb.w / 2, tb.y + 110, status, statusColor, 'center');
   } else if (S.navTarget) {
     drawSpin(ctx, spinOfSpob(S.navTarget), tb.x + tb.w / 2, tb.y + 44, 0);
     panelText(tb.x + tb.w / 2, tb.y + 98, S.navTarget.name, '#fff', 'center');
