@@ -1,6 +1,7 @@
 import {
   S,
   SAVED,
+  Save,
   html,
   pilotBorn,
   pilotName,
@@ -13,6 +14,7 @@ import { armAudioUnlock, startTitleMusic, stopTitleMusic } from './03-sound.js';
 import { combatRating, legalStatus } from './13-legal.js';
 import { render } from './10-render.js';
 import { Dialog } from './ui/dialog.js';
+import { decodePilotFile } from './ui/pilot-import.js';
 
 /*
  * engine/shell/11-title.js — part of the browser flight shell.
@@ -72,8 +74,8 @@ export function showTitle() {
   titleEl.style.display = 'flex';
   titleEl.classList.add('intro'); // one-shot fade/scale-in, cleared after
   setTimeout(() => titleEl.classList.remove('intro'), 1100);
-  // Open Pilot only means something when there's a save to resume.
-  document.getElementById('hotOpen').style.opacity = SAVED ? '' : '0.35';
+  // Open Pilot always works now — it lists the roster and can import a pilot.
+  document.getElementById('hotOpen').style.opacity = '';
   // draw the pilot summary once layout settles, and keep it sized on resize
   requestAnimationFrame(renderTitleSummary);
   setTimeout(renderTitleSummary, 200); // fonts/bg may lag a frame
@@ -237,21 +239,90 @@ export function renderTitleSummary() {
 // re-render on resize while the title is up (the canvas is sized from layout)
 export let titleSummaryResize = null;
 
-// Enter Ship / Open Pilot need a loaded pilot; otherwise nudge toward New Pilot.
+// Enter Ship needs a loaded pilot; otherwise nudge toward New Pilot / Open Pilot.
 export const needPilot = () => {
-  showMsg('No pilot loaded — choose New Pilot to begin.');
+  showMsg('No pilot loaded — choose New Pilot or Open Pilot to begin.');
 };
+
+/* Open Pilot: pick a saved pilot from the roster, delete one, or import an
+ * original EV Classic pilot file (which lands as a new roster slot). Selecting or
+ * importing sets the active pilot and reloads to boot it. */
+function openPilotBody() {
+  const list = Save.roster();
+  const active = Save.activeId();
+  const rows = list.length
+    ? list.map(
+        (p) => html`<button
+          class="svc"
+          data-action="pick"
+          data-arg="${p.id}"
+          style="display:block;width:100%;text-align:left;margin:4px 0"
+        >
+          ${p.id === active ? '▶ ' : ''}${p.name}${p.strict ? ' ⚠' : ''} —
+          ${ships[p.ship] ? ships[p.ship].name : 'ship'} ·
+          ${(p.credits || 0).toLocaleString('en-US')} cr
+          <span data-action="del" data-arg="${p.id}" title="Delete pilot" style="float:right;color:#d67"
+            >✕</span
+          >
+        </button>`,
+      )
+    : html`<p style="color:#6f7c94">No saved pilots yet — start a New Pilot or import one.</p>`;
+  return html`<h2>Open Pilot</h2>
+    ${rows}
+    <div style="margin-top:14px">
+      <button data-action="import">Import EV Pilot…</button>
+      <button data-action="close">Close</button>
+    </div>`;
+}
+const openPilotActions = {
+  pick: (id) => {
+    Save.select(id);
+    try {
+      sessionStorage.setItem('ve_newpilot', '1'); // skip the splash → title
+    } catch {}
+    location.reload();
+  },
+  del: (id) => {
+    if (confirm('Delete this pilot permanently?')) {
+      Save.remove(id);
+      openPilotDialog.refresh();
+    }
+  },
+  import: () => document.getElementById('pilotFile').click(),
+  close: () => openPilotDialog.close(),
+};
+export const openPilotDialog = new Dialog(
+  'openpilot',
+  'openPilotCard',
+  openPilotBody,
+  openPilotActions,
+);
+// Decode a chosen .rsrc into a new roster slot, then boot it.
+document.getElementById('pilotFile').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = ''; // let the same file be re-picked later
+  if (!file) return;
+  try {
+    const save = decodePilotFile(await file.arrayBuffer(), file.name, DATA);
+    if (!Save.create(save)) {
+      showMsg('Could not save the imported pilot — browser storage is unavailable.');
+      return;
+    }
+    try {
+      sessionStorage.setItem('ve_newpilot', '1');
+    } catch {}
+    location.reload();
+  } catch (err) {
+    showMsg('Import failed: ' + err.message);
+  }
+});
+
 document.getElementById('hotEnter').onclick = () => {
   if (SAVED) enterGame();
   else needPilot();
 };
-document.getElementById('hotOpen').onclick = () => {
-  if (SAVED) enterGame();
-  else needPilot();
-};
-document.getElementById('hotNew').onclick = () => {
-  if (!SAVED || confirm('Start a new pilot? Your saved pilot will be erased.')) startNewPilot();
-};
+document.getElementById('hotOpen').onclick = () => openPilotDialog.open();
+document.getElementById('hotNew').onclick = () => startNewPilot();
 document.getElementById('hotAbout').onclick = titleAbout;
 document.getElementById('hotPrefs').onclick = titlePrefs;
 document.getElementById('hotQuit').onclick = () =>
