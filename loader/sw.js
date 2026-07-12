@@ -95,9 +95,12 @@ self.addEventListener('fetch', (e) => {
   }
 
   // Other in-scope assets: stale-while-revalidate — instant from cache, refreshed
-  // in the background so an update lands on the next load.
+  // in the background so an update lands on the next load. The revalidation is
+  // tied to e.waitUntil so the SW isn't killed after respondWith resolves (which
+  // would cancel the fetch/cache.put and leave the cache stale).
   e.respondWith(
-    caches.open(SHELL).then(async (cache) => {
+    (async () => {
+      const cache = await caches.open(SHELL);
       const cached = await cache.match(req);
       const network = fetch(req)
         .then((resp) => {
@@ -105,7 +108,8 @@ self.addEventListener('fetch', (e) => {
           return resp;
         })
         .catch(() => cached);
+      e.waitUntil(network.catch(() => {})); // keep the worker alive until it settles
       return cached || network;
-    }),
+    })(),
   );
 });
