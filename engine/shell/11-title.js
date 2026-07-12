@@ -3,7 +3,6 @@ import {
   SAVED,
   Save,
   html,
-  pilotBorn,
   pilotName,
   shipName,
   ships,
@@ -12,6 +11,7 @@ import {
 } from './01-state.js';
 import { armAudioUnlock, startTitleMusic, stopTitleMusic } from './03-sound.js';
 import { combatRating, legalStatus } from './13-legal.js';
+import { formatDate } from './08-missions.js';
 import { render } from './10-render.js';
 import { Dialog } from './ui/dialog.js';
 import { decodePilotFile } from './ui/pilot-import.js';
@@ -128,35 +128,9 @@ export function titlePrefs() {
  * original does), drawn on the canvas so it scales with the framed art. */
 export function gameDate() {
   // Classic EV starts the calendar at the pilot's creation date + 250 years and
-  // advances it one day per hyperspace jump (gameDay). Anchored to the stored
-  // creation epoch so the date is stable across sessions.
-  const base = new Date(pilotBorn);
-  const d = new Date(base.getFullYear() + 250, base.getMonth(), base.getDate());
-  d.setDate(d.getDate() + S.gameDay);
-  const months = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
-  const day = d.getDate();
-  const suf =
-    day % 10 === 1 && day !== 11
-      ? 'st'
-      : day % 10 === 2 && day !== 12
-        ? 'nd'
-        : day % 10 === 3 && day !== 13
-          ? 'rd'
-          : 'th';
-  return `${months[d.getMonth()]} ${day}${suf}, ${d.getFullYear()}`;
+  // advances it one day per hyperspace jump (gameDay). formatDate does the work;
+  // this is just "the current day".
+  return formatDate(S.gameDay);
 }
 export function renderTitleSummary() {
   const cv = document.getElementById('titleView');

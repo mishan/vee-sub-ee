@@ -60,6 +60,29 @@
   #landed button:hover:not(:disabled), #service button:hover:not(:disabled) { background: #24304d; }
   #landed .wallet, #service .wallet { margin-top: 10px; color: #8fa3c8; font-size: 12px; }
   #landed .wallet b, #service .wallet b { color: #fff; }
+  /* Active Missions dialog (press I in flight) — list + detail + Abort/Done,
+     modelled on the original EV "Currently active missions" window. */
+  #missions { position: fixed; inset: 0; display: none; z-index: 4;
+    align-items: center; justify-content: center; background: rgba(0,0,0,.55); }
+  #missions .card { width: min(560px, 94vw); max-height: 88vh; overflow-y: auto;
+    background: #0c1120; border: 1px solid #2a3550; border-radius: 8px;
+    padding: 18px 22px; box-shadow: 0 12px 48px rgba(0,0,0,.8); }
+  #missions h2 { margin: 0 0 10px; color: #fff; font-size: 15px; }
+  #missions .mcols { display: flex; gap: 14px; }
+  #missions .mlist { flex: 1; min-width: 190px; max-height: 300px; overflow-y: auto;
+    border: 1px solid #26304a; border-radius: 4px; padding: 4px; }
+  #missions .mrow { padding: 4px 6px; font-size: 13px; cursor: pointer; border-radius: 3px;
+    color: #cfd6e4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #missions .mrow.sel { background: #1f6f3a; color: #eafff0; }
+  #missions .mrow:hover:not(.sel) { background: #1a2338; }
+  #missions .mdetail { flex: 1.25; min-width: 210px; max-height: 300px; overflow-y: auto;
+    color: #aab6cc; font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+  #missions .mdetail .msub { color: #7c8aa6; font-size: 12px; margin-top: 8px; white-space: normal; }
+  #missions .mbtns { display: flex; justify-content: space-between; margin-top: 16px; }
+  #missions button { background: #1a2338; color: #cfd6e4; border: 1px solid #2a3550;
+    border-radius: 4px; padding: 6px 16px; font-size: 13px; cursor: pointer; }
+  #missions button:hover:not(:disabled) { background: #24304d; }
+  #missions button:disabled { opacity: .35; cursor: default; }
   /* classic shop layout: thumbnail grid (sliced from the original menu
      sheets, PICT 5100/6100) + detail pane with the 100×100 dialog art */
   .shop { display: flex; gap: 16px; margin-top: 10px; }
@@ -277,6 +300,7 @@
   <div id="deadHint">Press R to try again</div>
 </div></div>
 <div id="hail"><div class="card" id="hailCard"></div></div>
+<div id="missions"><div class="card" id="missionsCard"></div></div>
 <div id="splash">
   <div id="splashFrame">
     <div id="splashPrompt">Press any key to continue</div>

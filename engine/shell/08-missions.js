@@ -7,6 +7,7 @@ import {
   outfits,
   params,
   legal,
+  pilotBorn,
   ships,
   showMsg,
   systs,
@@ -147,13 +148,38 @@ export function offeredMissions(p, loc) {
   return out;
 }
 
-/* A game "date": gameDay counts days since a fixed epoch. Classic EV shows
- * real calendar dates; we render day N of an in-fiction year for flavor. */
+/* Render an absolute gameDay as the real in-game calendar date, e.g.
+ * "May 3rd, 2276" — the same clock the title/map show (pilot's creation date +
+ * 250 years, advanced one day per jump). gameDate() in 11-title is just this
+ * called with the current day. */
+const DATE_MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
 export function formatDate(day) {
-  const YEAR0 = 1177,
-    DPY = 365;
-  const y = YEAR0 + Math.floor(day / DPY);
-  return `day ${(day % DPY) + 1}, NC ${y}`;
+  const base = new Date(pilotBorn);
+  const d = new Date(base.getFullYear() + 250, base.getMonth(), base.getDate());
+  d.setDate(d.getDate() + day);
+  const dd = d.getDate();
+  const suf =
+    dd % 10 === 1 && dd !== 11
+      ? 'st'
+      : dd % 10 === 2 && dd !== 12
+        ? 'nd'
+        : dd % 10 === 3 && dd !== 13
+          ? 'rd'
+          : 'th';
+  return `${DATE_MONTHS[d.getMonth()]} ${dd}${suf}, ${d.getFullYear()}`;
 }
 
 /* Substitute EV mission text placeholders from a resolved offer/mission A.
@@ -467,30 +493,6 @@ export function checkExpiredMissions() {
       showMsg(`Mission failed (out of time): ${misnName(misns[A.id], A)}`);
     }
   }
-}
-/* I in flight: briefing for the active missions (QuickBrief). */
-export function showMissionBriefing() {
-  if (!missionLog.count) {
-    showMsg('No active missions.');
-    return;
-  }
-  const lines = missionLog.list.map((a) => {
-    const destId = a.travelStel != null ? a.travelStel : a.returnStel;
-    const dest =
-      destId != null
-        ? `${stelName(destId)}${systOfSpob(spobById(destId)) ? ' (' + systOfSpob(spobById(destId)).name + ')' : ''}`
-        : '—';
-    const days =
-      a.timeLimit > 0 ? `, ${Math.max(0, a.timeLimit - (S.gameDay - a.accepted))}d left` : '';
-    const goal =
-      a.shipsLeft > 0
-        ? `${a.shipsLeft} ships remain`
-        : a.cargoName
-          ? `deliver ${a.cargoQty}t ${a.cargoName}`
-          : `go to ${dest}`;
-    return `${a.name}: ${goal} → ${dest}${days}`;
-  });
-  showMsg(lines.join('  |  '));
 }
 export function payMission(m) {
   const v = m.PayVal;
