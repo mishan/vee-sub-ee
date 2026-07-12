@@ -105,8 +105,19 @@ const pyRaw = (my) => cssH() / 2 + (my - view.cy) * view.scale;
  * 9501+3i — the normal-zoom variant of its three (9500/9502 are the zoomed
  * out/in ones). Positioned by XPos/YPos (top-left) and sized by XSize/YSize in
  * map coordinates, the same space as the systems. Drawn additively so the black
- * image background adds nothing and the cloud glows over the star field. */
+ * image background adds nothing and the cloud glows over the star field. Hidden
+ * (fog) until the player has explored a system within the nebula's bounds — you
+ * can't see phenomena over regions you've never visited. */
 const nebImgs = {};
+function nebExplored(n) {
+  const x1 = n.XPos + n.XSize,
+    y1 = n.YPos + n.YSize;
+  for (const id of explored) {
+    const s = systs[id];
+    if (s && s.xPos >= n.XPos && s.xPos <= x1 && s.yPos >= n.YPos && s.yPos <= y1) return true;
+  }
+  return false;
+}
 function nebImg(nebuId) {
   if (!nebImgs[nebuId]) {
     const img = new Image();
@@ -123,6 +134,7 @@ function drawNebulae(g) {
   g.globalCompositeOperation = 'lighter';
   g.globalAlpha = 0.9;
   for (const [id, n] of Object.entries(nebu)) {
+    if (!nebExplored(n)) continue; // fog: unexplored phenomena stay hidden
     const img = nebImg(+id);
     if (!img.complete || !img.naturalWidth) continue;
     g.drawImage(img, pxRaw(n.XPos), pyRaw(n.YPos), n.XSize * view.scale, n.YSize * view.scale);

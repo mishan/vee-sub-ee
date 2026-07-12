@@ -169,7 +169,9 @@ system is inhabited (has a landable spöb = a "port"):
 Background **nebulae** (nëbu resources) are drawn behind the systems: each is
 positioned by XPos/YPos (top-left) and sized by XSize/YSize in map coordinates,
 using PICT `9501+3i` (the normal-zoom variant of nëbu i's three), composited
-additively so the cloud glows over the star field. Independent (Govt −1) systems
+additively so the cloud glows over the star field. A nebula is itself subject to
+fog: it's hidden until the player has **explored a system within its bounds**, so
+phenomena over never-visited regions stay dark. Independent (Govt −1) systems
 that *have* ports still carry a legal standing (via
 the govt-128 fallback), so they're blue/red like any inhabited system — **not**
 gray. The system you're **currently in** gets a filled green dot inside its
