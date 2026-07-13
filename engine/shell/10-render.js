@@ -6,7 +6,6 @@ import {
   drawGfxFit,
   drawSpin,
   gfxImg,
-  html,
   preloadSprites,
   ships,
   spinOfShip,
@@ -14,6 +13,7 @@ import {
   sprites,
   systs,
 } from './01-state.js';
+import { html } from './ui/html.js';
 import { fuelMax, holds, player, poolKey } from './04-combat.js';
 import { updateTouchUI } from './05-input.js';
 import { distTo } from './06-interaction.js';

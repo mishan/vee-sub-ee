@@ -9,6 +9,7 @@
 import { Wallet } from './wallet.js';
 import { LegalRecord } from './legal.js';
 import { MissionLog } from './mission-log.js';
+import { html, raw } from './ui/html.js'; // the html`` primitive lives in the UI leaf now
 /* ---------------- configuration ---------------- */
 
 export const params = new URLSearchParams(location.search);
@@ -20,47 +21,6 @@ export const params = new URLSearchParams(location.search);
  * `let` in its module.) This is the groundwork for splitting the shell into
  * real ES modules. */
 export const S = {};
-
-// Escape untrusted game-data strings interpolated into innerHTML by the html``
-// tag. Escapes quotes as well as &<> because the tag is also used inside quoted
-// HTML attributes (onclick, style, …), where an unescaped quote would break out
-// of the attribute. (Quote-escaping stops attribute breakout, not script
-// injection — inline JS handler attributes must still never take untrusted
-// values.) Lives here (an early module) so later modules can call it.
-export function escapeHtml(s) {
-  return String(s).replace(
-    /[&<>"']/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
-  );
-}
-// Auto-escaping HTML template tag. `html`...`` escapes every ${interpolation}
-// unless it is trusted markup — the result of another html`` (below) or wrapped
-// in raw(). An array interpolates each element the same way and joins them, so a
-// list of html`` fragments composes without escaping while a stray plain string
-// in the array is still escaped. Since data values default to escaped, dialogs
-// can't be XSS'd by a modified data fork, and nested fragments never re-escape.
-export class SafeHtml {
-  constructor(s) {
-    this.value = s;
-  }
-  toString() {
-    return this.value;
-  }
-}
-export function raw(s) {
-  return new SafeHtml(s == null ? '' : String(s));
-} // opt out: trust this markup
-export function html(strings, ...values) {
-  const render = (v) =>
-    v instanceof SafeHtml
-      ? v.value
-      : Array.isArray(v)
-        ? v.map(render).join('')
-        : escapeHtml(v == null ? '' : v);
-  let out = strings[0];
-  for (let i = 0; i < values.length; i++) out += render(values[i]) + strings[i + 1];
-  return new SafeHtml(out);
-}
 
 // Transient status line (bottom-left). A base UI helper — kept here so every
 // module can call it without a back-edge to the interaction module.

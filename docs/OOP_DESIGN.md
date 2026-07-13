@@ -239,6 +239,10 @@ Independent of the class work; each is one branch, verified with lint,
    comm outcomes) and imports `hailDialog`/`renderHail` back. (The buttons were
    already `data-action`, not inline handlers, so no global-bridge churn.)
 4. `ui/html.js` — relocate the template primitive; rewire every importer.
+   **Done** — `html`/`raw`/`escapeHtml`/`SafeHtml` moved to the import-free leaf
+   `ui/html.js`; the 8 importers now take them from there, and 01-state imports
+   `html`/`raw` from it too (for its new-pilot dialog). `ui/html.js` is now the
+   first leaf, loaded before 01-state.
 5. `ui/landing.js`, `ui/title.js`, `ui/render.js` — relocations.
 
 Do the file separation first; the `Dialog`-class conversion (Layer 4) then
