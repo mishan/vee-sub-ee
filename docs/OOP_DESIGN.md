@@ -295,8 +295,15 @@ lands cleanly on top, one screen at a time.
    low-risk, high signal.)*
 2. **`World` object** wrapping `S.aiShips`/`S.shots`/`player` and owning
    `step()` — move the loop body out of `09-step.js` unchanged.
-3. **AI strategies** — replace the `stepWarship/stepTrader` branch with
-   `ship.ai.step(ship, world)`, one subclass per current branch.
+3. **AI strategies (done)** — the `stepWarship/stepTrader` if/else in
+   `09-step.js` is now `aiFor(ship, world).step(ship, world)`, one strategy
+   subclass per branch (`EscortAI`/`WarshipAI`/`FleeAI`/`TraderAI`). The
+   per-behavior *movement* (warship/trader/flee) is `Ship` methods
+   (`s.stepWarship`/`stepTrader`/`stepFlee`), unit-tested in core.test.mjs; the
+   strategy layer just chooses which to run, picks the target, and fires. What
+   is *not* yet extracted is the strategies' own decision helpers
+   (`combatTarget`, `aiEnemies`, escort target-selection) — see "Testability —
+   next" item 4.
 4. **`Dialog` base** for the service screens; migrate `MissionBoard`/`HireBoard`
    (just split out) to self-bound handlers; shrink the global bridge. **Done** —
    every dialog already routed its buttons through the `Dialog` data-action
@@ -333,13 +340,13 @@ zero shell or DOM risk. If it feels right, we proceed to `World`.
 - **Compatibility layer (done):** the old `EV.thrust(ship)`-style free-function
   wrappers (`thrust`, `steerToward`, `retrograde`, `integrate`, `stepPlayer`,
   `canLand`, `placeAtTakeoff`, `placeAtArrival`, `stepJumpEngage`, `applyDamage`
-  → `takeDamage`, `stepShields`→`regenShields`, `stepShot`, `stepAsteroid`) and
+  → `takeDamage`, `stepShields` → `regenShields`, `stepShot`, `stepAsteroid`) and
   the `make*` factories were **removed**. Call sites use methods
   (`ship.thrust()`, `shot.step(target)`) and construction goes through the class
   (`new EV.Ship(rec, x, y, h)`), so there's one way to do each thing and no dead
-  API. The AI steppers (`stepTrader`/`stepWarship`/`stepFlee`) remain free
-  functions pending Phase 3 (the AI-strategy extraction in "Testability — next"),
-  but now drive the ship through its methods rather than the wrappers.
+  API. The per-behavior AI movement (`stepTrader`/`stepWarship`/`stepFlee`) is
+  now `Ship` methods too, so nothing in the core is a free function over a ship
+  anymore.
 - **UI/logic separation (done):** presentation lives in `engine/shell/ui/`; the
   first slice was `ui/shops.js` and the rest followed.
 - **`GameState` shape (done):** a few focused classes rather than one big
@@ -378,9 +385,13 @@ reaching for the `DATA` global. In priority order:
 3. **Legal spread (`13-legal`).** The spread constants are already flagged as
    tuned/approximate; a pure, tested function pins down the reverse-engineered
    behavior.
-4. **AI strategies + targeting (`09-step`).** Most valuable behaviorally but
-   highest effort — the decision math is entangled with the live entity arrays,
-   so it needs a small entity stub. Do this one last.
+4. **AI targeting decisions (`09-step`).** The per-behavior *movement* is now
+   tested `Ship` methods, but the strategies' *decision* helpers — `combatTarget`
+   (who to fight), `aiEnemies` (govt hostility), and the escort/trader target
+   selection — still read the live entity arrays and govt tables directly, so
+   they're untested. Pulling those into a DOM-free module that takes the ship +
+   a plain list of candidates (plus the govt table) would make the targeting
+   logic unit-testable. Highest effort of the four; do it last.
 
 A cheaper alternative — a Node harness that stubs `DATA`/`EV`/`document` so the
 existing modules import unchanged — was considered and rejected: it tests

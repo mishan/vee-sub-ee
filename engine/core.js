@@ -7,8 +7,8 @@
  * and callers use those methods directly (`ship.thrust()`, `shot.step(target)`,
  * `new EV.Ship(rec, x, y, h)`). The old `EV.thrust(ship)`-style free-function
  * wrappers and the make* factories are gone — one way to do each thing (see
- * docs/OOP_DESIGN.md). The AI steppers below are still free functions (they
- * become strategy objects in Phase 3); they drive a ship through its methods.
+ * docs/OOP_DESIGN.md). The per-behavior AI movement (warship/trader/flee) is now
+ * `Ship` methods too; the shell's `aiFor` strategy layer picks which to run.
  *
  * An ES module: esbuild bundles it (npm run build:engine) into
  * engine/core.bundle.js — an IIFE that exposes the exports as the browser global
@@ -176,6 +176,84 @@ class Ship {
       this.shields = Math.min(shieldMax, this.shields + shieldMax / 100);
     }
   }
+
+  /* ---- AI movement (spec: "AI …") ----
+   * One frame of a behavior. The strategy layer (the shell's `aiFor`) decides
+   * which to run, picks the target, and fires; the movement math lives here on
+   * the ship (docs/OOP_DESIGN.md phase 3). */
+
+  /* AI trader state machine (spec: "AI trader"). States on this.state:
+   *   'cruise' → 'brake' → 'landed' (motionless above the planet) → 'depart'.
+   * Landing doesn't despawn the ship (the original never made ships vanish on
+   * touchdown): it holds still for landTimer frames, then takes off and heads
+   * back out. The shell (TraderAI) assigns the depart target (a system edge) and
+   * removes the ship once it's flown clear. target: {x, y}. Always returns true;
+   * the shell owns the despawn decision. */
+  stepTrader(target) {
+    this.thrusting = false;
+    if (this.state === undefined) this.state = 'cruise';
+    // Landed: hold position above the planet, counting down to takeoff.
+    if (this.state === 'landed') {
+      this.vx = 0;
+      this.vy = 0;
+      if ((this.landTimer = (this.landTimer ?? 0) - 1) <= 0) {
+        this.state = 'depart';
+        this.target = null; // shell picks an edge to leave through next frame
+      }
+      return true;
+    }
+    if (!target) {
+      this.integrate();
+      return true;
+    }
+    const dx = target.x - this.x,
+      dy = target.y - this.y;
+    const dist = Math.hypot(dx, dy);
+    const speed = Math.hypot(this.vx, this.vy);
+    // brake distance + coast while turning 180° to retrograde + pad
+    const stopDist = (speed * speed) / (2 * this.accel) + speed * (180 / this.turn) + 40;
+    if (this.state === 'cruise') {
+      const aligned = this.steerToward(bearing(dx, dy));
+      if (dist > stopDist) {
+        if (aligned) this.thrust();
+      } else this.state = 'brake';
+    } else if (this.state === 'brake') {
+      const aligned = this.steerToward(this.retrograde());
+      if (speed > 0.15) {
+        if (aligned) this.thrust();
+      } else if (dist < 80) {
+        // touchdown: sit motionless above the planet for a few seconds
+        this.state = 'landed';
+        this.landTimer = 120 + Math.floor(Math.random() * 180); // ~4–10s @30Hz
+        this.vx = 0;
+        this.vy = 0;
+        return true;
+      } else this.state = 'cruise';
+    } else if (this.state === 'depart') {
+      // head out to the edge target (set by the shell) and build up speed
+      const aligned = this.steerToward(bearing(dx, dy));
+      if (aligned) this.thrust();
+    }
+    this.integrate();
+    return true;
+  }
+
+  /* Warship attack step (spec: "Warship AI"): steer, thrust per distance bands,
+   * integrate. Returns {aligned, dist} so the shell decides firing. */
+  stepWarship(ex, ey) {
+    const dist = Math.hypot(ex - this.x, ey - this.y);
+    const aligned = this.steerToward(bearing(ex - this.x, ey - this.y));
+    if ((dist > 260 && aligned) || dist < 120) this.thrust();
+    this.integrate();
+    return { aligned, dist };
+  }
+
+  /* Flee: turn tail to the threat and burn. */
+  stepFlee(ex, ey) {
+    const aligned = this.steerToward(norm(bearing(ex - this.x, ey - this.y) + 180));
+    if (aligned) this.thrust();
+    this.integrate();
+  }
 }
 
 /* A projectile in flight (bullet / beam / homing missile / rocket). `aim` is
@@ -300,84 +378,6 @@ function shotAsteroidImpact(shot, asteroids) {
   return t < Infinity ? { x: ox + dx * t, y: oy + dy * t } : null;
 }
 
-/* ==================== AI (spec: "AI …") ====================
- * Still free functions over a ship; Phase 3 (docs/OOP_DESIGN.md) turns these
- * into strategy objects. They drive a ship through its methods. `s` is always a
- * `Ship` instance (the shell makes every entity with `new EV.Ship(…)`). */
-
-/* AI trader state machine (spec: "AI trader"). States on s.state:
- *   'cruise' → 'brake' → 'landed' (motionless above the planet) → 'depart'.
- * Landing no longer despawns the ship the way the original never made ships
- * vanish on touchdown: it sits still for s.landTimer frames, then takes off and
- * heads back out. The shell (TraderAI) assigns the depart target (a system edge)
- * and removes the ship once it's flown clear. target: {x, y}. Always returns
- * true; the shell owns the despawn decision now. */
-function stepTrader(s, target) {
-  s.thrusting = false;
-  if (s.state === undefined) s.state = 'cruise';
-  // Landed: hold position above the planet, counting down to takeoff.
-  if (s.state === 'landed') {
-    s.vx = 0;
-    s.vy = 0;
-    if ((s.landTimer = (s.landTimer ?? 0) - 1) <= 0) {
-      s.state = 'depart';
-      s.target = null; // shell picks an edge to leave through next frame
-    }
-    return true;
-  }
-  if (!target) {
-    s.integrate();
-    return true;
-  }
-  const dx = target.x - s.x,
-    dy = target.y - s.y;
-  const dist = Math.hypot(dx, dy);
-  const speed = Math.hypot(s.vx, s.vy);
-  // brake distance + coast while turning 180° to retrograde + pad
-  const stopDist = (speed * speed) / (2 * s.accel) + speed * (180 / s.turn) + 40;
-  if (s.state === 'cruise') {
-    const aligned = s.steerToward(bearing(dx, dy));
-    if (dist > stopDist) {
-      if (aligned) s.thrust();
-    } else s.state = 'brake';
-  } else if (s.state === 'brake') {
-    const aligned = s.steerToward(s.retrograde());
-    if (speed > 0.15) {
-      if (aligned) s.thrust();
-    } else if (dist < 80) {
-      // touchdown: sit motionless above the planet for a few seconds
-      s.state = 'landed';
-      s.landTimer = 120 + Math.floor(Math.random() * 180); // ~4–10s @30Hz
-      s.vx = 0;
-      s.vy = 0;
-      return true;
-    } else s.state = 'cruise';
-  } else if (s.state === 'depart') {
-    // head out to the edge target (set by the shell) and build up speed
-    const aligned = s.steerToward(bearing(dx, dy));
-    if (aligned) s.thrust();
-  }
-  s.integrate();
-  return true;
-}
-
-/* Warship attack step (spec: "Warship AI"): steer, thrust per distance bands,
- * integrate. Returns {aligned, dist} so the shell decides firing. */
-function stepWarship(s, ex, ey) {
-  const dist = Math.hypot(ex - s.x, ey - s.y);
-  const aligned = s.steerToward(bearing(ex - s.x, ey - s.y));
-  if ((dist > 260 && aligned) || dist < 120) s.thrust();
-  s.integrate();
-  return { aligned, dist };
-}
-
-/* Flee: turn tail to the threat and burn. */
-function stepFlee(s, ex, ey) {
-  const aligned = s.steerToward(norm(bearing(ex - s.x, ey - s.y) + 180));
-  if (aligned) s.thrust();
-  s.integrate();
-}
-
 export {
   FPS,
   maxSpeedOf,
@@ -389,7 +389,6 @@ export {
   bearing,
   Ship,
   Projectile,
-  stepTrader,
   LAND_DIST,
   LAND_SPEED,
   JUMP_FUEL,
@@ -404,6 +403,4 @@ export {
   shotAsteroidImpact,
   ASTEROID_BOUND,
   ASTEROID_RADII,
-  stepWarship,
-  stepFlee,
 };

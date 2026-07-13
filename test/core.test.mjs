@@ -188,10 +188,50 @@ test('Projectile.step: homing turns toward target and expires with life', () => 
   assert.equal(shot.step(null), false); // life hits 0
 });
 
-test('stepWarship reports distance/alignment and thrusts in the bands', () => {
+test('Ship.stepWarship reports distance/alignment and thrusts in the bands', () => {
   const s = new Ship(SHUTTLE, 0, 0, 90); // already facing the target at +x
-  const r = EV.stepWarship(s, 300, 0); // 300px away, aligned, dist > 260 → thrust
+  const r = s.stepWarship(300, 0); // 300px away, aligned, dist > 260 → thrust
   close(r.dist, 300);
   assert.equal(r.aligned, true);
   assert.equal(s.thrusting, true);
+
+  // In the dead band (120–260) an aligned warship coasts instead of burning.
+  const mid = new Ship(SHUTTLE, 0, 0, 90);
+  mid.stepWarship(200, 0);
+  assert.equal(mid.thrusting, false);
+  // ...but closes when very near (<120), even already on top of the target.
+  const near = new Ship(SHUTTLE, 0, 0, 90);
+  near.stepWarship(50, 0);
+  assert.equal(near.thrusting, true);
+});
+
+test('Ship.stepFlee turns tail to the threat and burns once aligned', () => {
+  // threat at +x (bearing 90) → flee heading is 270; start already facing 270.
+  const s = new Ship(SHUTTLE, 0, 0, 270);
+  s.stepFlee(100, 0);
+  assert.equal(s.heading, 270); // already aligned away from the threat
+  assert.equal(s.thrusting, true);
+});
+
+test('Ship.stepTrader: cruise → brake → landed → depart state machine', () => {
+  const port = { x: 0, y: 2000 }; // far off, so it keeps cruising (dist > stopDist)
+  const s = new Ship(SHUTTLE, 0, 0, 0);
+  s.stepTrader(port); // first frame: undefined → cruise
+  assert.equal(s.state, 'cruise');
+  // Close and slow: it brakes, then touches down and holds still with a timer.
+  const t = new Ship(SHUTTLE, 0, 0, 0);
+  t.vx = 0;
+  t.vy = 0;
+  t.state = 'brake';
+  t.stepTrader({ x: 0, y: 10 }); // within 80, speed ~0 → touchdown
+  assert.equal(t.state, 'landed');
+  assert.ok(t.landTimer > 0);
+  // Landed holds position and counts down; at zero it departs (target cleared).
+  const d = new Ship(SHUTTLE, 0, 0, 0);
+  d.state = 'landed';
+  d.landTimer = 1;
+  d.vx = 5; // landing pins velocity to zero
+  d.stepTrader(null);
+  assert.deepEqual([d.vx, d.vy], [0, 0]);
+  assert.equal(d.state, 'depart');
 });
