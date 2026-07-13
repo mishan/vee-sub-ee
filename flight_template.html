@@ -86,19 +86,22 @@
   /* classic shop layout: a grid of larger named item thumbnails (the per-item
      dialog art, PICT 6000/5000) + a detail pane with a big picture, stats and
      the item's description — mirrors the original outfitter/shipyard. */
-  .shop { display: flex; gap: 16px; margin-top: 10px; }
-  .shopgrid { display: grid; grid-template-columns: repeat(4, 70px); gap: 6px;
-    align-content: start; max-height: 360px; overflow-y: auto; flex: 0 0 auto; }
+  .shop { display: flex; gap: 14px; margin-top: 10px; }
+  /* the grid takes the lion's share of the width; flexible (1fr) columns keep the
+     vertical scrollbar from forcing a horizontal one, so it only scrolls up/down */
+  .shopgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+    align-content: start; max-height: 360px; overflow: hidden auto; flex: 1 1 auto;
+    min-width: 0; scrollbar-gutter: stable; }
   #service .shopcard { display: flex; flex-direction: column; align-items: center; gap: 3px;
-    width: 70px; padding: 5px 3px; margin: 0; background: #0f1524; border: 1px solid #26304a;
+    min-width: 0; padding: 5px 3px; margin: 0; background: #0f1524; border: 1px solid #26304a;
     border-radius: 4px; cursor: pointer; color: #aab6cc; font: inherit; }
-  #service .shopcard img { width: 52px; height: 52px; object-fit: contain; background: #000;
+  #service .shopcard img { width: 56px; height: 56px; object-fit: contain; background: #000;
     border-radius: 3px; }
   #service .shopcard .name { font-size: 10px; line-height: 1.15; text-align: center;
     max-height: 2.35em; overflow: hidden; }
   #service .shopcard:hover { border-color: #4a5b82; background: #16203a; }
   #service .shopcard.sel { border-color: #ffd479; box-shadow: 0 0 6px rgba(255,212,121,.45); color: #fff; }
-  .shoppane { flex: 1; min-width: 190px; }
+  .shoppane { flex: 0 0 200px; min-width: 0; }
   .shoppane img { width: 100px; height: 100px; image-rendering: pixelated;
     border: 1px solid #26304a; border-radius: 4px; background: #000; float: right; margin: 0 0 8px 10px; }
   .shoppane h3 { margin: 0 0 4px; color: #fff; font-size: 15px; }
