@@ -1,18 +1,5 @@
-import {
-  wallet,
-  COMMODITIES,
-  S,
-  hold,
-  drawGfxFit,
-  drawSpin,
-  gfxImg,
-  preloadSprites,
-  ships,
-  spinOfShip,
-  spinOfSpob,
-  sprites,
-  systs,
-} from '../01-state.js';
+import { wallet, COMMODITIES, S, hold, ships, spinOfShip, spinOfSpob, systs } from '../01-state.js';
+import { drawGfxFit, drawSpin, gfxImg, preloadSprites, sprites } from './sprites.js';
 import { html } from './html.js';
 import { fuel, holds, player, poolKey } from '../04-combat.js';
 import { updateTouchUI } from '../05-input.js';

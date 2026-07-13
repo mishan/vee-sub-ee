@@ -1,13 +1,5 @@
-import {
-  wallet,
-  S,
-  dudes,
-  escorts,
-  preloadSprites,
-  ships,
-  showMsg,
-  spinOfShip,
-} from './01-state.js';
+import { wallet, S, dudes, escorts, ships, showMsg, spinOfShip } from './01-state.js';
+import { preloadSprites } from './ui/sprites.js';
 import { attenuate, playSnd } from './03-sound.js';
 import { armShip, player } from './04-combat.js';
 import { refreshView } from './ui/dialog.js';

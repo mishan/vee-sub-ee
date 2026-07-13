@@ -14,12 +14,12 @@ import {
   hold,
   escorts,
   outfits,
-  preloadSprites,
   shipName,
   ships,
   showMsg,
   spinOfShip,
 } from './01-state.js';
+import { preloadSprites } from './ui/sprites.js';
 import { MAX_ESCORTS, addEscort } from './02-spawning.js';
 import { playSnd } from './03-sound.js';
 import {

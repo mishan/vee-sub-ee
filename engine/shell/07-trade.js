@@ -6,12 +6,12 @@ import {
   S,
   hold,
   outfits,
-  preloadSprites,
   ships,
   showMsg,
   spinOfShip,
   explored,
 } from './01-state.js';
+import { preloadSprites } from './ui/sprites.js';
 import {
   applyShipStats,
   effectiveShip,
