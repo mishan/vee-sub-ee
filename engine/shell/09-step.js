@@ -93,6 +93,9 @@ export class World {
     return S.asteroids;
   }
 
+  /* One 30 Hz tick: advance the player, the AI ships, then resolve combat
+   * (asteroids drift, shots and beams hit, explosions animate). Each phase is
+   * its own method below; this reads as the frame's outline. */
   step() {
     // dialogs/splash/title pause the sim; landed pauses too — the system is
     // frozen while docked and rebuilt fresh on takeoff; the galaxy map pauses it
@@ -108,6 +111,31 @@ export class World {
     }
     maybeSpawnBountyHunter();
     checkHostileAlert(this.ships);
+
+    this.stepPlayer();
+    this.stepShips();
+
+    // Combat resolution: the set that can be hit this frame — the player joins
+    // only while alive and in flight — and the allied test that keeps the player
+    // and their escorts from harming each other.
+    const everyone =
+      this.player.deathT < 0 && !S.landedAt && !S.gameOver
+        ? [this.player, ...this.ships]
+        : [...this.ships];
+    const alliedTo = (o) => o === this.player || o.playerEscort;
+    const friendly = (a, b) => alliedTo(a) && alliedTo(b);
+    // Asteroids drift/spin (spec: "Asteroids"); they never touch ships, only fire.
+    // Wrap around the player so the field always surrounds them in-system.
+    for (const a of this.asteroids) a.step(this.player.x, this.player.y);
+    this.stepShots(everyone, friendly);
+    this.stepBeams(everyone, friendly);
+    this.stepExplosions();
+  }
+
+  /* The player: hyperspace cues + jump engage/streak, breaking-up death, and
+   * flight control + firing. (Skipped while docked — but step() has already
+   * returned in that case, so the guard is just defensive.) */
+  stepPlayer() {
     if (!S.landedAt) {
       // One nearest-planet scan for this frame, shared by the jump cue and the
       // drift tutorial below (the player hasn't moved between them). The later
@@ -193,7 +221,11 @@ export class World {
         } else if (this.player.shields > this.player.shieldMax * 0.25) S.klaxxonArmed = true;
       }
     }
+  }
 
+  /* AI ships: run each one — disintegration + despawn/replace, warp-in coast,
+   * disabled drift, else regen/cooldowns and its chosen AI strategy. */
+  stepShips() {
     for (const s of [...this.ships]) {
       if (s.deathT >= 0) {
         // disintegrating (fireball already going)
@@ -259,19 +291,11 @@ export class World {
       // (escort / hostile-to-player / fleeing / trader) — see the AI classes.
       aiFor(s, this).step(s, this);
     }
+  }
 
-    /* shots */
-    const everyone =
-      this.player.deathT < 0 && !S.landedAt && !S.gameOver
-        ? [this.player, ...this.ships]
-        : [...this.ships];
-    // The player and their escorts are one side: their fire never harms each other.
-    const alliedTo = (o) => o === this.player || o.playerEscort;
-    const friendly = (a, b) => alliedTo(a) && alliedTo(b);
-    // Asteroids drift/spin (spec: "Asteroids"); they never touch ships, only fire.
-    // Wrap around the player so the field always surrounds them in-system.
-    for (const a of this.asteroids) a.step(this.player.x, this.player.y);
-
+  /* Projectiles vs ships and asteroids: each shot hits the first non-friendly
+   * ship in range, or is absorbed by an asteroid in its swept path. */
+  stepShots(everyone, friendly) {
     for (const shot of [...this.shots]) {
       const alive = shot.step(shot.homing);
       let hit = false;
@@ -296,8 +320,11 @@ export class World {
       }
       if (hit || !alive) this.shots.splice(this.shots.indexOf(shot), 1);
     }
+  }
 
-    /* beams: ray from owner's nose, damage first ship within 8 px */
+  /* Beams: a ray from the owner's nose that damages the nearest non-friendly
+   * ship, stopped short by any closer asteroid; b.len is the drawn length. */
+  stepBeams(everyone, friendly) {
     for (const b of [...this.beams]) {
       if (b.owner.deathT >= 0 || --b.life <= 0) {
         this.beams.splice(this.beams.indexOf(b), 1);
@@ -327,8 +354,11 @@ export class World {
       b.len = bestV ? bestT : Math.min(astT, b.rec.Speed);
       if (bestV) hitShip(bestV, b.rec, b.heading, b.owner);
     }
+  }
 
-    /* explosions */
+  /* Explosion animation (spec: "Explosions"): advance a frame every 2 ticks and
+   * drop the explosion once it runs out. */
+  stepExplosions() {
     for (const ex of [...this.explosions]) {
       if (++ex.tick % 2 === 0 && ++ex.f >= ex.frames)
         this.explosions.splice(this.explosions.indexOf(ex), 1);
