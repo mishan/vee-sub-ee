@@ -23,6 +23,7 @@ import './ui/render.js';
 import './11-title.js';
 import './12-boarding.js';
 import './13-legal.js';
+import './ui/landing.js';
 import './14-landing.js';
 import './15-pers.js';
 import './17-main.js';
