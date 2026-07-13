@@ -145,22 +145,25 @@ natural continuation of the mission-board extraction.
 
 ### Where UI lives today
 
-A quick census of the shell (counting `html\`\`` templates, `document.` access,
-canvas `ctx.` calls, and inline `onclick=` handlers) sorts the modules into
-three groups:
+A census of the shell (counting `html\`\`` templates, `document.` access, canvas
+`ctx.` calls, and inline `onclick=` handlers) originally sorted the modules into
+three groups. All the "still mixed" targets have since been split, so the census
+now reads:
 
-- **Already UI-free logic** — `02-spawning`, `03-sound`, `04-combat`,
-  `08-missions`, `12-boarding`, `13-legal`, `15-pers`. Nothing to do.
-- **Already presentation** — `10-render` (canvas: ~115 `ctx.` calls),
-  `16-missionboard` (the split we just did), most of `11-title` and
-  `14-landing`.
-- **Still mixed** — `07-trade` (trade/outfit/buy logic + three shop render
-  functions), `06-interaction` (targeting/hail logic + a hail dialog with ~22
-  inline handlers). These are the real targets.
+- **UI-free logic** — `02-spawning`, `03-sound`, `04-combat`, `08-missions`,
+  `12-boarding`, `13-legal`, `15-pers`, and now `06-interaction` (targeting +
+  hail *logic*; its dialog moved to `ui/hail.js`) and `07-trade` (trade/outfit
+  logic; its shop renderers moved to `ui/shops.js`).
+- **Presentation, under `engine/shell/ui/`** — `ui/render.js` (the canvas
+  scene/HUD, was `10-render`), `ui/missionboard.js`, `ui/shops.js`, `ui/hail.js`,
+  `ui/landing.js`, `ui/title.js`, `ui/sprites.js` (sprite/PICT drawing),
+  `ui/pilot-create.js`, plus the `ui/dialog.js` base and the `ui/html.js` tag.
 
-Plus one cross-cutting item: the `html` / `SafeHtml` / `escapeHtml` template
-tag lives in `01-state.js` (the state leaf), even though it's a pure UI
-primitive used everywhere.
+The two originally-mixed modules — `07-trade` and `06-interaction` — are done:
+each dialog's markup + `data-action` handlers live in its `ui/*` module, and the
+inline-`onclick` bridge is gone. The cross-cutting item is resolved too: the
+`html`/`SafeHtml`/`escapeHtml` template tag was relocated from the `01-state`
+leaf to `ui/html.js`, its proper home.
 
 ### Target: an `engine/shell/ui/` subfolder
 
