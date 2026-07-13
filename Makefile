@@ -13,6 +13,8 @@ DATA    ?= EV_data/EV Data.rsrc
 APP     ?= EV_data/EV_1.0.5/Escape Velocity.rsrc
 RAW     ?= EV_data
 ASSETS  ?= evassets
+# SIT is the StuffIt archive the `unsit` target decompresses (see that target).
+SIT     ?= EV_data/Escape-Velocity_Mac_EN_RIP.sit
 SCHEMAS := $(wildcard schemas/*.json)
 ESBUILD ?= node_modules/.bin/esbuild   # from `npm install` (devDependency)
 
@@ -59,6 +61,13 @@ flight: flight.html
 galaxy: galaxy.html
 data:   evdata.json
 
+## unsit         – decompress the dev resource forks out of the StuffIt archive
+##                 ($(SIT)) into EV_data/ — the DATA/APP + asset-conversion source.
+##                 Uses the loader's own StuffIt decoder (no external unstuffer);
+##                 the .sit is the source of truth (see loader/README.md).
+unsit:
+	node loader/evsit.js extract "$(SIT)" "$(RAW)"
+
 ## assets        – convert PICT/snd → PNG/WAV and composite sprite sheets
 ##                 (needs resource_dasm + ImageMagick on PATH; see CLAUDE.md)
 assets:
@@ -94,4 +103,4 @@ help:
 	@echo "Vₑ make targets:"
 	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/^## /  /'
 
-.PHONY: flight galaxy data assets sprites schemas selftest verify test clean help
+.PHONY: flight galaxy data unsit assets sprites schemas selftest verify test clean help
