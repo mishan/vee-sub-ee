@@ -1,9 +1,20 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { PilotStore } from '../engine/shell/save.js';
 
 // PilotStore reads `localStorage` and `DATA` only inside its methods, so it
 // imports in node; we stub those globals to exercise the roster/slot machinery.
+// Capture and restore any pre-existing globals so this file doesn't leak stubs
+// into other suites sharing the process.
+const origLocalStorage = globalThis.localStorage;
+const origDATA = globalThis.DATA;
+after(() => {
+  if (origLocalStorage === undefined) delete globalThis.localStorage;
+  else globalThis.localStorage = origLocalStorage;
+  if (origDATA === undefined) delete globalThis.DATA;
+  else globalThis.DATA = origDATA;
+});
+
 function fakeLocalStorage() {
   const m = new Map();
   return {
@@ -121,4 +132,20 @@ test('_migrateLegacy absorbs a stray ve_pilot blob into a fresh active slot', ()
   assert.equal(r[0].name, 'Legacy');
   assert.equal(PilotStore._get(PilotStore.LEGACY), null); // the legacy blob is consumed
   assert.equal(PilotStore.read(PilotStore.activeId()).name, 'Legacy');
+});
+
+test('_migrateLegacy does not re-import when removeItem throws (no duplicate pilots)', () => {
+  // A storage whose removeItem always fails (e.g. locked). The legacy key must
+  // still be neutralized so a second roster() doesn't import it again.
+  const m = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (m.has(k) ? m.get(k) : null),
+    setItem: (k, v) => m.set(k, String(v)),
+    removeItem: () => {
+      throw new Error('storage locked');
+    },
+  };
+  PilotStore._set(PilotStore.LEGACY, { v: 2, name: 'Legacy', ship: 128 });
+  assert.equal(PilotStore.roster().length, 1); // imported once
+  assert.equal(PilotStore.roster().length, 1); // second pass: NOT re-imported
 });

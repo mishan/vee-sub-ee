@@ -78,7 +78,12 @@ export const PilotStore = {
       this._set(this.ACTIVE, id);
       try {
         localStorage.removeItem(this.LEGACY);
-      } catch {}
+      } catch {
+        // Removal failed (locked storage): neutralize the key so the next
+        // roster()/load() doesn't re-import the same blob into a duplicate slot.
+        // We're inside `if (this._set(...))`, so _set is working here.
+        this._set(this.LEGACY, null);
+      }
     }
   },
   _newId() {
