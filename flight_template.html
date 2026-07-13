@@ -126,6 +126,14 @@
     margin: 4px 0; cursor: pointer; font-size: 13px; }
   #hail button:hover:not(:disabled) { background: #24304d; }
   #hail button:disabled { opacity: .4; cursor: default; }
+  /* Keep the canvas sidebar panel (shield/fuel/target/cargo) fully visible while
+     a dialog is open: inset each modal's dim to the panel's left edge instead of
+     covering it. --panel-w is the panel's live width, published by drawPanel.
+     Desktop only — touch devices use their own HUD and want the full width. */
+  body:not(.touch) #landed,
+  body:not(.touch) #service,
+  body:not(.touch) #missions,
+  body:not(.touch) #hail { right: var(--panel-w, 0); }
   /* loading splash: PICT 131, sits above the title menu so it can reveal it */
   #splash { position: fixed; inset: 0; display: none; align-items: center;
     justify-content: center; background: #000; z-index: 55; opacity: 1;

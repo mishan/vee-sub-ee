@@ -189,12 +189,21 @@ export function panelText(
   ctx.textAlign = 'left';
 }
 
+let publishedPanelW = -1; // last --panel-w written to the DOM (see drawPanel)
 export function drawPanel(w, h) {
   const pw = 144,
     ph = 480;
   // Shrink the fixed 144×480 sidebar to fit short (mobile landscape) screens;
   // no-op on desktop where the viewport is taller than the panel.
   const psc = Math.min(1, h / ph);
+  // Publish the panel's on-screen width (CSS px) so the dialog overlays can inset
+  // their dim to its left edge and leave the sidebar's ship stats fully visible.
+  // Cached: only touch the DOM when it actually changes (avoids per-frame recalc).
+  const cssW = pw * psc;
+  if (cssW !== publishedPanelW) {
+    publishedPanelW = cssW;
+    document.documentElement.style.setProperty('--panel-w', cssW + 'px');
+  }
   // Snap the panel origin to a whole device pixel. Vertical-centering with an
   // odd window height (or a fractional DPR) otherwise lands it on a half pixel,
   // smearing the bitmap's 1px beveled separators into wavy lines.
