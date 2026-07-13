@@ -64,23 +64,35 @@ export function renderExchange() {
     <th style="text-align:right">Held</th><th></th></tr>${rows}</table>${walletHtml()}`;
 }
 
-/* Classic shop layout. Menu-sheet thumbnails: outfit i (id−128) lives at
- * cell (i%8, ⌊i/8⌋) of PICT 6100; ships likewise in PICT 5100. Large
- * 100×100 dialog art: outfit → PICT 6000+i, ship → PICT 5000+i.
- *
- * Only items actually available here are shown — no empty or grayed slots (the
- * grid compacts; each thumbnail is still sliced from the item's fixed cell in
- * the original menu sheet). */
-export function shopGrid(sheet, items, selId, clickFn) {
-  const cells = items.map(({ id }) => {
-    const i = id - 128;
-    return html`<button class="cell${id === selId ? ' sel' : ''}"
-      style="background-image:url(evassets/graphics/${sheet});
-             background-position:-${(i % 8) * 32}px -${Math.floor(i / 8) * 32}px"
-      data-action="${clickFn}" data-arg="${id}"></button>`;
-  });
+/* Classic shop layout: a grid of named item thumbnails. Each cell shows the
+ * item's own dialog picture (outfit → PICT 6000+i, ship → PICT 5000+i, passed as
+ * `picBase`) with its name below — larger and labelled, like the original shops.
+ * Only items actually available here are shown; `nameFn(id)` gives the label. */
+export function shopGrid(picBase, items, selId, clickFn, nameFn) {
+  const cells = items.map(
+    ({ id }) => html`<button
+      class="shopcard${id === selId ? ' sel' : ''}"
+      data-action="${clickFn}"
+      data-arg="${id}"
+      title="${nameFn(id)}"
+    >
+      <img src="evassets/graphics/PICT_${picBase + (id - 128)}.png" alt="" onerror="this.style.visibility='hidden'" />
+      <span class="name">${nameFn(id)}</span>
+    </button>`,
+  );
   return html`<div class="shopgrid">${cells}</div>`;
 }
+
+// The item's flavour description (dësc resource): outfits at 3000+i, ships at
+// 2000+i — the same text the original shops show beside the picture.
+const outfitDesc = (id) => {
+  const d = DATA.types.desc[3000 + (id - 128)];
+  return d && d.Description ? d.Description : '';
+};
+const shipDesc = (id) => {
+  const d = DATA.types.desc[2000 + (id - 128)];
+  return d && d.Description ? d.Description : '';
+};
 
 export function renderOutfitter() {
   const p = S.landedAt;
@@ -105,13 +117,14 @@ export function renderOutfitter() {
       <div class="row">Cost: <b>${o.Cost.toLocaleString('en-US')}</b> cr</div>
       <div class="row">Mass: <b>${o.Mass}</b> tons</div>
       <div class="row">Owned: <b>${own}</b></div>
+      <div class="desc">${outfitDesc(S.selOutfitId)}</div>
       <div style="margin-top:10px">
         <button class="svc" data-action="buyOutfit" data-arg="${S.selOutfitId}:1" ${canBuy ? '' : 'disabled'}>Buy</button>
         <button class="svc" data-action="buyOutfit" data-arg="${S.selOutfitId}:-1" ${own < 1 ? 'disabled' : ''}>Sell</button>
       </div></div>`;
   }
   return html`<h2>Outfitter</h2><div class="meta">${p.name} · tech ${p.TechLevel}</div>
-     <div class="shop">${shopGrid('PICT_6100.png', items, S.selOutfitId, 'selectOutfit')}${pane}</div>${walletHtml()}`;
+     <div class="shop">${shopGrid(6000, items, S.selOutfitId, 'selectOutfit', outfitName)}${pane}</div>${walletHtml()}`;
 }
 
 export function renderShipyard() {
@@ -135,11 +148,12 @@ export function renderShipyard() {
       <div class="row">Cargo <b>${r.Holds}</b>t · Outfit space <b>${r.FreeMass}</b>t</div>
       <div class="row">Fuel <b>${r.Fuel / 100}</b> jumps · Crew <b>${r.Crew}</b></div>
       <div class="row">Guns <b>${r.MaxGun}</b> · Turrets <b>${r.MaxTur}</b></div>
+      <div class="desc">${shipDesc(S.selShipId)}</div>
       <div style="margin-top:10px">
         <button class="svc" data-action="buyShip" data-arg="${S.selShipId}" ${own || (net > 0 && !wallet.canAfford(net)) ? 'disabled' : ''}>Buy</button>
       </div></div>`;
   }
   return html`<h2>Shipyard</h2><div class="meta">${p.name} · tech ${p.TechLevel} ·
        trade-in: 25% of hull + upgrades (${refund.toLocaleString('en-US')} cr)</div>
-     <div class="shop">${shopGrid('PICT_5100.png', items, S.selShipId, 'selectShip')}${pane}</div>${walletHtml()}`;
+     <div class="shop">${shopGrid(5000, items, S.selShipId, 'selectShip', shipyardName)}${pane}</div>${walletHtml()}`;
 }
