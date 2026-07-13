@@ -57,8 +57,10 @@ export function toggleFastForward() {
   manualFF = !manualFF;
   applyFF();
 }
-/* Keyboard-activate the desktop 2× pill (Enter/Space) without the keypress
- * also leaking through to the flight controls. */
+/* The desktop 2× pill toggles on click (self-bound, no global-onclick bridge)
+ * and on keyboard-activation (Enter/Space) without the keypress also leaking
+ * through to the flight controls. */
+document.getElementById('ff').addEventListener('click', () => toggleFastForward());
 document.getElementById('ff').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') {
     e.preventDefault();

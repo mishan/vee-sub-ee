@@ -267,9 +267,9 @@ lands cleanly on top, one screen at a time.
 - **Churn vs. review.** A big-bang refactor is unreviewable and risks silent
   behavior drift. Everything below is incremental and individually verifiable
   with the existing harness (lint + `npm test` + headless boot screenshots).
-- **The bundle/global bridge.** Screens that self-bind handlers reduce globals,
-  but some inline handlers may remain during the transition; that's fine — the
-  bridge and `addEventListener` can coexist per-dialog.
+- **The bundle/global bridge.** Screens that self-bind handlers reduce globals.
+  (Resolved: all handlers are self-bound now and the `Object.assign(globalThis, …)`
+  bridge has been retired — see phase 4 below.)
 
 ## Migration path (each phase ships green)
 
@@ -282,9 +282,17 @@ lands cleanly on top, one screen at a time.
 3. **AI strategies** — replace the `stepWarship/stepTrader` branch with
    `ship.ai.step(ship, world)`, one subclass per current branch.
 4. **`Dialog` base** for the service screens; migrate `MissionBoard`/`HireBoard`
-   (just split out) to self-bound handlers; shrink the global bridge.
+   (just split out) to self-bound handlers; shrink the global bridge. **Done** —
+   every dialog already routed its buttons through the `Dialog` data-action
+   delegation (self-bound); the last consumers of the `Object.assign(globalThis,…)`
+   bridge were three inline `onclick`s in the flight chrome (Take Off, ◀
+   Back, the 2× pill). Those now `addEventListener` in their owning modules
+   (14-landing, ui/services, 05-input), so **the global bridge is retired** — no
+   shell export is exposed as a global (EV/DATA/MANIFEST/NAMES stay ambient from
+   the flight.html `<script>`).
 5. **`GameState`** — fold `S` onto a class cluster by cluster (credits/cargo,
-   legal record, missions), adding methods that guard invariants.
+   legal record, missions), adding methods that guard invariants. (Wallet,
+   LegalRecord and MissionLog are already extracted; the rest of `S` remains.)
 
 Phases 1–2 are pure internal structure and reversible. 3–5 change real seams
 and each deserves its own branch + Copilot review, in the usual stacked order.
