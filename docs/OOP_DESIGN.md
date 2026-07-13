@@ -1,8 +1,11 @@
 # Toward an object-oriented Vₑ — a design proposal
 
-Status: **proposal / for discussion.** Nothing here is implemented yet. This
-scopes a direction and a migration path; the intent is to agree on the target
-and the first slice before writing code.
+Status: **implemented.** What began as a proposal has shipped: the four-layer
+target below is in place, every migration phase (1–5) and every UI slice landed
+on its own branch, and `npm test` stays green. This document is now a record of
+the design and its rationale rather than a plan. The one open thread —
+*testability of the procedural shell* — is scoped in "Testability — next" at the
+end.
 
 ## Why
 
@@ -325,14 +328,61 @@ zero shell or DOM risk. If it feels right, we proceed to `World`.
 
 ## Decisions & open questions
 
-- **Timing (decided):** stay a proposal for now — no implementation yet.
-  Revisit when we're ready to start Phase 1.
-- **Compatibility layer (decided):** do **not** keep the old `EV.thrust(ship)`
-  function exports long-term. Migrate call sites to methods and delete the free
-  functions, so there's one way to do each thing and no dead API.
-- **UI/logic separation (decided):** presentation moves into an
-  `engine/shell/ui/` subfolder (see the section above). Planned only for now —
-  no extraction yet; recommended first slice is `ui/shops.js`.
-- **Decided — `GameState` shape:** a few focused classes rather than one big
-  `GameState`. `Wallet`, `LegalRecord`, `MissionLog` and `Hold` are each their
-  own DOM-free, unit-tested class; the `S` bag keeps the transient glue.
+- **Timing (done):** implemented in stacked branches, Phase 1 first, each
+  shipping green — exactly as recommended.
+- **Compatibility layer (outstanding):** the original intent was to delete the
+  old `EV.thrust(ship)`-style free functions once call sites moved to methods.
+  In practice the free-function exports (`thrust`, `steerToward`, `stepShot`,
+  `stepWarship`, `makeShip`) were **kept** as thin wrappers over the
+  `Ship`/`Projectile` methods, and the shell (and core's own AI steppers) still
+  call them — e.g. `EV.thrust(this.player)` in 09-step, `EV.makeShip(…)` in
+  02-spawning. Migrating those call sites to methods and removing the wrappers
+  is still to do; it pairs naturally with the AI-strategy extraction in
+  "Testability — next" below.
+- **UI/logic separation (done):** presentation lives in `engine/shell/ui/`; the
+  first slice was `ui/shops.js` and the rest followed.
+- **`GameState` shape (done):** a few focused classes rather than one big
+  `GameState`. `Wallet`, `LegalRecord`, `MissionLog`, `Hold`, `Outfits` and
+  `Fuel` are each their own DOM-free, unit-tested class; the `S` bag keeps the
+  transient glue.
+
+## Testability — next
+
+The migration cleaned up the two layers it set out to clean: the DOM-free core
+(`engine/core.js`) and the *state invariants* (the focused `Wallet`/`Hold`/… 
+classes). Both are Node-importable and unit-tested. It deliberately left the
+**procedural shell** alone, and that's where the remaining mess — and the
+remaining untestability — lives.
+
+The tell: the big shell modules (`08-missions`, `07-trade`, `04-combat`,
+`09-step`, `06-interaction`, `13-legal`, `02-spawning`) can't even be *imported*
+in Node — `import('./engine/shell/08-missions.js')` throws `location is not
+defined`, because they read ambient globals (`DATA`/`document`/`EV`) at
+module-eval time. That import barrier quarantines the *pure* logic living inside
+them. `08-missions` alone holds ~10 pure functions (`missionAvailable`,
+`resolveStel`, `availStelMatch`, `goalSupported`, `govtAllies/Enemies`, the
+bit-set helpers, `formatDate`) that take records and return values — untestable
+only because line 30 evaluates `DATA.types.misn` on load.
+
+**Plan:** extend the pattern already proven by `mission-cargo.js` — lift the
+pure rules out of each procedural module into a DOM-free sibling that both the
+shell and a test import, passing the data records in as arguments instead of
+reaching for the `DATA` global. In priority order:
+
+1. **Mission rules → `missions-rules.js`.** Highest value: the most branching
+   logic in the shell, the area where the cargo/accept bugs surfaced, and
+   currently zero unit coverage.
+2. **Trade / pricing.** `priceAt`, `techAvailable`, `tradeInValue`, `refuelCost`
+   — self-contained math, an easy win.
+3. **Legal spread (`13-legal`).** The spread constants are already flagged as
+   tuned/approximate; a pure, tested function pins down the reverse-engineered
+   behavior.
+4. **AI strategies + targeting (`09-step`).** Most valuable behaviorally but
+   highest effort — the decision math is entangled with the live entity arrays,
+   so it needs a small entity stub. Do this one last.
+
+A cheaper alternative — a Node harness that stubs `DATA`/`EV`/`document` so the
+existing modules import unchanged — was considered and rejected: it tests
+against a fake `DATA` and leaves the ambient-global coupling in place. The
+extraction path is the one already proven here and matches this document's
+philosophy (a DOM-free core that owns its logic), so it wins.

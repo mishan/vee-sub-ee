@@ -16,6 +16,7 @@ import { weighted } from './02-spawning.js';
 import { applyShipStats, armShip, player } from './04-combat.js';
 import { legalOf, applyGovtDelta, pardonGovt } from './13-legal.js';
 import { rollCargoQty } from './mission-cargo.js';
+import * as rules from './missions-rules.js';
 
 /*
  * engine/shell/08-missions.js — part of the browser flight shell.
@@ -34,69 +35,22 @@ export const MISN_ALL = params.has('allmissions'); // test: ignore AvailRandom r
 export const allSpobs = () => Object.entries(DATA.types.spob).map(([id, p]) => ({ id: +id, ...p }));
 export const spobById = (id) => DATA.types.spob[id];
 export const systOfSpob = (p) => p && systs[p.System];
-export const bitReq = (v) => {
-  // AvailBitSet-style code check
-  if (v < 0) return true;
-  if (v >= 1000) return !missionLog.bit(v - 1000);
-  return missionLog.bit(v);
-};
-export function setBitCode(v) {
-  // CompBitSet-style: 0-511 set, 1000-1511 clear
-  if (v == null || v < 0) return; // classic misn lacks some Nova bit fields
-  if (v >= 1000) missionLog.clearBit(v - 1000);
-  else missionLog.setBit(v);
-}
+// The record-only mission rules live in missions-rules.js (DOM-free, unit-tested);
+// these thin wrappers thread this module's data tables (the govt/spöb tables, the
+// mission log's bit store, the pilot birthdate) so the public API is unchanged.
+export const bitReq = (v) => rules.bitReq(v, missionLog);
+export const setBitCode = (v) => rules.setBitCode(v, missionLog);
 export const field = (m, k, dflt = -1) => (m[k] == null ? dflt : m[k]); // classic vs Nova
+export const govtAllies = (g) => rules.govtAllies(g, govts);
+export const govtEnemies = (g) => rules.govtEnemies(g, govts);
 
-// govt relations (from $sem flags we don't have allies as data; use gövt Ally/Enemy)
-export function govtAllies(g) {
-  const r = govts[g];
-  return r ? [r.Ally].filter((a) => a >= 128) : [];
-}
-export function govtEnemies(g) {
-  const r = govts[g];
-  return r ? [r.Enemy].filter((a) => a >= 128) : [];
-}
-
-/* Resolve an AvailStel/TravelStel/ReturnStel code to a concrete spob id.
- * `here` is the spob the mission is being offered/accepted at. Returns a
- * spob id, or null if unresolvable. */
-export function resolveStel(code, here) {
-  const inhabited = () => allSpobs().filter((p) => p.$sem && !p.$sem.uninhabited && p.$sem.canLand);
-  const uninhab = () => allSpobs().filter((p) => p.$sem && p.$sem.uninhabited);
-  const pick = (arr) => (arr.length ? arr[Math.floor(Math.random() * arr.length)].id : null);
-  if (code === -1) return null; // no specific dest / any (caller decides)
-  if (code === -2) return pick(inhabited());
-  if (code === -3) return pick(uninhab());
-  if (code === -4) return here ? here.id : null;
-  if (code >= 128 && code <= 1627) return spobById(code) ? code : null;
-  const govtPick = (g, filter) => pick(inhabited().filter((p) => filter(p.Govt, g)));
-  if (code >= 9999 && code <= 10127) return govtPick(code - 9999, (pg, g) => pg === g);
-  if (code >= 15000 && code <= 15127)
-    return govtPick(code - 15000, (pg, g) => govtAllies(g).includes(pg));
-  if (code >= 20000 && code <= 20127) return govtPick(code - 20000, (pg, g) => pg !== g);
-  if (code >= 25000 && code <= 25127)
-    return govtPick(code - 25000, (pg, g) => govtEnemies(g).includes(pg));
-  return null;
-}
-
-/* Does mission m's AvailStel match the spob `p`? */
-export function availStelMatch(code, p) {
-  if (code === -1) return p.$sem && !p.$sem.uninhabited && p.$sem.canLand;
-  if (code >= 128 && code <= 1627) return p.id === code;
-  const g = (c) => code - c;
-  if (code >= 9999 && code <= 10127) return p.Govt === g(9999);
-  if (code >= 15000 && code <= 15127) return govtAllies(g(15000)).includes(p.Govt);
-  if (code >= 20000 && code <= 20127) return p.Govt !== g(20000);
-  if (code >= 25000 && code <= 25127) return govtEnemies(g(25000)).includes(p.Govt);
-  return false;
-}
-
-/* Which goal types can we actually complete? Others aren't offered. */
-export function goalSupported(m) {
-  if (m.ShipCount > 0 && m.ShipGoal >= 0) return [0, 1, 2, 3, 4, 5, 6].includes(m.ShipGoal);
-  return true; // cargo delivery / plain go-to
-}
+/* Resolve an AvailStel/TravelStel/ReturnStel code to a concrete spob id, and
+ * match a code against a spöb — pure logic in missions-rules.js; these wrappers
+ * pass in the spöb/govt tables. `goalSupported` is fully pure (re-exported). */
+export const resolveStel = (code, here) =>
+  rules.resolveStel(code, here, { spobs: DATA.types.spob, govts });
+export const availStelMatch = (code, p) => rules.availStelMatch(code, p, govts);
+export const goalSupported = rules.goalSupported;
 export function playerAI() {
   return ships[S.playerShipId].InherentAI;
 }
@@ -150,38 +104,9 @@ export function offeredMissions(p, loc) {
 }
 
 /* Render an absolute gameDay as the real in-game calendar date, e.g.
- * "May 3rd, 2276" — the same clock the title/map show (pilot's creation date +
- * 250 years, advanced one day per jump). gameDate() in 11-title is just this
- * called with the current day. */
-const DATE_MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-export function formatDate(day) {
-  const base = new Date(pilotBorn);
-  const d = new Date(base.getFullYear() + 250, base.getMonth(), base.getDate());
-  d.setDate(d.getDate() + day);
-  const dd = d.getDate();
-  const suf =
-    dd % 10 === 1 && dd !== 11
-      ? 'st'
-      : dd % 10 === 2 && dd !== 12
-        ? 'nd'
-        : dd % 10 === 3 && dd !== 13
-          ? 'rd'
-          : 'th';
-  return `${DATE_MONTHS[d.getMonth()]} ${dd}${suf}, ${d.getFullYear()}`;
-}
+ * "May 3rd, 2276" — the same clock the title/map show. The calendar math is pure
+ * (missions-rules.js); this passes the pilot's birthdate in. */
+export const formatDate = (day) => rules.formatDate(day, pilotBorn);
 
 /* Substitute EV mission text placeholders from a resolved offer/mission A.
  * (See the bible's token table: <DST> <DSY> <RST> <RSY> <CT> <CQ> <DL> ...) */
