@@ -74,8 +74,11 @@ export const outfitName = (id) =>
 export const isMapOutfit = (o) => !!(o && o.$sem && o.$sem.modType === 'map');
 // Would buying this map here chart any system not already known? (Drives whether
 // it's purchasable — once the region is explored there's nothing left to buy.)
-export const mapRevealsSomething = (o) =>
-  isMapOutfit(o) && [...systemsWithinJumps(S.SYSTEM_ID, o.ModVal)].some((id) => !explored.has(id));
+export function mapRevealsSomething(o) {
+  if (!isMapOutfit(o)) return false;
+  for (const id of systemsWithinJumps(S.SYSTEM_ID, o.ModVal)) if (!explored.has(id)) return true;
+  return false;
+}
 
 export function buyOutfit(id, qty) {
   const o = DATA.types.outf[id];
@@ -83,13 +86,15 @@ export function buyOutfit(id, qty) {
   // Map outfits are one-shot region charts, not inventory (spec: "Outfitter").
   if (isMapOutfit(o)) {
     if (qty <= 0 || !wallet.canAfford(o.Cost)) return;
-    const added = [...systemsWithinJumps(S.SYSTEM_ID, o.ModVal)].filter(
-      (sid) => !explored.has(sid),
-    );
+    const added = [];
+    for (const sid of systemsWithinJumps(S.SYSTEM_ID, o.ModVal))
+      if (!explored.has(sid)) added.push(sid);
     if (!added.length) return; // whole region already known → nothing to buy
     for (const sid of added) explored.add(sid);
     wallet.settle(o.Cost);
-    showMsg(`Regional map: charted ${added.length} nearby system${added.length > 1 ? 's' : ''}.`);
+    showMsg(
+      `${outfitName(id)}: charted ${added.length} nearby system${added.length > 1 ? 's' : ''}.`,
+    );
     refreshView();
     return;
   }
