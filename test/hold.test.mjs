@@ -31,6 +31,20 @@ test('adjust adds/removes and clamps at 0, returning the real delta', () => {
   assert.equal(h.adjust('nope', 5), 0);
 });
 
+test('prototype-chain keys and non-finite qty cannot poison the hold', () => {
+  const h = new Hold(KEYS);
+  // Inherited Object.prototype members are not real commodities.
+  assert.equal(h.adjust('toString', 1), 0);
+  assert.equal(h.adjust('constructor', 5), 0);
+  assert.equal(h.get('toString'), 0);
+  assert.deepEqual(h.toJSON(), Object.fromEntries(KEYS.map((k) => [k, 0])));
+  // ±Infinity must not set tons to a non-finite value.
+  assert.equal(h.adjust('food', Infinity), 0);
+  assert.equal(h.adjust('food', -Infinity), 0);
+  assert.equal(h.get('food'), 0);
+  assert.equal(Number.isFinite(h.used()), true);
+});
+
 test('clampTo dumps overflow down to capacity and reports tons dumped', () => {
   const h = new Hold(KEYS, { food: 6, metal: 6 }); // 12 tons
   assert.equal(h.clampTo(20), 0, 'under capacity → nothing dumped');

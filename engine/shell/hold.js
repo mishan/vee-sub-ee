@@ -15,7 +15,10 @@ export class Hold {
   // non-integer amount coerces to 0, so a bad save can't poison the hold.
   constructor(commodities, initial = {}) {
     this.commodities = [...commodities];
-    this.goods = {};
+    // Null-prototype: keys come from untrusted data (commodity names, save
+    // files), so the hold must not confuse a good named e.g. "toString" with an
+    // inherited Object.prototype member — `adjust`/`get` check own keys only.
+    this.goods = Object.create(null);
     for (const c of this.commodities) {
       const n = Math.floor(Number(initial && initial[c]));
       this.goods[c] = Number.isFinite(n) && n > 0 ? n : 0;
@@ -35,11 +38,14 @@ export class Hold {
 
   // Move `qty` tons of `c` in (positive) or out (negative), clamped at 0. Returns
   // the delta actually applied (so a sell of more than you hold reports the real
-  // amount). A non-integer/NaN qty is a no-op.
+  // amount). An unknown commodity or a non-finite/NaN qty (incl. ±Infinity) is a
+  // no-op, so bad input can't poison the hold with Infinity/NaN tons.
   adjust(c, qty) {
-    if (!(c in this.goods)) return 0;
+    if (!Object.hasOwn(this.goods, c)) return 0;
+    const d = Math.trunc(Number(qty));
+    if (!Number.isFinite(d)) return 0;
     const before = this.goods[c];
-    const after = Math.max(0, before + Math.trunc(Number(qty) || 0));
+    const after = Math.max(0, before + d);
     this.goods[c] = after;
     return after - before;
   }
