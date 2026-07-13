@@ -96,8 +96,8 @@ export function checkHostileAlert(aiShips = S.aiShips) {
  * `aiFor(ship, world)` from the ship's current disposition (docs/OOP_DESIGN.md,
  * phase 3). Strategies are stateless — they act on the ship + world passed in —
  * so a single shared instance of each is reused. The flight math still lives in
- * the core (EV.stepWarship / stepTrader / stepFlee); the strategy decides which
- * to run, picks a target, and fires. */
+ * the core as Ship methods (s.stepWarship / stepTrader / stepFlee); the strategy
+ * decides which to run, picks a target, and fires. */
 class AI {
   // eslint-disable-next-line no-unused-vars
   step(s, world) {}
@@ -118,10 +118,10 @@ class EscortAI extends AI {
       }
     }
     if (tgt && !S.gameOver && !S.landedAt) {
-      const r = EV.stepWarship(s, tgt.x, tgt.y);
+      const r = s.stepWarship(tgt.x, tgt.y);
       if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, tgt, true);
     } else {
-      EV.stepWarship(s, world.player.x, world.player.y); // shadow the player
+      s.stepWarship(world.player.x, world.player.y); // shadow the player
     }
   }
 }
@@ -182,7 +182,7 @@ class WarshipAI extends AI {
       traderAI.step(s, world); // nothing to fight → cruise / loiter
       return;
     }
-    const r = EV.stepWarship(s, t.x, t.y);
+    const r = s.stepWarship(t.x, t.y);
     if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, t, true);
   }
 }
@@ -193,7 +193,7 @@ class WarshipAI extends AI {
 class FleeAI extends AI {
   step(s, world) {
     const from = s.foe || world.player;
-    EV.stepFlee(s, from.x, from.y);
+    s.stepFlee(from.x, from.y);
   }
 }
 
@@ -226,7 +226,7 @@ class TraderAI extends AI {
       s.departing = false;
       s.target = null; // depart logic below picks a system edge to leave through
     }
-    EV.stepTrader(s, s.target);
+    s.stepTrader(s.target);
     if (catchGoal) {
       // Don't let it leave: if it lands or tries to depart, send it back to a
       // planet and keep loitering in-system.
