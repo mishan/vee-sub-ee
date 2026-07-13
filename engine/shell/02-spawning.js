@@ -57,6 +57,33 @@ export function warpIntoSystem(e, tx = 0, ty = 0) {
 export const isPort = (p) => !!(p && p.$sem && p.$sem.canLand && !p.$sem.uninhabited);
 export const portsHere = () => S.spobs.filter(isPort);
 
+/* Populate S.asteroids for the current system (spec: "Asteroids"). The syst
+ * `Asteroids` field (0 = none, 2–10 light→heavy) sets the count; each rock gets a
+ * random size, a slow drift + spin, and a stable shape seed. Ambient scenery,
+ * regenerated per visit and never saved. */
+export function spawnAsteroids() {
+  S.asteroids = [];
+  const density = S.syst && S.syst.Asteroids > 0 ? S.syst.Asteroids : 0;
+  if (!density) return;
+  const B = EV.ASTEROID_BOUND;
+  const rand = (lo, hi) => lo + Math.random() * (hi - lo);
+  for (let i = 0; i < density; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const spd = rand(0.05, 0.2); // slow drift, px/frame
+    S.asteroids.push(
+      EV.makeAsteroid(
+        rand(-B, B),
+        rand(-B, B),
+        Math.cos(ang) * spd,
+        Math.sin(ang) * spd,
+        Math.floor(Math.random() * 3), // size 0/1/2
+        rand(-0.6, 0.6), // spin, deg/frame
+        (Math.random() * 0x7fffffff) | 0, // shape seed
+      ),
+    );
+  }
+}
+
 export function spawnAI(atEdge) {
   const pairsD = [];
   for (let i = 1; i <= 4; i++) {

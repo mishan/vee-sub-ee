@@ -134,6 +134,42 @@ export function spriteHalf(spinId, fallback) {
   return (m ? Math.max(m.frameW, m.frameH) : fallback) / 2 + 6;
 }
 
+/* A lumpy grey asteroid (spec: "Asteroids"). Its outline is a fixed irregular
+ * polygon derived from the rock's seed, so the shape holds steady as it spins; a
+ * shaded rim and a lighter facet give it a bit of relief. Pure scenery — drawn at
+ * the entity layer, but ships and fire pass straight over it. */
+export function drawAsteroid(a, x, y) {
+  const n = 11;
+  const lump = (i) => {
+    // stable per-vertex value in ~[0.68, 1.0] from the rock's seed and index
+    const h = (((a.seed ^ (i * 0x9e3779b1)) >>> 0) * 1103515245 + 12345) >>> 0;
+    return 0.68 + (((h >>> 16) & 0xff) / 255) * 0.32;
+  };
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(EV.rad(a.rot));
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const ang = (i / n) * Math.PI * 2;
+    const rr = a.r * lump(i);
+    const vx = Math.cos(ang) * rr,
+      vy = Math.sin(ang) * rr;
+    if (i === 0) ctx.moveTo(vx, vy);
+    else ctx.lineTo(vx, vy);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#7a7a80';
+  ctx.fill();
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = '#3c3c44';
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(196,198,206,.28)'; // top-left facet highlight
+  ctx.beginPath();
+  ctx.ellipse(-a.r * 0.28, -a.r * 0.28, a.r * 0.42, a.r * 0.3, -0.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 /* ---- classic sidebar: PICT 128 "Game Panel" (144×480) from EV Titles.
  * Box geometry measured from the asset: radar y3–138, shield/fuel bar
  * slots at x60–134 / y154 & y170, message box y190–227, status strip
@@ -252,6 +288,8 @@ export function drawPanel(w, h) {
     ctx.arc(x, y, 3, 0, 7);
     ctx.stroke();
   }
+  // asteroids show as faint grey specks so the field is legible on radar
+  for (const a of S.asteroids) blip(a, '#9a9aa2', 1.5);
   // …and ships are brighter green dots (the selected target blinks yellow).
   for (const s of S.aiShips) {
     const isTarget = s === S.shipTarget;
@@ -455,6 +493,11 @@ export function render() {
         ok ? 'rgba(120,230,140,.9)' : 'rgba(150,160,180,.7)',
       );
     }
+  }
+  for (const a of S.asteroids) {
+    const [x, y] = toScreen(a.x, a.y);
+    if (x < -40 || x > w + 40 || y < -40 || y > h + 40) continue; // cull off-screen
+    drawAsteroid(a, x, y);
   }
   for (const s of S.aiShips) {
     const [x, y] = toScreen(s.x, s.y);

@@ -466,6 +466,36 @@ other and never make an AI take one of them as a foe.
 matching weapon). Space fires all primary weapons; Q cycles secondary
 (MiscFlags 0x0002) weapons, X fires the selected one.
 
+## Asteroids
+
+Systems with a nonzero **`Asteroids`** field (0 = none; 2–10 = light→heavy in
+the data) carry a drifting field of rocks. On entering a system the shell spawns
+`Asteroids`-many asteroids at random positions within a fixed square (±3000 px of
+the system origin), each with a random **size** (0/1/2 = small/medium/large, with
+collision radii ≈ 11/18/28 px), a slow random drift velocity (~0.05–0.2 px/frame),
+and a slow spin. Each frame they integrate and **wrap toroidally** within the
+±3000 box, so the field stays put rather than dispersing. Asteroids are purely
+ambient scenery generated per visit — they are not saved and carry no data.
+
+**No ship collision.** Asteroids never touch ships: the player and AI fly
+straight through them. Their only gameplay effect is on weapons, which makes them
+usable as cover.
+
+**They block all weapons fire** (both sides'):
+
+- A **projectile** (bullet / missile / rocket / torpedo) is absorbed the frame its
+  swept path (previous → current position) crosses any asteroid disc — tested as a
+  segment so a fast shot can't tunnel through. On absorption the shot is removed
+  and its `ExplodType` explosion (if any) plays at the impact point; it deals no
+  damage. A ship sheltering behind an asteroid is safe.
+- A **beam** is a ray from the owner's nose. It stops at the nearest asteroid it
+  enters within its length: the beam is drawn only up to that point and damages no
+  ship beyond it. A ship is hit only when no asteroid lies closer along the ray
+  than the ship.
+
+Asteroids are **indestructible** — weapons are consumed by them but never damage
+or break them; they are permanent cover for the life of the system visit.
+
 ## Audio (shell responsibility)
 
 Sound IDs follow the classic files (names baked into the resources):

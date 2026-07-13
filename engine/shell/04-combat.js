@@ -54,6 +54,7 @@ export const weaps = DATA.types.weap;
 S.shots = [];
 S.beams = [];
 S.explosions = [];
+S.asteroids = []; // drifting rocks (spec: "Asteroids"); (re)filled by loadSystem
 S.gameOver = false;
 
 // ammo pool key for a weapon record (AmmoType 0-63 -> weapon 128+n's pool)

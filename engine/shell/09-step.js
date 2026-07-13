@@ -15,7 +15,7 @@ import {
   tutorialActive,
 } from './01-state.js';
 import { tutorial } from './ui/tutorial.js';
-import { maybeSpawnBountyHunter, spawnAI, isPort } from './02-spawning.js';
+import { maybeSpawnBountyHunter, spawnAI, spawnAsteroids, isPort } from './02-spawning.js';
 import { attenuate, playSnd, stopAllLoops } from './03-sound.js';
 import {
   abortJump,
@@ -304,6 +304,9 @@ export class World {
   get explosions() {
     return S.explosions;
   }
+  get asteroids() {
+    return S.asteroids;
+  }
 
   step() {
     // dialogs/splash/title pause the sim; landed pauses too — the system is
@@ -472,6 +475,9 @@ export class World {
     // The player and their escorts are one side: their fire never harms each other.
     const alliedTo = (o) => o === this.player || o.playerEscort;
     const friendly = (a, b) => alliedTo(a) && alliedTo(b);
+    // Asteroids drift/spin (spec: "Asteroids"); they never touch ships, only fire.
+    for (const a of this.asteroids) EV.stepAsteroid(a);
+
     for (const shot of [...this.shots]) {
       const alive = EV.stepShot(shot, shot.homing);
       let hit = false;
@@ -483,6 +489,11 @@ export class World {
           hit = true;
           break;
         }
+      }
+      // An asteroid in the shot's swept path absorbs it (no damage): cover works.
+      if (!hit && this.asteroids.length && EV.shotHitsAsteroid(shot, this.asteroids)) {
+        if (shot.rec.ExplodType >= 0) spawnExplosion(shot.x, shot.y, shot.rec.ExplodType);
+        hit = true;
       }
       if (hit || !alive) this.shots.splice(this.shots.indexOf(shot), 1);
     }
@@ -512,7 +523,12 @@ export class World {
           bestV = v;
         }
       }
-      b.len = bestV ? bestT : b.rec.Speed;
+      // An asteroid closer than the target ship stops the beam short (no damage).
+      const astT = this.asteroids.length
+        ? EV.rayHitsAsteroids(b.owner.x, b.owner.y, dx, dy, b.rec.Speed, this.asteroids)
+        : Infinity;
+      if (astT < bestT) bestV = null;
+      b.len = bestV ? bestT : Math.min(astT, b.rec.Speed);
       if (bestV) hitShip(bestV, b.rec, b.heading, b.owner);
     }
 
@@ -544,6 +560,7 @@ export function loadSystem(systId) {
   S.shots = [];
   S.beams = [];
   S.explosions = [];
+  spawnAsteroids(); // drifting rocks that block weapons fire (spec: "Asteroids")
   S.navTarget = null;
   S.shipTarget = null;
   S.alertGrace = 45;

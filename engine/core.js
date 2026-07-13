@@ -223,9 +223,81 @@ class Projectile {
   }
 }
 
+/* ---- asteroids (spec: "Asteroids") ----
+ * Inert cover: rocks that drift and spin but never touch ships; their only effect
+ * is to block weapons fire (projectiles absorbed, beams stopped short). Size 0/1/2
+ * is small/medium/large with the matching collision radius. */
+const ASTEROID_BOUND = 3000; // rocks wrap within ±this (px) so the field stays put
+const ASTEROID_RADII = [11, 18, 28]; // collision radius by size
+
+class Asteroid {
+  constructor(x, y, vx, vy, size, spin, seed) {
+    this.x = x;
+    this.y = y;
+    this.vx = vx;
+    this.vy = vy;
+    this.size = size;
+    this.r = ASTEROID_RADII[size] ?? ASTEROID_RADII[1];
+    this.rot = 0;
+    this.spin = spin; // deg/frame
+    this.seed = seed; // stable per-rock shape seed (the renderer derives the outline)
+  }
+
+  /* Drift and spin one frame, wrapping toroidally so the field doesn't disperse. */
+  step() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.rot = norm(this.rot + this.spin);
+    const B = ASTEROID_BOUND;
+    if (this.x > B) this.x -= 2 * B;
+    else if (this.x < -B) this.x += 2 * B;
+    if (this.y > B) this.y -= 2 * B;
+    else if (this.y < -B) this.y += 2 * B;
+  }
+}
+
+/* Nearest distance along a unit ray (ox,oy) + t·(dx,dy), t∈[0,maxLen], at which it
+ * first enters an asteroid — or Infinity if none is hit. Origin-inside counts as 0.
+ * Drives both beam blocking and the swept-segment test for projectiles. */
+function rayHitsAsteroids(ox, oy, dx, dy, maxLen, asteroids) {
+  let best = Infinity;
+  for (const a of asteroids) {
+    const mx = a.x - ox,
+      my = a.y - oy;
+    const tc = mx * dx + my * dy; // asteroid centre projected onto the ray
+    if (tc - a.r > maxLen) continue; // disc begins past the ray's end
+    if (tc + a.r < 0) continue; // disc ends before the ray's start
+    const perp2 = mx * mx + my * my - tc * tc; // perpendicular distance²
+    const r2 = a.r * a.r;
+    if (perp2 > r2) continue; // ray misses the disc
+    let t = tc - Math.sqrt(r2 - perp2); // entry point along the ray
+    if (t < 0) t = 0; // origin already inside → blocked here
+    if (t <= maxLen && t < best) best = t;
+  }
+  return best;
+}
+
+/* Did this shot cross an asteroid on the frame it just moved through? Tests the
+ * swept segment (previous → current) so a fast shot can't tunnel a thin rock. */
+function shotHitsAsteroid(shot, asteroids) {
+  const len = Math.hypot(shot.vx, shot.vy);
+  if (len < 1e-6) {
+    // a resting shot (e.g. a dropped mine): plain point-in-disc test
+    for (const a of asteroids)
+      if ((a.x - shot.x) ** 2 + (a.y - shot.y) ** 2 < a.r * a.r) return true;
+    return false;
+  }
+  const ox = shot.x - shot.vx, // where the shot was last frame
+    oy = shot.y - shot.vy;
+  return rayHitsAsteroids(ox, oy, shot.vx / len, shot.vy / len, len, asteroids) < Infinity;
+}
+
 /* ---- factories (the shell constructs entities through these) ---- */
 const makeShip = (rec, x, y, heading) => new Ship(rec, x, y, heading);
 const makeShot = (rec, shooter, aim) => new Projectile(rec, shooter, aim);
+const makeAsteroid = (x, y, vx, vy, size, spin, seed) =>
+  new Asteroid(x, y, vx, vy, size, spin, seed);
+const stepAsteroid = (a) => Asteroid.prototype.step.call(a);
 
 /* ---- free-function compatibility wrappers (delegate to the methods) ----
  * Kept until every call site uses methods; then deleted (see docs/OOP_DESIGN.md).
@@ -354,6 +426,13 @@ export {
   shotSpeedOf,
   makeShot,
   stepShot,
+  Asteroid,
+  makeAsteroid,
+  stepAsteroid,
+  rayHitsAsteroids,
+  shotHitsAsteroid,
+  ASTEROID_BOUND,
+  ASTEROID_RADII,
   applyDamage,
   stepShields,
   stepWarship,
