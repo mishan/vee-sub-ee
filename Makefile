@@ -69,10 +69,19 @@ unsit:
 	node loader/evsit.js extract "$(SIT)" "$(RAW)"
 
 ## assets        – convert PICT/snd → PNG/WAV and composite sprite sheets
-##                 (needs resource_dasm + ImageMagick on PATH; see CLAUDE.md)
+##                 (needs resource_dasm + ImageMagick on PATH; see CLAUDE.md).
+##                 This is the "golden" native pipeline verify.js checks against.
 assets:
 	./evconvert.sh "$(RAW)" "$(ASSETS)"
 	./evsprites.sh "$(ASSETS)"
+
+## assets-js      – build the ENTIRE $(ASSETS)/ tree (graphics/titles PNGs, sounds/
+##                 music WAVs, composited sprites, manifest.json) with the loader's
+##                 own pure-JS decoders — no resource_dasm/ImageMagick, just Node.
+##                 Reads the EV_data/ forks (see `unsit`); pairs with it so a dev
+##                 with only the .sit can go: `make unsit assets-js`.
+assets-js:
+	node loader/evassets.js "$(RAW)" "$(ASSETS)"
 
 ## sprites       – re-composite sprite+mask sheets only
 sprites:
@@ -103,4 +112,4 @@ help:
 	@echo "Vₑ make targets:"
 	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/^## /  /'
 
-.PHONY: flight galaxy data unsit assets sprites schemas selftest verify test clean help
+.PHONY: flight galaxy data unsit assets assets-js sprites schemas selftest verify test clean help

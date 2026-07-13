@@ -79,6 +79,7 @@ module.exports = [
       'tmpl2schema.js',
       'eslint.config.js',
       'loader/verify.js',
+      'loader/evassets.js',
     ],
     languageOptions: {
       ecmaVersion: 'latest',
