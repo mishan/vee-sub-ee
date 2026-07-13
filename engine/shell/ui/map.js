@@ -1,7 +1,7 @@
 /*
  * engine/shell/ui/map.js — the galaxy map, a DOM overlay (canvas star map plus
- * HTML info panels and buttons), replacing the old canvas-drawn map in
- * 10-render. Systems are coloured by legal status; you plan a hyperspace route
+ * HTML info panels and buttons), replacing the old canvas-drawn map in the HUD
+ * renderer. Systems are coloured by legal status; you plan a hyperspace route
  * of contiguous jumps, then exit (Done/Esc) and press J to fly it one hop at a
  * time. Normative behaviour: engine/ENGINE_SPEC.md ("Galaxy map").
  */

@@ -3,7 +3,7 @@ import { html } from './ui/html.js';
 import { armAudioUnlock, startTitleMusic, stopTitleMusic } from './03-sound.js';
 import { combatRating, legalStatus } from './13-legal.js';
 import { formatDate } from './08-missions.js';
-import { render } from './10-render.js';
+import { render } from './ui/render.js';
 import { Dialog } from './ui/dialog.js';
 import { decodePilotFile } from './ui/pilot-import.js';
 
