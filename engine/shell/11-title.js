@@ -5,7 +5,12 @@ import { combatRating, legalStatus } from './13-legal.js';
 import { formatDate } from './08-missions.js';
 import { render } from './ui/render.js';
 import { Dialog } from './ui/dialog.js';
-import { decodePilotFile, looksLikeJSON, parsePilotJSON } from './ui/pilot-import.js';
+import {
+  decodePilotFile,
+  downloadPilotFile,
+  looksLikeJSON,
+  parsePilotJSON,
+} from './ui/pilot-import.js';
 
 /*
  * engine/shell/11-title.js — part of the browser flight shell.
@@ -217,26 +222,57 @@ function openPilotBody() {
   const active = Save.activeId();
   const rows = list.length
     ? list.map(
-        (p) => html`<button
-          class="svc"
-          data-action="pick"
-          data-arg="${p.id}"
-          style="display:block;width:100%;text-align:left;margin:4px 0"
+        // Each row is a flex container of separate real <button>s (pick + the
+        // export/JSON/delete controls), not a <button> with nested <span>s:
+        // nested interactive elements are invalid HTML and unreachable by
+        // keyboard, whereas real buttons are focusable and fire on Enter/Space
+        // for free (the delegated click handler then routes their data-action).
+        (p) => html`<div
+          class="pilotrow"
+          style="display:flex;align-items:center;gap:6px;margin:4px 0"
         >
-          ${p.id === active ? '▶ ' : ''}${p.name}${p.strict ? ' ⚠' : ''} —
-          ${ships[p.ship] ? ships[p.ship].name : 'ship'} ·
-          ${(p.credits || 0).toLocaleString('en-US')} cr
-          <span data-action="del" data-arg="${p.id}" title="Delete pilot" style="float:right;color:#d67"
-            >✕</span
+          <button
+            type="button"
+            class="svc"
+            data-action="pick"
+            data-arg="${p.id}"
+            style="flex:1 1 auto;min-width:0;text-align:left"
           >
-          <span
+            ${p.id === active ? '▶ ' : ''}${p.name}${p.strict ? ' ⚠' : ''} —
+            ${ships[p.ship] ? ships[p.ship].name : 'ship'} ·
+            ${(p.credits || 0).toLocaleString('en-US')} cr
+          </button>
+          <button
+            type="button"
+            class="svc"
+            data-action="export"
+            data-arg="${p.id}"
+            title="Export to an original-EV pilot file (.rsrc)"
+            style="flex:0 0 auto;color:#7aa"
+          >
+            ⤓ EV
+          </button>
+          <button
+            type="button"
+            class="svc"
             data-action="json"
             data-arg="${p.id}"
-            title="Export this save as native Vₑ JSON"
-            style="float:right;color:#6bb6ff;margin-right:12px;font-size:0.85em"
-            >⤓ JSON</span
+            title="Export as a native Vₑ JSON save"
+            style="flex:0 0 auto;color:#6bb6ff"
           >
-        </button>`,
+            ⤓ JSON
+          </button>
+          <button
+            type="button"
+            class="svc"
+            data-action="del"
+            data-arg="${p.id}"
+            title="Delete pilot"
+            style="flex:0 0 auto;color:#d67"
+          >
+            ✕
+          </button>
+        </div>`,
       )
     : html`<p style="color:#6f7c94">No saved pilots yet — start a New Pilot or import one.</p>`;
   return html`<h2>Open Pilot</h2>
@@ -282,6 +318,17 @@ const openPilotActions = {
     }
   },
   json: (id) => exportPilotJSON(id),
+  export: (id) => {
+    const save = Save.read(id);
+    if (!save) return showMsg('Could not read that pilot.');
+    try {
+      downloadPilotFile(save, DATA);
+    } catch (err) {
+      // A non-Error throw (e.g. a string) has no .message — fall back to its
+      // string form so the user always sees something meaningful.
+      showMsg('Export failed: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  },
   import: () => document.getElementById('pilotFile').click(),
   close: () => openPilotDialog.close(),
 };

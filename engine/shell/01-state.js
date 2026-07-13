@@ -96,6 +96,9 @@ export const Save = {
       escorts,
       persDone: [...persDone],
       persGrudge: [...persGrudge],
+      // Carry the stashed source file forward (set by the pilot importer) so the
+      // pilot can be exported back to an original-EV file byte-faithfully.
+      origin: SAVED && SAVED.origin,
     };
   },
   fresh(name, ship, strict) {

@@ -53,3 +53,19 @@ export function parsePilotJSON(text) {
   }
   return obj;
 }
+
+// Encode a Vₑ save into an original-EV pilot file and prompt the browser to save
+// it. Pilots imported from a real file round-trip byte-faithfully; pilots born in
+// Vₑ get a synthesized resource 129 (see pilot-codec's export note).
+export function downloadPilotFile(save, DATA) {
+  const bytes = codec.fromSave(save, DATA);
+  const safe = (save.name || 'Pilot').replace(/[^\w .-]/g, '_');
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${safe}.rsrc`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
