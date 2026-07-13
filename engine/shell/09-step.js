@@ -5,7 +5,6 @@ import {
   TEST_MODE,
   escorts,
   explored,
-  preloadSprites,
   ships,
   showMsg,
   spinsNeededFor,
@@ -14,6 +13,7 @@ import {
   tutSeen,
   tutorialActive,
 } from './01-state.js';
+import { preloadSprites } from './ui/sprites.js';
 import { tutorial } from './ui/tutorial.js';
 import { maybeSpawnBountyHunter, spawnAI, spawnAsteroids, isPort } from './02-spawning.js';
 import { attenuate, playSnd, stopAllLoops } from './03-sound.js';
