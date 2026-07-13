@@ -11,7 +11,7 @@
 import { S, savePilot, showMsg } from './01-state.js';
 import { spawnEscorts } from './02-spawning.js';
 import { loopSnd, playSnd, stopAllLoops } from './03-sound.js';
-import { fuel, player, rebuildPlayerWeapons } from './04-combat.js';
+import { hasAutoRefueller, player, rebuildPlayerWeapons, refuelShip } from './04-combat.js';
 import { distTo, nearestLandable } from './06-interaction.js';
 import { missionLandingEvents } from './08-missions.js';
 import { loadSystem } from './09-step.js';
@@ -53,7 +53,7 @@ export function tryLand() {
   }
   S.landedAt = p;
   player.vx = player.vy = 0;
-  fuel.refill(); // landing refuels (spec)
+  if (hasAutoRefueller()) refuelShip(); // auto-refuel (charged) only if that outfit is owned
   player.shields = player.shieldMax; // ...and repairs
   player.armor = player.armorMax;
   player.disabled = false;

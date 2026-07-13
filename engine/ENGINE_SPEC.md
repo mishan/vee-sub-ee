@@ -86,7 +86,16 @@ to a planet to land; the earlier 60 px was too tight and made landing feel
 fussy, so the radius was widened to 120 px. The speed cap is unchanged.)
 On takeoff the player is placed at
 `(spob.x, spob.y − 40)`, heading 0, **velocity 0** (launch stationary,
-not drifting). Landing refuels the ship to capacity (see Hyperjump).
+not drifting). Landing repairs the ship (shields/armor to full).
+
+**Refuelling is paid, and only automatic with the Auto-Refueller outfit.** Fuel
+at a spaceport costs `FUEL_UNIT_PRICE` (2 cr) per unit topped off — cheaper than
+the passing-ship `FUEL_PRICE`. Landing tops the tank off automatically **only if
+the pilot owns an Auto-Refueller** (oütf ModType `autoRefueller`), charging for
+the fuel. Otherwise the tank stays as-is and the landing screen offers a **Refuel
+Ship (N cr)** button that tops it off for the same price. Refuelling is
+all-or-nothing (disabled when the pilot can't afford the full top-up), and a ship
+bought or captured still arrives with a full tank.
 
 **While docked the sim is paused** (the shell's `step()` no-ops when
 `landedAt`), so the system freezes behind the landing screen instead of

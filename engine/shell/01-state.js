@@ -51,6 +51,7 @@ export const TEST_MODE = [
   'x',
   'y',
   'heading',
+  'fuel',
   'ff',
   'land',
   'exchange',
