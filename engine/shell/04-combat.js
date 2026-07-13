@@ -21,6 +21,7 @@ import { checkExpiredMissions, govts, onMissionShipDisabled } from './08-mission
 import { PF } from './15-pers.js';
 import { applyGovtDelta } from './13-legal.js';
 import { loadSystem } from './09-step.js';
+import { Fuel } from './fuel.js';
 
 /*
  * engine/shell/04-combat.js — part of the browser flight shell.
@@ -44,8 +45,9 @@ export const player = EV.makeShip(
   +(params.get('heading') || 0),
 );
 player.shipId = S.playerShipId;
-S.fuel = ships[S.playerShipId].Fuel;
-export let fuelMax = ships[S.playerShipId].Fuel;
+// The pilot's fuel (current level + tank size) is a focused state class; a fresh
+// tank starts full (docs/OOP_DESIGN.md phase 5).
+export const fuel = new Fuel(ships[S.playerShipId].Fuel, EV.JUMP_FUEL);
 export let holds = ships[S.playerShipId].Holds;
 S.landedAt = null;
 
@@ -330,8 +332,7 @@ export function applyShipStats() {
   player.accel = EV.accelOf(s.rec);
   player.turn = EV.turnOf(s.rec);
   holds = s.holds;
-  fuelMax = s.fuelMax;
-  S.fuel = Math.min(S.fuel, fuelMax);
+  fuel.setMax(s.fuelMax); // resize the tank (fuel-capacity outfits) + clamp the level
   rebuildPlayerWeapons(); // loadout + shield/armor maxes follow the refit
 }
 
@@ -414,7 +415,7 @@ export let warpSnd = null;
 export function beginJump() {
   if (S.jump || S.landedAt) return;
   if (S.jumpDest == null || !linkedSystems().includes(S.jumpDest)) return;
-  if (S.fuel < EV.JUMP_FUEL) {
+  if (!fuel.canJump()) {
     showMsg('Not enough fuel to jump.');
     return;
   }
@@ -448,7 +449,7 @@ export function completeJump() {
   EV.placeAtArrival(player, EV.norm(mapBearingTo(from) + 180));
   clearArrivalOfSpobs(); // materialise beyond the no-jump ring (chain-jump ready)
   spawnEscorts(); // fleet jumps in around the now-placed player
-  S.fuel -= EV.JUMP_FUEL;
+  fuel.spendJump();
   S.jump = null;
   // Advance a planned route one hop at a time: if we just arrived at the next
   // waypoint, drop it and arm the following one (press J to take it); else clear.

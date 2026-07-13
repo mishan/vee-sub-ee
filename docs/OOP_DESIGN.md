@@ -304,11 +304,13 @@ lands cleanly on top, one screen at a time.
    shell export is exposed as a global (EV/DATA/MANIFEST/NAMES stay ambient from
    the flight.html `<script>`).
 5. **`GameState`** — fold `S` onto a class cluster by cluster (credits/cargo,
-   legal record, missions), adding methods that guard invariants. **In progress**
-   — `Wallet` (credits), `LegalRecord`, `MissionLog`, `Hold` (the cargo hold) and
-   now `Outfits` (the outfit inventory) are extracted as focused classes with
-   their own tests. What remains on the `S` bag is mostly transient per-frame/
-   session state (targets, jump, flags); further clusters (e.g. fuel) can follow.
+   legal record, missions), adding methods that guard invariants. **Effectively
+   done** — `Wallet` (credits), `LegalRecord`, `MissionLog`, `Hold` (the cargo
+   hold), `Outfits` (the outfit inventory) and `Fuel` (level + tank + jump cost)
+   are extracted as focused, DOM-free classes with their own tests. What remains
+   on the `S` bag is the transient per-frame/session glue — targets, the jump
+   state machine, the landed/paused flags, the live entity arrays — which is
+   coordination state, not an owned invariant, so it stays on `S`.
 
 Phases 1–2 are pure internal structure and reversible. 3–5 change real seams
 and each deserves its own branch + Copilot review, in the usual stacked order.

@@ -14,7 +14,7 @@ import {
   systs,
 } from '../01-state.js';
 import { html } from './html.js';
-import { fuelMax, holds, player, poolKey } from '../04-combat.js';
+import { fuel, holds, player, poolKey } from '../04-combat.js';
 import { updateTouchUI } from '../05-input.js';
 import { distTo } from '../06-interaction.js';
 import { cargoNames } from '../07-trade.js';
@@ -304,7 +304,7 @@ export function drawPanel(w, h) {
   ctx.fillStyle = GREEN;
   const topFrac = shieldsUp ? player.shields / player.shieldMax : player.armor / player.armorMax;
   ctx.fillRect(px + 60, py + 154, Math.round(74 * Math.max(0, topFrac)), 6);
-  ctx.fillRect(px + 60, py + 170, Math.round(74 * (S.fuel / fuelMax)), 6);
+  ctx.fillRect(px + 60, py + 170, Math.round(74 * fuel.fraction), 6);
 
   /* navigation pane (slot 1, right below shield/fuel — classic panel order): the
    * hyperspace jump target, or the stellar-navigation (landing) target, with the
@@ -401,7 +401,7 @@ export function drawPanel(w, h) {
   /* cargo / wallet box */
   const cb = { x: px + 9, y: py + 398 };
   panelText(cb.x, cb.y, `Credits: ${wallet.credits.toLocaleString('en-US')}`);
-  panelText(cb.x, cb.y + 13, `Jumps left: ${Math.floor(S.fuel / EV.JUMP_FUEL)}`);
+  panelText(cb.x, cb.y + 13, `Jumps left: ${fuel.jumps}`);
   let cy = cb.y + 30;
   const held = COMMODITIES.map((c, i) => [cargoNames[i], hold.get(c)]).filter(([, q]) => q > 0);
   if (held.length === 0) panelText(cb.x, cy, `Cargo: ${holds} tons free`, DIMGREEN);

@@ -15,7 +15,7 @@ import {
 import {
   applyShipStats,
   effectiveShip,
-  fuelMax,
+  fuel,
   holds,
   player,
   systemsWithinJumps,
@@ -180,7 +180,7 @@ export function buyShip(id) {
   player.shipId = id;
   outfits.clear(); // old hull's upgrades are traded in
   applyShipStats();
-  S.fuel = fuelMax;
+  fuel.refill();
   preloadSprites(new Set([spinOfShip(id)]));
   showMsg(`${shipyardName(id)} purchased. Old hull and outfits traded in.`);
   refreshView();

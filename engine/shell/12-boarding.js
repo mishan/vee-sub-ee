@@ -26,7 +26,7 @@ import {
   applyShipStats,
   beginDestruction,
   commitCrime,
-  fuelMax,
+  fuel,
   holds,
   penaltyOf,
   player,
@@ -210,7 +210,7 @@ export function takeCommand(s) {
   player.disabled = false;
   outfits.clear(); // old ship & upgrades left behind
   applyShipStats(); // arm the stock captured hull
-  S.fuel = fuelMax;
+  fuel.refill();
   player.shields = player.shieldMax;
   player.armor = player.armorMax;
   hold.clampTo(holds - missionCargoUsed()); // dump cargo that won't fit the new hull
