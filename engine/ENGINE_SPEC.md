@@ -321,8 +321,11 @@ resolved destinations, accept-day, day counter, reputation) in the pilot.
 Availability gate for both: item `TechLevel ≤ spöb.TechLevel`, or an exact
 match against `SpecialTech1..3`; items with `MissionBit ≥ 0` are hidden
 until the mission system exists. Shops show **only available items** —
-no empty or grayed slots; the grid compacts (thumbnails still come from
-each item's fixed cell in the menu sheet). Owned outfits stay listed
+no empty or grayed slots; the grid compacts. Each item is a labelled thumbnail
+of its own dialog picture (outfit → PICT 6000+i, ship → PICT 5000+i) with the
+item name below, and the detail pane shows a larger picture, the stats, and the
+item's dësc-resource description (outfits at 3000+i, ships at 2000+i) — as the
+original shops do. Owned outfits stay listed
 anywhere they'd otherwise be hidden (you can always sell). A shop whose
 list would be empty doesn't get a button on the landing screen at all. Outfits: `Cost`/`Mass`/`Max` from the
 oütf record; outfit Mass consumes the hull's `FreeMass` (negative Mass —

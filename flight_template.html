@@ -31,7 +31,7 @@
   #landed .card, #service .card { width: min(560px, 94vw); max-height: 88vh; overflow-y: auto;
     background: #0c1120; border: 1px solid #2a3550;
     border-radius: 8px; padding: 20px 24px; }
-  #service .card { width: min(540px, 94vw); box-shadow: 0 12px 48px rgba(0,0,0,.8); }
+  #service .card { width: min(640px, 94vw); box-shadow: 0 12px 48px rgba(0,0,0,.8); }
   /* persistent leave button, pinned to the overlay so it's reachable without
      scrolling (essential on mobile, where there is no Esc key) */
   .leaveBtn { position: fixed; top: 10px; right: 12px; z-index: 3;
@@ -83,20 +83,32 @@
     border-radius: 4px; padding: 6px 16px; font-size: 13px; cursor: pointer; }
   #missions button:hover:not(:disabled) { background: #24304d; }
   #missions button:disabled { opacity: .35; cursor: default; }
-  /* classic shop layout: thumbnail grid (sliced from the original menu
-     sheets, PICT 5100/6100) + detail pane with the 100×100 dialog art */
-  .shop { display: flex; gap: 16px; margin-top: 10px; }
-  .shopgrid { display: grid; grid-template-columns: repeat(8, 34px); gap: 2px; align-content: start; }
-  .shopgrid .cell { width: 32px; height: 32px; border: 1px solid #26304a; border-radius: 3px;
-    background-color: #000; cursor: pointer; image-rendering: pixelated; padding: 0; }
-  .shopgrid .cell:hover { border-color: #4a5b82; }
-  .shopgrid .cell.sel { border-color: #ffd479; box-shadow: 0 0 6px rgba(255,212,121,.5); }
-  .shoppane { flex: 1; min-width: 200px; }
+  /* classic shop layout: a grid of larger named item thumbnails (the per-item
+     dialog art, PICT 6000/5000) + a detail pane with a big picture, stats and
+     the item's description — mirrors the original outfitter/shipyard. */
+  .shop { display: flex; gap: 14px; margin-top: 10px; }
+  /* the grid takes the lion's share of the width; flexible (1fr) columns keep the
+     vertical scrollbar from forcing a horizontal one, so it only scrolls up/down */
+  .shopgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+    align-content: start; max-height: 360px; overflow: hidden auto; flex: 1 1 auto;
+    min-width: 0; scrollbar-gutter: stable; }
+  #service .shopcard { display: flex; flex-direction: column; align-items: center; gap: 3px;
+    min-width: 0; padding: 5px 3px; margin: 0; background: #0f1524; border: 1px solid #26304a;
+    border-radius: 4px; cursor: pointer; color: #aab6cc; font: inherit; }
+  #service .shopcard img { width: 56px; height: 56px; object-fit: contain; background: #000;
+    border-radius: 3px; }
+  #service .shopcard .name { font-size: 10px; line-height: 1.15; text-align: center;
+    max-height: 2.35em; overflow: hidden; }
+  /* :not(:disabled) bumps specificity above the generic #service button:hover rule */
+  #service .shopcard:hover:not(:disabled) { border-color: #4a5b82; background: #16203a; }
+  #service .shopcard.sel { border-color: #ffd479; box-shadow: 0 0 6px rgba(255,212,121,.45); color: #fff; }
+  .shoppane { flex: 0 0 200px; min-width: 0; }
   .shoppane img { width: 100px; height: 100px; image-rendering: pixelated;
     border: 1px solid #26304a; border-radius: 4px; background: #000; float: right; margin: 0 0 8px 10px; }
   .shoppane h3 { margin: 0 0 4px; color: #fff; font-size: 15px; }
   .shoppane .row { color: #aab6cc; font-size: 12px; margin: 2px 0; }
   .shoppane .row b { color: #fff; }
+  .shoppane .desc { color: #aab6cc; font-size: 12px; line-height: 1.4; margin-top: 10px; }
   #help { position: fixed; bottom: 8px; left: 12px; color: #4d5b76; font-size: 11px; }
   #ff { position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
     color: #ffd479; font-size: 13px; font-weight: 600; letter-spacing: .1em;
