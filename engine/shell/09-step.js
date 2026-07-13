@@ -472,7 +472,7 @@ export class World {
       let hit = false;
       for (const v of everyone) {
         if (v === shot.owner || v.deathT >= 0 || friendly(shot.owner, v)) continue;
-        if (Math.hypot(v.x - shot.x, v.y - shot.y) < Math.max(shot.rec.ProxRadius, shipHalf(v))) {
+        if (EV.shotHitsShip(shot, v, shipHalf(v))) {
           hitShip(v, shot.rec, shot.heading, shot.owner);
           if (shot.rec.ExplodType >= 0) spawnExplosion(shot.x, shot.y, shot.rec.ExplodType);
           hit = true;
@@ -508,11 +508,8 @@ export class World {
         bestV = null;
       for (const v of everyone) {
         if (v === b.owner || v.deathT >= 0 || friendly(b.owner, v)) continue;
-        const t = (v.x - b.owner.x) * dx + (v.y - b.owner.y) * dy;
-        if (t < 0 || t > b.rec.Speed) continue;
-        const px = b.owner.x + dx * t,
-          py = b.owner.y + dy * t;
-        if (Math.hypot(v.x - px, v.y - py) < 8 + shipHalf(v) / 2 && t < bestT) {
+        const t = EV.beamHitDist(b.owner.x, b.owner.y, dx, dy, b.rec.Speed, v, shipHalf(v));
+        if (t < bestT) {
           bestT = t;
           bestV = v;
         }
