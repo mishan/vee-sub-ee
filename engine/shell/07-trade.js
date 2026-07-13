@@ -100,16 +100,15 @@ export function buyOutfit(id, qty) {
   }
   const s = effectiveShip();
   if (qty > 0) {
-    if (o.Max > 0 && (outfits[id] || 0) + qty > o.Max) qty = o.Max - (outfits[id] || 0);
+    if (o.Max > 0 && outfits.count(id) + qty > o.Max) qty = o.Max - outfits.count(id);
     if (o.Mass > 0) qty = Math.min(qty, Math.floor(s.freeMass / o.Mass));
     if (o.Cost > 0) qty = Math.min(qty, Math.floor(wallet.credits / o.Cost));
     if (qty <= 0) return;
   } else {
-    qty = Math.max(qty, -(outfits[id] || 0));
+    qty = Math.max(qty, -outfits.count(id));
     if (qty === 0) return;
   }
-  outfits[id] = (outfits[id] || 0) + qty;
-  if (!outfits[id]) delete outfits[id];
+  outfits.add(id, qty); // clamps at 0 and prunes an outfit that hits 0
   wallet.settle(qty * o.Cost); // buy (qty>0) charges, sell (qty<0) credits
   applyShipStats();
   // cargo can't exceed a shrunken hold: dump overflow (paid nothing for it),
@@ -128,7 +127,7 @@ S.selShipId = null;
  * and the button on the landing screen. */
 export function outfitterStock(p) {
   return Object.entries(DATA.types.outf).filter(
-    ([id, o]) => o.MissionBit < 0 && (techAvailable(o.TechLevel, p) || (outfits[id] || 0) > 0),
+    ([id, o]) => o.MissionBit < 0 && (techAvailable(o.TechLevel, p) || outfits.has(id)),
   );
 }
 export function shipyardStock(p) {
@@ -156,10 +155,12 @@ export function tradeInValue() {
   return Math.round(
     0.25 *
       (ships[S.playerShipId].Cost +
-        Object.entries(outfits).reduce(
-          (n, [oid, c]) => n + (DATA.types.outf[oid] ? DATA.types.outf[oid].Cost * c : 0),
-          0,
-        )),
+        outfits
+          .entries()
+          .reduce(
+            (n, [oid, c]) => n + (DATA.types.outf[oid] ? DATA.types.outf[oid].Cost * c : 0),
+            0,
+          )),
   );
 }
 export function buyShip(id) {
@@ -177,7 +178,7 @@ export function buyShip(id) {
   wallet.settle(price); // net-negative (trade-in > cost) pays the pilot
   S.playerShipId = id;
   player.shipId = id;
-  for (const k of Object.keys(outfits)) delete outfits[k];
+  outfits.clear(); // old hull's upgrades are traded in
   applyShipStats();
   S.fuel = fuelMax;
   preloadSprites(new Set([spinOfShip(id)]));

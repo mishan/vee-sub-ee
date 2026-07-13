@@ -10,6 +10,7 @@ import { Wallet } from './wallet.js';
 import { LegalRecord } from './legal.js';
 import { MissionLog } from './mission-log.js';
 import { Hold } from './hold.js';
+import { Outfits } from './outfits.js';
 import { html, raw } from './ui/html.js'; // the html`` primitive lives in the UI leaf now
 /* ---------------- configuration ---------------- */
 
@@ -81,7 +82,7 @@ export const Save = {
       ship: S.playerShipId,
       credits: wallet.credits,
       cargo: hold.toJSON(),
-      outfits,
+      outfits: outfits.toJSON(),
       explored: [...explored],
       bits: [...missionLog.bits.keys()].filter((b) => missionLog.bits[b]),
       day: S.gameDay,
@@ -288,8 +289,7 @@ export const PRICE_MULT = { low: 0.8, medium: 1.0, high: 1.25 };
 export const wallet = new Wallet(SAVED ? SAVED.credits : 10000);
 export const hold = new Hold(COMMODITIES, SAVED && SAVED.cargo);
 
-export const outfits = {}; // outf id -> count (pilot inventory)
-if (SAVED && SAVED.outfits) Object.assign(outfits, SAVED.outfits);
+export const outfits = new Outfits(SAVED && SAVED.outfits); // outf id -> count
 export const explored = new Set(SAVED ? SAVED.explored : []);
 
 /* mission state (spec: "Missions") — also part of the pilot file. 512 flags:

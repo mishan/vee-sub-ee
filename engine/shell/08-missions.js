@@ -279,7 +279,7 @@ export function acceptMission(id, here) {
   if (m.PayVal >= -30255 && m.PayVal <= -30128) {
     const oid = -m.PayVal - 30000;
     if (DATA.types.outf[oid]) {
-      outfits[oid] = (outfits[oid] || 0) + 1;
+      outfits.add(oid, 1);
       applyShipStats();
     }
   }
@@ -498,7 +498,7 @@ export function payMission(m) {
   else if (v >= -20255 && v <= -20128) {
     const oid = -v - 20000;
     if (DATA.types.outf[oid]) {
-      outfits[oid] = (outfits[oid] || 0) + 1;
+      outfits.add(oid, 1);
       applyShipStats();
     }
   } else if (v >= -40099 && v <= -40001) {

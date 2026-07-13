@@ -305,10 +305,10 @@ lands cleanly on top, one screen at a time.
    the flight.html `<script>`).
 5. **`GameState`** — fold `S` onto a class cluster by cluster (credits/cargo,
    legal record, missions), adding methods that guard invariants. **In progress**
-   — `Wallet` (credits), `LegalRecord`, `MissionLog` and now `Hold` (the cargo
-   hold) are extracted as focused classes with their own tests. What remains on
-   the `S` bag is mostly transient per-frame/session state (targets, jump,
-   flags); further clusters (e.g. fuel, outfits inventory) can follow.
+   — `Wallet` (credits), `LegalRecord`, `MissionLog`, `Hold` (the cargo hold) and
+   now `Outfits` (the outfit inventory) are extracted as focused classes with
+   their own tests. What remains on the `S` bag is mostly transient per-frame/
+   session state (targets, jump, flags); further clusters (e.g. fuel) can follow.
 
 Phases 1–2 are pure internal structure and reversible. 3–5 change real seams
 and each deserves its own branch + Copilot review, in the usual stacked order.

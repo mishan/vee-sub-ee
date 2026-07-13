@@ -84,7 +84,7 @@ export function boardTarget() {
  * outfit (oütf ModType 25 adds ModVal to the crew complement, per bible). */
 export function playerCrew() {
   let c = ships[S.playerShipId].Crew || 1;
-  for (const [oid, n] of Object.entries(outfits)) {
+  for (const [oid, n] of outfits.entries()) {
     const o = DATA.types.outf[oid];
     if (o && o.$sem && o.$sem.modType === 'marines') c += (o.ModVal || 0) * (n || 0);
   }
@@ -208,7 +208,7 @@ export function takeCommand(s) {
   player.vy = 0;
   player.deathT = -1;
   player.disabled = false;
-  for (const k of Object.keys(outfits)) delete outfits[k]; // old ship & upgrades left behind
+  outfits.clear(); // old ship & upgrades left behind
   applyShipStats(); // arm the stock captured hull
   S.fuel = fuelMax;
   player.shields = player.shieldMax;
