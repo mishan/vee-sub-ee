@@ -197,6 +197,12 @@ export const Save = {
     this._migrateLegacy();
     return this._get(this.ACTIVE);
   },
+  // Read any pilot's stored save by id, exactly as it sits in localStorage
+  // (no v1→v2 migration — the raw on-disk shape is what a JSON export/bug
+  // report wants). null if the slot is missing or unparseable.
+  read(id) {
+    return this._get(this.slot(id));
+  },
   // Load the currently active pilot (v1→v2 migrated), or null.
   load() {
     this._migrateLegacy();
