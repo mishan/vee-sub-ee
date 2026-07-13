@@ -202,7 +202,7 @@ export function draw() {
       if (!(c >= 128 && systs[c] && +id < c)) continue;
       if (!(explored.has(+id) || explored.has(c))) continue;
       const routed = onRoute(+id, c, route);
-      g.strokeStyle = routed ? '#4fd06a' : 'rgba(90,110,160,.28)';
+      g.strokeStyle = routed ? '#4fd06a' : 'rgba(255,255,255,.5)';
       g.lineWidth = routed ? (route.length > 1 ? 3 : 2) : 1;
       g.beginPath();
       g.moveTo(px(s), py(s));
@@ -246,7 +246,7 @@ export function draw() {
     if (missionDest.has(id) && known) missionMark(g, x, y);
     if (known || linked.includes(id)) {
       g.fillStyle = known ? '#cfd6e4' : '#7a869c';
-      g.font = '11px system-ui, sans-serif';
+      g.font = '13px system-ui, sans-serif';
       g.fillText(s.name ?? id, x + 9, y + 4);
     }
   }
