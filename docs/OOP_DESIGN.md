@@ -383,17 +383,18 @@ reaching for the `DATA` global. In priority order:
    `formatDate` — is now a DOM-free module with unit tests.
 2. **Trade / pricing → `trade-rules.js` (done).** `priceAt`, `techAvailable`,
    `isMapOutfit`, `tradeInValue` and the refuel price are pure and unit-tested.
-3. **Legal spread (`13-legal`).** The spread constants are already flagged as
-   tuned/approximate; a pure, tested function pins down the reverse-engineered
-   behavior. **The one item still open.**
+3. **Legal spread → `legal-rules.js` (done).** The per-system record spread —
+   `relation` (how a govt-standing change signs onto a system) and
+   `spreadGovtDelta` (current system full, related systems reduced and
+   probabilistic) — is now a DOM-free, unit-tested module; 13-legal keeps a thin
+   `applyGovtDelta` wrapper feeding it the live syst table and legal store. The
+   tuned spread constants are pinned down by tests.
 4. **AI targeting decisions → `ai-targeting.js` (done).** The per-behavior
    *movement* is `Ship` methods; the *decision* logic — `combatTarget` (who to
    fight), `aiEnemies` (govt hostility) and the shared `nearest` selection — is
    now a DOM-free module taking the ship, a plain candidate array and a
    govt-relations interface, with unit tests. 09-step keeps thin wrappers that
    read the live world/govt tables.
-
-Only the legal-spread extraction (3) remains.
 
 A cheaper alternative — a Node harness that stubs `DATA`/`EV`/`document` so the
 existing modules import unchanged — was considered and rejected: it tests
