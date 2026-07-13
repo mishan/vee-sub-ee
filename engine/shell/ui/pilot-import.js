@@ -15,3 +15,41 @@ import codec from '../../../pilot-codec.js';
 export function decodePilotFile(arrayBuffer, filename, DATA) {
   return codec.toSave(new Uint8Array(arrayBuffer), filename, DATA);
 }
+
+// Sniff whether a file's bytes are a native Vₑ JSON save rather than a binary EV
+// Classic pilot fork: JSON begins with '{' past an optional UTF-8 BOM and any
+// leading whitespace, whereas a pilot fork starts with binary magic. Sniffing the
+// bytes (not the extension) means a misnamed .rsrc/.json still imports correctly.
+export function looksLikeJSON(bytes) {
+  let i = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0; // UTF-8 BOM
+  while (
+    i < bytes.length &&
+    (bytes[i] === 0x20 || bytes[i] === 0x09 || bytes[i] === 0x0a || bytes[i] === 0x0d)
+  )
+    i++;
+  return bytes[i] === 0x7b; // '{'
+}
+
+// Parse a native Vₑ .json save (as produced by the Open Pilot "⤓ JSON" export)
+// back into a save object, throwing a user-facing Error if the text isn't one.
+// Only a light shape check: it must be a JSON object with an integer ship id and
+// a known save version (v1 is migrated on load). This is the inverse of the
+// exporter, not a schema validator — a hand-tweaked save is the user's own risk.
+export function parsePilotJSON(text) {
+  let obj;
+  try {
+    obj = JSON.parse(text);
+  } catch {
+    throw new Error('not a valid JSON file');
+  }
+  if (
+    !obj ||
+    typeof obj !== 'object' ||
+    Array.isArray(obj) ||
+    !Number.isInteger(obj.ship) ||
+    (obj.v !== 1 && obj.v !== 2)
+  ) {
+    throw new Error('not a Vₑ save (expected a JSON pilot export)');
+  }
+  return obj;
+}

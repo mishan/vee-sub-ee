@@ -5,7 +5,7 @@ import { combatRating, legalStatus } from './13-legal.js';
 import { formatDate } from './08-missions.js';
 import { render } from './ui/render.js';
 import { Dialog } from './ui/dialog.js';
-import { decodePilotFile } from './ui/pilot-import.js';
+import { decodePilotFile, looksLikeJSON, parsePilotJSON } from './ui/pilot-import.js';
 
 /*
  * engine/shell/11-title.js — part of the browser flight shell.
@@ -242,7 +242,7 @@ function openPilotBody() {
   return html`<h2>Open Pilot</h2>
     ${rows}
     <div style="margin-top:14px">
-      <button data-action="import">Import EV Pilot…</button>
+      <button data-action="import">Import Pilot…</button>
       <button data-action="close">Close</button>
     </div>`;
 }
@@ -291,13 +291,21 @@ export const openPilotDialog = new Dialog(
   openPilotBody,
   openPilotActions,
 );
-// Decode a chosen .rsrc into a new roster slot, then boot it.
+// Decode a chosen pilot file into a new roster slot, then boot it. Accepts both
+// an EV Classic pilot (.rsrc/.bin, binary) and a native Vₑ save (.json, from the
+// "⤓ JSON" export). The format is sniffed from the bytes, not the extension, so a
+// misnamed file still works: a JSON save begins with '{' (past an optional BOM /
+// whitespace), while a pilot fork starts with binary magic.
 document.getElementById('pilotFile').addEventListener('change', async (e) => {
   const file = e.target.files && e.target.files[0];
   e.target.value = ''; // let the same file be re-picked later
   if (!file) return;
   try {
-    const save = decodePilotFile(await file.arrayBuffer(), file.name, DATA);
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    const save = looksLikeJSON(bytes)
+      ? parsePilotJSON(new TextDecoder().decode(bytes))
+      : decodePilotFile(buf, file.name, DATA);
     if (!Save.create(save)) {
       showMsg('Could not save the imported pilot — browser storage is unavailable.');
       return;
