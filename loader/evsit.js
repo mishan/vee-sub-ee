@@ -433,6 +433,56 @@ function extractFork(bytes, entry) {
   throw new Error('unsupported StuffIt method ' + method);
 }
 
+/* ---- Node CLI: extract the resource forks needed for local dev ----
+ * `node loader/evsit.js extract <archive.sit> <outdir>` decompresses the forks
+ * the build consumes (the five EV_data resource files + the EV application, for
+ * name suggestions / app strings) straight out of the StuffIt archive — the same
+ * decoder the browser loader uses, so no external unstuffer is needed. Written to
+ * the standard layout the Makefile's DATA/APP/RAW defaults expect. Guarded so the
+ * browser bundle (which has no `require`) never runs it. */
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
+  const fs = require('fs');
+  const path = require('path');
+  const [verb, sitPath, outDir] = process.argv.slice(2);
+  if (verb !== 'extract' || !sitPath || !outDir) {
+    console.error('usage: node loader/evsit.js extract <archive.sit> <outdir>');
+    process.exit(2);
+  }
+  // entry name (in the archive) → destination path (relative to outDir).
+  const WANT = {
+    'EV Data': 'EV Data.rsrc',
+    'EV Graphics': 'EV Graphics.rsrc',
+    'EV Sounds': 'EV Sounds.rsrc',
+    'EV Titles': 'EV Titles.rsrc',
+    'EV Music': 'EV Music.rsrc',
+    'Escape Velocity': path.join('EV_1.0.5', 'Escape Velocity.rsrc'),
+  };
+  const sit = new Uint8Array(fs.readFileSync(sitPath));
+  const entries = parseSit(sit);
+  let wrote = 0;
+  for (const name of Object.keys(WANT)) {
+    const e = entries.find((x) => x.isResource && x.name === name);
+    if (!e) {
+      console.error(`  ! ${name}: not found in archive — skipped`);
+      continue;
+    }
+    let fork;
+    try {
+      fork = extractFork(sit, e);
+    } catch (err) {
+      console.error(`  ! ${name}: ${err.message} — skipped`);
+      continue;
+    }
+    const dest = path.join(outDir, WANT[name]);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, fork);
+    console.log(`  ${name} → ${dest} (${fork.length} bytes)`);
+    wrote++;
+  }
+  console.log(`extracted ${wrote}/${Object.keys(WANT).length} forks to ${outDir}`);
+  if (wrote === 0) process.exit(1);
+}
+
 if (typeof module !== 'undefined' && module.exports)
   module.exports = { unstuff13, parseSit, extractFork };
 if (typeof self !== 'undefined') {

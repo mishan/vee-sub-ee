@@ -13,6 +13,8 @@ DATA    ?= EV_data/EV Data.rsrc
 APP     ?= EV_data/EV_1.0.5/Escape Velocity.rsrc
 RAW     ?= EV_data
 ASSETS  ?= evassets
+# SIT is the StuffIt archive the `unsit` target decompresses (see that target).
+SIT     ?= EV_data/Escape-Velocity_Mac_EN_RIP.sit
 SCHEMAS := $(wildcard schemas/*.json)
 ESBUILD ?= node_modules/.bin/esbuild   # from `npm install` (devDependency)
 
@@ -59,11 +61,27 @@ flight: flight.html
 galaxy: galaxy.html
 data:   evdata.json
 
+## unsit         – decompress the dev resource forks out of the StuffIt archive
+##                 ($(SIT)) into EV_data/ — the DATA/APP + asset-conversion source.
+##                 Uses the loader's own StuffIt decoder (no external unstuffer);
+##                 the .sit is the source of truth (see loader/README.md).
+unsit:
+	node loader/evsit.js extract "$(SIT)" "$(RAW)"
+
 ## assets        – convert PICT/snd → PNG/WAV and composite sprite sheets
-##                 (needs resource_dasm + ImageMagick on PATH; see CLAUDE.md)
+##                 (needs resource_dasm + ImageMagick on PATH; see CLAUDE.md).
+##                 This is the "golden" native pipeline verify.js checks against.
 assets:
 	./evconvert.sh "$(RAW)" "$(ASSETS)"
 	./evsprites.sh "$(ASSETS)"
+
+## assets-js      – build the ENTIRE $(ASSETS)/ tree (graphics/titles PNGs, sounds/
+##                 music WAVs, composited sprites, manifest.json) with the loader's
+##                 own pure-JS decoders — no resource_dasm/ImageMagick, just Node.
+##                 Reads the EV_data/ forks (see `unsit`); pairs with it so a dev
+##                 with only the .sit can go: `make unsit assets-js`.
+assets-js:
+	node loader/evassets.js "$(RAW)" "$(ASSETS)"
 
 ## sprites       – re-composite sprite+mask sheets only
 sprites:
@@ -94,4 +112,4 @@ help:
 	@echo "Vₑ make targets:"
 	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/^## /  /'
 
-.PHONY: flight galaxy data assets sprites schemas selftest verify test clean help
+.PHONY: flight galaxy data unsit assets assets-js sprites schemas selftest verify test clean help
