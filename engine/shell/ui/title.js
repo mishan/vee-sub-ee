@@ -15,7 +15,8 @@
  * esbuild bundles the shell modules (entry: main.js). Normative: ENGINE_SPEC.md.
  */
 
-import { S, SAVED, Save, pilotName, shipName, ships, showMsg, startNewPilot } from '../01-state.js';
+import { S, SAVED, Save, pilotName, shipName, ships, showMsg } from '../01-state.js';
+import { startNewPilot } from './pilot-create.js';
 import { html } from './html.js';
 import { startTitleMusic, stopTitleMusic } from '../03-sound.js';
 import { combatRating, legalStatus } from '../13-legal.js';
