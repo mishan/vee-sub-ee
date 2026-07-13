@@ -12,15 +12,18 @@ import {
   spinOfSpob,
   sprites,
   systs,
-} from './01-state.js';
-import { html } from './ui/html.js';
-import { fuelMax, holds, player, poolKey } from './04-combat.js';
-import { updateTouchUI } from './05-input.js';
-import { distTo } from './06-interaction.js';
-import { cargoNames } from './07-trade.js';
+} from '../01-state.js';
+import { html } from './html.js';
+import { fuelMax, holds, player, poolKey } from '../04-combat.js';
+import { updateTouchUI } from '../05-input.js';
+import { distTo } from '../06-interaction.js';
+import { cargoNames } from '../07-trade.js';
 
 /*
- * engine/shell/10-render.js — part of the browser flight shell.
+ * engine/shell/ui/render.js — the canvas HUD/scene renderer (was 10-render.js).
+ * Presentation moved under ui/ per OOP_DESIGN.md's "Separating UI from logic"
+ * (slice 5). Pure drawing: it reads game state and paints the frame + sidebar
+ * panel; no game logic lives here.
  *
  * esbuild bundles the shell modules (entry: main.js) into engine/shell.bundle.js,
  * injected into flight.html by `evexport --flight` and the loader. 01-state is

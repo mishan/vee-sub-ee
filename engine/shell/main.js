@@ -12,7 +12,7 @@ import * as m06 from './06-interaction.js';
 import * as m07 from './07-trade.js';
 import * as m08 from './08-missions.js';
 import * as m09 from './09-step.js';
-import * as m10 from './10-render.js';
+import * as mRender from './ui/render.js';
 import * as m11 from './11-title.js';
 import * as m12 from './12-boarding.js';
 import * as m13 from './13-legal.js';
@@ -42,7 +42,7 @@ Object.assign(
   m07,
   m08,
   m09,
-  m10,
+  mRender,
   m11,
   m12,
   m13,

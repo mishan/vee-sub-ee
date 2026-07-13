@@ -7,7 +7,7 @@ import { cyclePlanetTarget, cycleShipTarget } from './06-interaction.js';
 import { openService } from './ui/services.js';
 import { landedDialog, tryLand } from './14-landing.js';
 import { loadSystem, step } from './09-step.js';
-import { render } from './10-render.js';
+import { render } from './ui/render.js';
 import { showSplash, showTitle } from './11-title.js';
 import { openMap } from './ui/map.js';
 

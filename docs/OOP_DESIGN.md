@@ -243,7 +243,11 @@ Independent of the class work; each is one branch, verified with lint,
    `ui/html.js`; the 8 importers now take them from there, and 01-state imports
    `html`/`raw` from it too (for its new-pilot dialog). `ui/html.js` is now the
    first leaf, loaded before 01-state.
-5. `ui/landing.js`, `ui/title.js`, `ui/render.js` — relocations.
+5. `ui/landing.js`, `ui/title.js`, `ui/render.js` — relocations. `ui/render.js`
+   **done** — the canvas HUD/scene renderer (`10-render.js`) moved under `ui/`
+   wholesale (it's pure drawing) with its importers rewired; `ui/landing.js` and
+   `ui/title.js` still to do (they mix logic with presentation, so likely a
+   split rather than a straight move).
 
 Do the file separation first; the `Dialog`-class conversion (Layer 4) then
 lands cleanly on top, one screen at a time.
