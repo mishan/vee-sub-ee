@@ -50,6 +50,13 @@ export function warpIntoSystem(e, tx = 0, ty = 0) {
   e.warpIn = 60; // safety cap; the coast ends as soon as it drops sub-light
   playSnd(130, attenuate(e.x, e.y) * 0.7); // Warp In boom (faint when far off)
 }
+// A "port": an inhabited, landable spöb — the only place an ambient trader
+// stops (mirrors ui/map.js's port definition). `portsHere()` is the current
+// system's ports; a system with none is a fly-through (traders head straight
+// back out — see TraderAI).
+export const isPort = (p) => !!(p && p.$sem && p.$sem.canLand && !p.$sem.uninhabited);
+export const portsHere = () => S.spobs.filter(isPort);
+
 export function spawnAI(atEdge) {
   const pairsD = [];
   for (let i = 1; i <= 4; i++) {
@@ -78,7 +85,10 @@ export function spawnAI(atEdge) {
   e.govt = dudes[dudeId].Govt;
   e.aiType = dudes[dudeId].AIType;
   e.booty = dudes[dudeId].Booty || 0; // what you can plunder when boarding (bible)
-  e.target = S.spobs.length ? S.spobs[Math.floor(Math.random() * S.spobs.length)] : null;
+  // Ambient traders head for a port to visit; a port-less system leaves the
+  // target null → TraderAI sends them straight back out.
+  const ports = portsHere();
+  e.target = ports.length ? ports[Math.floor(Math.random() * ports.length)] : null;
   armShip(e, ships[shipId]);
   // hostility from govt flags (spec: "Hostility")
   const gf =
