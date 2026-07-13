@@ -333,7 +333,7 @@ zero shell or DOM risk. If it feels right, we proceed to `World`.
 - **Compatibility layer (done):** the old `EV.thrust(ship)`-style free-function
   wrappers (`thrust`, `steerToward`, `retrograde`, `integrate`, `stepPlayer`,
   `canLand`, `placeAtTakeoff`, `placeAtArrival`, `stepJumpEngage`, `applyDamage`
-  → `takeDamage`, `stepShields`→`regenShields`, `stepShot`, `stepAsteroid`) and
+  → `takeDamage`, `stepShields` → `regenShields`, `stepShot`, `stepAsteroid`) and
   the `make*` factories were **removed**. Call sites use methods
   (`ship.thrust()`, `shot.step(target)`) and construction goes through the class
   (`new EV.Ship(rec, x, y, h)`), so there's one way to do each thing and no dead
