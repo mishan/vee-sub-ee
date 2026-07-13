@@ -437,11 +437,6 @@ export function render() {
   for (const p of S.spobs) {
     const [x, y] = toScreen(p.x, p.y);
     drawSpin(ctx, spinOfSpob(p), x, y, 0);
-    ctx.fillStyle = 'rgba(190,205,230,.55)';
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(p.name, x, y + 50);
-    ctx.textAlign = 'left';
     if (p === S.navTarget) {
       const ok = !p.$sem || p.$sem.canLand;
       drawBrackets(
