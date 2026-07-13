@@ -12,6 +12,15 @@
 
 import { legal, S } from './01-state.js';
 import { govts, govtAllies, govtEnemies } from './08-missions.js';
+import { spreadGovtDelta } from './legal-rules.js';
+
+// The govt-relations interface the legal-spread rules expect (see legal-rules.js
+// / ai-targeting.js): adapts this shell's govt table.
+const LEGAL_REL = {
+  allies: govtAllies,
+  enemies: govtEnemies,
+  flags: (g) => (govts[g] && govts[g].$sem ? govts[g].$sem.flags : []),
+};
 
 /* ---- legal record & combat rating (spec: "Legal record") ---- */
 // The government that controls a system (independent systems use govt 128).
@@ -81,15 +90,6 @@ export function isCriminalWith(systId) {
  * helps and a crime hurts; on an enemy system it flips (harming a govt pleases
  * its foes); neutral systems don't notice. The spread constants are tuned for
  * feel, not measured (CLAUDE.md "Known approximations"). */
-function relation(here, govt) {
-  if (here === govt || govtAllies(govt).includes(here) || govtAllies(here).includes(govt)) return 1;
-  if (govtEnemies(govt).includes(here) || govtEnemies(here).includes(govt)) return -1;
-  // a xenophobic govt counts everyone not allied to it as an enemy (bible), so
-  // hunting its ships (pirates) is lawful — the local govt credits you.
-  const gf = govts[govt] && govts[govt].$sem ? govts[govt].$sem.flags : [];
-  if (gf.includes('xenophobic')) return -1;
-  return 0;
-}
 // Calibrated from a real before/after pilot diff (one crime spree against the
 // Confederation reddened 26% of Confed systems and lifted 31% of the enemy
 // Rebellion's), so ~1/4 of related systems get caught, at a reduced magnitude.
@@ -97,24 +97,29 @@ export const SPREAD_PROB = 0.25; // chance a related system is caught in the net
 export const SPREAD_FRAC = 0.4; // fraction of the change those systems take
 // `delta` is a change to your standing WITH `govt` (positive = improves it);
 // crimes pass a negative delta. `rng` is injectable so the scatter is testable.
+// The spread policy is the pure spreadGovtDelta (legal-rules.js); this wrapper
+// feeds it the live syst table and legal store, staying allocation-free (it
+// passes system id + govt as primitives, not a fresh array).
 export function applyGovtDelta(govt, delta, rng = Math.random) {
-  if (govt < 128 || !delta) return;
   const here = S.SYSTEM_ID;
-  const bump = (sys, d) => {
-    if (d) legal.set(sys, legalOf(sys) + d);
-  };
-  bump(here, relation(govtOf(here), govt) * delta); // current system: full hit
-  const scatter = Math.round(delta * SPREAD_FRAC);
-  if (!scatter) return;
-  // for..in over the syst table (no fresh key array) — this runs on every
-  // kill/disable/mission event, so keep it allocation-free.
-  for (const id in DATA.types.syst) {
-    if (!Object.hasOwn(DATA.types.syst, id)) continue;
-    const sys = +id;
-    if (sys === here) continue;
-    const rel = relation(govtOf(sys), govt);
-    if (rel && rng() < SPREAD_PROB) bump(sys, rel * scatter); // random spread
-  }
+  spreadGovtDelta(govt, delta, {
+    here,
+    hereGovt: govtOf(here),
+    rel: LEGAL_REL,
+    prob: SPREAD_PROB,
+    frac: SPREAD_FRAC,
+    rng,
+    forEachSystem: (fn) => {
+      for (const id in DATA.types.syst) {
+        if (!Object.hasOwn(DATA.types.syst, id)) continue;
+        const sys = +id;
+        fn(sys, govtOf(sys));
+      }
+    },
+    bump: (sys, d) => {
+      if (d) legal.set(sys, legalOf(sys) + d);
+    },
+  });
 }
 // "Clean legal record with govt G": clear a criminal (negative) record in every
 // system that govt controls.
