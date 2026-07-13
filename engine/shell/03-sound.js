@@ -33,6 +33,7 @@ export function setVolume(delta) {
     if (a) a.volume = Math.min((a._baseVol ?? 1) * masterVol, 1);
   if (titleGain) titleGain.gain.value = titleVol();
   if (titleAudioEl) titleAudioEl.volume = titleVol();
+  for (const a of introMusicEls) a.volume = titleVol();
   showMsg(`Volume ${Math.round(masterVol * 100)}%`);
   playSnd(150, 0.6); // audible reference beep at the new level
 }
@@ -154,6 +155,49 @@ export function stopTitleMusic() {
     titleAudioEl.pause();
     titleAudioEl.currentTime = 0;
   }
+}
+
+/* ---- new-pilot intro music (spec: "New-pilot intro") ----
+ * The intro has two cues, distinct from the title theme (snd 30000): an ambient
+ * bed (snd 30003 "Transition") under the launch graphic, then drums under the
+ * story crawl — snd 30001 "Drum Intro" once, seguing into a snd 30002 "Drum Loop".
+ * Plain HTMLAudio (the 8-bit WAVs can trip desktop Web Audio decode); they start
+ * from the intro's first gesture, so autoplay is already unlocked. */
+export let introMusicEls = [];
+function introTrack(id, loop) {
+  const a = new Audio('evassets/music/snd_' + id + '.wav');
+  a.loop = !!loop;
+  a.volume = titleVol();
+  return a;
+}
+export function playIntroAmbient() {
+  stopIntroMusic();
+  if (!S.soundOn || masterVol <= 0) return;
+  const a = introTrack(30003, true);
+  a.play().catch(() => {});
+  introMusicEls = [a];
+}
+export function playIntroDrums() {
+  stopIntroMusic();
+  if (!S.soundOn || masterVol <= 0) return;
+  const intro = introTrack(30001, false),
+    loop = introTrack(30002, true);
+  // segue: when the one-shot drum intro ends, roll into the looping bed — but
+  // only if it hasn't been stopped (skip/finish) in the meantime.
+  intro.addEventListener('ended', () => {
+    if (introMusicEls.includes(loop)) loop.play().catch(() => {});
+  });
+  intro.play().catch(() => {});
+  introMusicEls = [intro, loop];
+}
+export function stopIntroMusic() {
+  for (const a of introMusicEls) {
+    try {
+      a.pause();
+      a.currentTime = 0;
+    } catch {}
+  }
+  introMusicEls = [];
 }
 /* Some mobile browsers only honour AudioContext.resume() from certain gesture
  * types (a pointerup/touchend/click — not the pointerdown the splash advances

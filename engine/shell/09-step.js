@@ -11,7 +11,10 @@ import {
   spinsNeededFor,
   strictPlay,
   systs,
+  tutSeen,
+  tutorialActive,
 } from './01-state.js';
+import { tutorial } from './ui/tutorial.js';
 import { maybeSpawnBountyHunter, spawnAI, isPort } from './02-spawning.js';
 import { attenuate, playSnd, stopAllLoops } from './03-sound.js';
 import {
@@ -310,6 +313,10 @@ export class World {
     maybeSpawnBountyHunter();
     checkHostileAlert(this.ships);
     if (!S.landedAt) {
+      // One nearest-planet scan for this frame, shared by the jump cue and the
+      // drift tutorial below (the player hasn't moved between them). The later
+      // jump-engage check re-scans because stepJumpEngage moves the player first.
+      const nearDist = nearestSpobInfo().dist;
       // Hyperspace-ready cue: with a destination armed and the fuel to take it,
       // light the nav pane and ding once the instant you clear the no-jump ring
       // (and again if you drift back out and clear it anew).
@@ -318,9 +325,13 @@ export class World {
         S.jumpDest != null &&
         !!systs[S.jumpDest] &&
         S.fuel >= EV.JUMP_FUEL &&
-        nearestSpobInfo().dist >= EV.JUMP_MIN_DIST;
+        nearDist >= EV.JUMP_MIN_DIST;
       if (jumpReady && !S.jumpReady) playSnd(150, 0.5); // ding on entering jump range
       S.jumpReady = jumpReady;
+      // New-pilot tutorial: once you've drifted far enough that the nearest planet
+      // has left the radar (~2600 px, its half-range) — the point the nav arrow
+      // shows — nudge toward the map/jump. Self-guards to fire once.
+      if (tutorialActive && !tutSeen.has('drift') && nearDist > 2600) tutorial('drift');
       if (S.jump && this.player.deathT >= 0) abortJump(); // no jumping out of a fireball
       if (S.jump && S.jump.phase === 'engage') {
         const ready = EV.stepJumpEngage(this.player, mapBearingTo(S.jump.destId));

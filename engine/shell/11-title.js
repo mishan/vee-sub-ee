@@ -1,5 +1,12 @@
-import { SAVED } from './01-state.js';
-import { armAudioUnlock, startTitleMusic, stopTitleMusic } from './03-sound.js';
+import { SAVED, armTutorial, markIntroSeen } from './01-state.js';
+import {
+  armAudioUnlock,
+  playIntroAmbient,
+  playIntroDrums,
+  startTitleMusic,
+  stopIntroMusic,
+  stopTitleMusic,
+} from './03-sound.js';
 import { render } from './ui/render.js';
 import {
   fadeSplashAway,
@@ -9,6 +16,8 @@ import {
   setSplashLoading,
   showTitleMenu,
 } from './ui/title.js';
+import { beginGraphic, hideIntro, showIntroGraphic, skipCrawl, startCrawl } from './ui/intro.js';
+import { tutorial } from './ui/tutorial.js';
 
 /*
  * engine/shell/11-title.js — the title/intro state machine (part of the shell).
@@ -34,8 +43,11 @@ import {
  * headless screenshots go straight to the game. ?title=1 forces it. */
 export let titleShown = false,
   splashShown = false,
-  splashAdvancing = false;
-export const introUp = () => splashShown || titleShown; // sim paused, keys swallowed
+  splashAdvancing = false,
+  introShown = false;
+// The splash, title menu, and new-pilot intro all pause the sim and swallow
+// gameplay keys.
+export const introUp = () => splashShown || titleShown || introShown;
 
 /* Loading splash (PICT 131) → "Press any key" → music, brief hold, then the
  * title menu, echoing classic EV's boot. The first key/pointer gesture is
@@ -77,6 +89,55 @@ export function enterGame() {
   hideTitleMenu();
   stopTitleMusic();
   render();
+}
+
+/* ---------------- new-pilot intro (spec: "New-pilot intro") ----------------
+ * Shown once, the first time a brand-new pilot is flown (see 17-main's boot).
+ * The launch graphic (PICT 8200) holds under an ambient bed; the first gesture
+ * begins it (unlocking audio), then it segues to the STR# 20000 story crawl over
+ * drums; finishing (or skipping) drops into flight and arms the tutorial. Phase:
+ * 'graphic' waits for the first gesture; 'playing' = holding/crawling (skippable). */
+let introPhase = 'idle';
+export function showIntro() {
+  introShown = true;
+  introPhase = 'graphic';
+  showIntroGraphic();
+  // A pointer gesture begins (or, once playing, skips) the intro; key presses
+  // reach the same handler via 05-input, which calls introGesture on any key
+  // while introShown. Kept until the intro ends (removed in finishIntro).
+  addEventListener('pointerdown', introGesture, true);
+}
+// One handler for both gestures and keys: the first begins the intro, any after
+// skips the rest.
+export function introGesture() {
+  if (introPhase === 'graphic') beginIntro();
+  else if (introPhase === 'playing') finishIntro();
+}
+function beginIntro() {
+  introPhase = 'playing';
+  beginGraphic();
+  playIntroAmbient(); // snd 30003 under the launch graphic
+  setTimeout(startCrawlPhase, 4500); // hold the graphic a beat, then crawl
+}
+function startCrawlPhase() {
+  if (!introShown) return; // skipped during the hold
+  playIntroDrums(); // snd 30001 → 30002 under the crawl
+  startCrawl(finishIntro);
+}
+export function finishIntro() {
+  if (!introShown) return;
+  introShown = false;
+  introPhase = 'idle';
+  removeEventListener('pointerdown', introGesture, true);
+  skipCrawl(); // no-op if the crawl already ended; cancels it if skipping
+  hideIntro();
+  stopIntroMusic();
+  markIntroSeen(); // persist so the intro never replays for this pilot
+  render();
+  // New pilots get the onboarding tutorial: arm it, then the first ("welcome")
+  // banner as they enter flight by Levo.
+  armTutorial();
+  tutorial('welcome');
 }
 
 // Enter Ship is the one gameplay entry point, so its binding stays with the

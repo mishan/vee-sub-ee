@@ -9,7 +9,7 @@ import { tryLand } from './14-landing.js';
 import { landedDialog } from './ui/landing.js';
 import { loadSystem, step } from './09-step.js';
 import { render } from './ui/render.js';
-import { showSplash, showTitle } from './11-title.js';
+import { showIntro, showSplash, showTitle } from './11-title.js';
 import { openMap } from './ui/map.js';
 
 /*
@@ -37,6 +37,21 @@ if (SAVED && SAVED.spob != null) {
     if (p.CustSndID >= 0) S.ambientSnd = loopSnd(p.CustSndID, 0.6);
     landedDialog.open(); // renders the hub, shows the panel, binds its actions
     showMsg('Pilot restored.');
+  }
+} else if (SAVED && SAVED.spob == null) {
+  // Brand-new pilot (never docked): start in flight just off the start planet,
+  // close enough that landing on it is an easy first move — the intro shows the
+  // ship launching from here, and the first tutorial message says to land. The
+  // default makeShip position (0,300) can be far from the planet, so nudge onto
+  // it. Pick the system's first landable spob (Levo, for the classic start).
+  const start = S.spobs.find((sp) => !sp.$sem || sp.$sem.canLand);
+  if (start) {
+    player.x = start.x;
+    // Right beside the planet (within LAND_DIST, so L→L lands immediately) — the
+    // intro shows the ship launching from here and the first hint says to land.
+    player.y = start.y - 80;
+    player.vx = player.vy = 0;
+    player.heading = 0;
   }
 }
 // Escorts only materialise when in flight; if we restored docked, takeOff()
@@ -100,6 +115,13 @@ addEventListener('load', () => {
     newPilotJustMade = sessionStorage.getItem('ve_newpilot') === '1';
     if (newPilotJustMade) sessionStorage.removeItem('ve_newpilot');
   } catch {}
-  if (params.has('titlemenu') || newPilotJustMade) showTitle();
+  // A brand-new pilot's first flight gets the intro (launch graphic + story
+  // crawl), then drops into space by Levo — like the original. It's gated on the
+  // persistent introSeen flag (+ never-docked), so it plays once and never for an
+  // established pilot. ?intro forces it; ?nointro skips it (e.g. headless runs).
+  const newPilotFirstPlay =
+    SAVED && !SAVED.introSeen && SAVED.spob == null && !resuming && !TEST_MODE;
+  if (params.has('intro') || (newPilotFirstPlay && !params.has('nointro'))) showIntro();
+  else if (params.has('titlemenu') || newPilotJustMade) showTitle();
   else if ((!resuming && !TEST_MODE) || params.has('title') || params.has('splash')) showSplash();
 });

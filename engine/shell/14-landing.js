@@ -18,6 +18,7 @@ import { loadSystem } from './09-step.js';
 import { activeView } from './ui/dialog.js';
 import { closeService } from './ui/services.js';
 import { landedDialog, setMissionNotes } from './ui/landing.js';
+import { tutorial } from './ui/tutorial.js';
 
 // The landing screen's persistent "Take Off" button self-binds here (it triggers
 // takeOff, which is logic), so it needs no global-onclick bridge.
@@ -77,4 +78,5 @@ export function takeOff() {
   loadSystem(S.SYSTEM_ID);
   EV.placeAtTakeoff(player, spob); // then place on the pad (loadSystem doesn't move you)
   spawnEscorts(); // launch the fleet alongside the player
+  tutorial('depart'); // new-pilot hint on first departure (self-guards to once)
 }

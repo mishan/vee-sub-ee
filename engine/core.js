@@ -37,8 +37,8 @@ const frameIndex = (heading, frames) =>
 const bearing = (dx, dy) => norm((Math.atan2(dx, -dy) * 180) / Math.PI);
 
 /* ---- landing rules (spec: "Landing") ---- */
-const LAND_DIST = 60,
-  LAND_SPEED = 0.9;
+const LAND_DIST = 120, // the original is forgiving about landing range; 60 was
+  LAND_SPEED = 0.9; //   too tight and made landing feel fussy (see spec)
 
 /* ---- hyperjump (spec: "Hyperjump") ---- */
 const JUMP_FUEL = 100,
