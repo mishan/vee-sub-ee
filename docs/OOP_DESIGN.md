@@ -245,9 +245,13 @@ Independent of the class work; each is one branch, verified with lint,
    first leaf, loaded before 01-state.
 5. `ui/landing.js`, `ui/title.js`, `ui/render.js` — relocations. `ui/render.js`
    **done** — the canvas HUD/scene renderer (`10-render.js`) moved under `ui/`
-   wholesale (it's pure drawing) with its importers rewired; `ui/landing.js` and
-   `ui/title.js` still to do (they mix logic with presentation, so likely a
-   split rather than a straight move).
+   wholesale (it's pure drawing) with its importers rewired. `ui/landing.js`
+   **done** — a split, as expected: the landing *screen* (the `landedBody`
+   markup, its `landedDialog`, `renderPlanetScreen`, and the `missionNotes` it
+   shows) moved to `ui/landing.js`; `14-landing.js` keeps the flight-side logic
+   (`tryLand`/`takeOff`) and imports the dialog + a `setMissionNotes` setter
+   back, so the dependency stays one-way (logic → ui) with no cycle.
+   `ui/title.js` still to do (the same logic/presentation split as landing).
 
 Do the file separation first; the `Dialog`-class conversion (Layer 4) then
 lands cleanly on top, one screen at a time.
