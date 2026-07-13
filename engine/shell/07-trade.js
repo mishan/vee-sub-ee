@@ -40,9 +40,11 @@ export const missionCargoUsed = () =>
 export const cargoUsed = () => hold.used() + missionCargoUsed();
 
 // The pure pricing/tech/trade-in math lives in trade-rules.js (DOM-free,
-// unit-tested); these wrappers thread this module's data tables.
-export const priceAt = (spob, i) =>
-  rules.priceAt(spob, i, { commodities: COMMODITIES, priceMult: PRICE_MULT, basePrices });
+// unit-tested); these wrappers thread this module's data tables. The price
+// tables are constant, so hoist them once instead of rebuilding the object on
+// every priceAt call (the exchange calls it per good, per render).
+const PRICE_TABLES = { commodities: COMMODITIES, priceMult: PRICE_MULT, basePrices };
+export const priceAt = (spob, i) => rules.priceAt(spob, i, PRICE_TABLES);
 export function trade(i, qty) {
   if (!S.landedAt) return;
   const price = priceAt(S.landedAt, i);
