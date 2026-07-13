@@ -13,7 +13,8 @@
  * normalize it (clamp a stale/empty selection to the first item), so they are
  * not side-effect-free.
  */
-import { S, cargo, COMMODITIES, html, outfits, ships, wallet } from '../01-state.js';
+import { S, cargo, COMMODITIES, outfits, ships, wallet } from '../01-state.js';
+import { html } from './html.js';
 import { effectiveShip, holds } from '../04-combat.js';
 import {
   cargoNames,

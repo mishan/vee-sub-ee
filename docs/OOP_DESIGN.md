@@ -232,9 +232,17 @@ Independent of the class work; each is one branch, verified with lint,
    and their logic) went into a new `ui/services.js`; `16-missionboard.js` moved
    to `ui/missionboard.js`. `07-trade` now holds only trade/outfit/shipyard
    logic.
-3. `ui/hail.js` — the hardest one (most inline handlers); extract from
-   `06-interaction`.
+3. `ui/hail.js` — extract from `06-interaction`. **Done** — the dialog body
+   (ship / boarding / planet variants + `shipOfferPanel`), the `hailActions`
+   map, and `hailDialog`/`renderHail` moved; 06-interaction keeps the
+   interaction logic/state (openHail/closeHail/hailOpen, target cycling, the
+   comm outcomes) and imports `hailDialog`/`renderHail` back. (The buttons were
+   already `data-action`, not inline handlers, so no global-bridge churn.)
 4. `ui/html.js` — relocate the template primitive; rewire every importer.
+   **Done** — `html`/`raw`/`escapeHtml`/`SafeHtml` moved to the import-free leaf
+   `ui/html.js`; the 8 importers now take them from there, and 01-state imports
+   `html`/`raw` from it too (for its new-pilot dialog). `ui/html.js` is now the
+   first leaf, loaded before 01-state.
 5. `ui/landing.js`, `ui/title.js`, `ui/render.js` — relocations.
 
 Do the file separation first; the `Dialog`-class conversion (Layer 4) then

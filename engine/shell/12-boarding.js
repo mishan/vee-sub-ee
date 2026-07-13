@@ -31,13 +31,8 @@ import {
   penaltyOf,
   player,
 } from './04-combat.js';
-import {
-  checkDefenseCleared,
-  hailClick,
-  hailOpen,
-  openHail,
-  renderHail,
-} from './06-interaction.js';
+import { checkDefenseCleared, hailClick, hailOpen, openHail } from './06-interaction.js';
+import { renderHail } from './ui/hail.js';
 import { cargoNames, cargoUsed } from './07-trade.js';
 import { misnName, misns } from './08-missions.js';
 

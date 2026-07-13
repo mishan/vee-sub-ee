@@ -1,4 +1,5 @@
-import { missionLog, wallet, S, html, escorts, ships, savePilot, showMsg } from '../01-state.js';
+import { missionLog, wallet, S, escorts, ships, savePilot, showMsg } from '../01-state.js';
+import { html } from './html.js';
 import { HIRE_ROSTER, MAX_ESCORTS, hireFee, shipClassDesc, upkeepOf } from '../02-spawning.js';
 import { holds } from '../04-combat.js';
 import { cargoUsed } from '../07-trade.js';
