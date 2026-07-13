@@ -402,6 +402,23 @@ function beamHitDist(ox, oy, dx, dy, maxLen, target, half) {
   return Math.hypot(target.x - px, target.y - py) < BEAM_HALF + half / 2 ? t : Infinity;
 }
 
+/* Longest range at which any of a ship's weapons can hit: beams (Guidance 0/3)
+ * reach their raw Speed; other projectiles reach shotSpeed·Count. Fighter bays
+ * (Guidance 99) launch ships, not fire, so they don't count. Drives the AI's
+ * decision to open fire (shell: ai-strategies). `ship.weapons` is [{rec}, …]. */
+function maxWeaponRange(ship) {
+  let r = 0;
+  for (const w of ship.weapons)
+    if (w.rec.Guidance !== 99)
+      r = Math.max(
+        r,
+        w.rec.Guidance === 0 || w.rec.Guidance === 3
+          ? w.rec.Speed
+          : shotSpeedOf(w.rec) * w.rec.Count,
+      );
+  return r;
+}
+
 export {
   FPS,
   maxSpeedOf,
@@ -429,4 +446,5 @@ export {
   ASTEROID_RADII,
   shotHitsShip,
   beamHitDist,
+  maxWeaponRange,
 };
