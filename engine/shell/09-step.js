@@ -12,7 +12,7 @@ import {
   strictPlay,
   systs,
 } from './01-state.js';
-import { maybeSpawnBountyHunter, spawnAI } from './02-spawning.js';
+import { maybeSpawnBountyHunter, spawnAI, isPort } from './02-spawning.js';
 import { attenuate, playSnd, stopAllLoops } from './03-sound.js';
 import {
   abortJump,
@@ -206,8 +206,23 @@ const randomSpob = () =>
  * mission escorts complete their arrival on touchdown. */
 class TraderAI extends AI {
   step(s, world) {
-    EV.stepTrader(s, s.target);
     const catchGoal = (s.misnId != null && !s.escort) || (s.isPers && !s.offered);
+    // A plain ambient trader with nowhere to land — a port-less system (empty,
+    // star-only, or all-uninhabited), or a target that isn't an inhabited
+    // landable port — doesn't loiter: it heads straight back out. (Catch-goal /
+    // escort ships, and ships already landed or departing, keep their flow.)
+    if (
+      !catchGoal &&
+      !s.escort &&
+      s.state !== 'landed' &&
+      s.state !== 'depart' &&
+      !isPort(s.target)
+    ) {
+      s.state = 'depart';
+      s.departing = false;
+      s.target = null; // depart logic below picks a system edge to leave through
+    }
+    EV.stepTrader(s, s.target);
     if (catchGoal) {
       // Don't let it leave: if it lands or tries to depart, send it back to a
       // planet and keep loitering in-system.

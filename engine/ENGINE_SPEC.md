@@ -339,8 +339,12 @@ the system's `DudeTypes1..4` weighted by `Prob1..4`; pick ship from the
 düde's `ShipTypes1..4` weighted by its `Prob1..4`; skip IDs < 128 or
 missing records. Position: angle uniform in [0, 2π), radius 1000 + rand·500
 (edge/arrival spawn) or 400 + rand·1200 (initial population). Target:
-uniform over the system's spobs. Departed traders respawn after a 2–8 s
-delay (as a fresh arrival).
+uniform over the system's **ports** (inhabited, landable spöbs). A system with
+no port — empty, star-only, or only uninhabited worlds — is a **fly-through**:
+an ambient trader has nowhere worth stopping, so instead of cruising to some
+object and loitering it heads straight for the edge and hyperspaces out shortly
+after arriving. Departed traders respawn after a 2–8 s delay (as a fresh
+arrival).
 
 **Warp-in** (`warpIntoSystem`, spec: the original never popped ships into
 existence). Arrivals enter from just off-screen moving at ~4× their top
