@@ -40,7 +40,7 @@ import { refuelCost as refuelCostOf } from './trade-rules.js';
  * into its own module moved it here. It's referenced lazily everywhere else, so
  * the position is safe; it's grouped with combat only by adjacency. */
 
-export const player = EV.makeShip(
+export const player = new EV.Ship(
   ships[S.playerShipId],
   +(params.get('x') || 0),
   +(params.get('y') || 300),
@@ -205,7 +205,7 @@ export function fire(e, target, primary) {
         aim = target ? clampArc(leadAim(e, target, EV.shotSpeedOf(w.rec)), base, 45) : base;
       }
       aim = EV.norm(aim + (Math.random() * 2 - 1) * w.rec.Inaccuracy);
-      const shot = EV.makeShot(w.rec, e, aim);
+      const shot = new EV.Projectile(w.rec, e, aim);
       shot.owner = e;
       shot.homing = g === 1 || g === 2 ? target : null;
       S.shots.push(shot);
@@ -268,7 +268,7 @@ export function grudge(victim, attacker) {
 }
 
 export function hitShip(victim, rec, heading, attacker) {
-  const result = EV.applyDamage(victim, rec);
+  const result = victim.takeDamage(rec);
   const kick = rec.Impact / (10 * victim.mass);
   victim.vx += Math.sin(EV.rad(heading)) * kick;
   victim.vy -= Math.cos(EV.rad(heading)) * kick;
@@ -474,7 +474,7 @@ export function completeJump() {
   loadSystem(S.jump.destId);
   // placeAtArrival wants the inbound bearing (origin → dest); from the
   // destination, mapBearingTo(origin) is the reverse bearing, so flip it.
-  EV.placeAtArrival(player, EV.norm(mapBearingTo(from) + 180));
+  player.placeAtArrival(EV.norm(mapBearingTo(from) + 180));
   clearArrivalOfSpobs(); // materialise beyond the no-jump ring (chain-jump ready)
   spawnEscorts(); // fleet jumps in around the now-placed player
   fuel.spendJump();

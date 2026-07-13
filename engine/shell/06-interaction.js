@@ -165,7 +165,7 @@ export function spawnDefenseFleet(p) {
     if (shipId == null) continue;
     const a = Math.random() * Math.PI * 2,
       r = 500 + Math.random() * 300;
-    const e = EV.makeShip(
+    const e = new EV.Ship(
       ships[shipId],
       player.x + Math.cos(a) * r,
       player.y + Math.sin(a) * r,

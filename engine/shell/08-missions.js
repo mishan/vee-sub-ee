@@ -249,7 +249,7 @@ export function maybeSpawnMissionShips(A) {
     if (shipId == null) continue;
     const a = Math.random() * Math.PI * 2,
       r = 900 + Math.random() * 700;
-    const e = EV.makeShip(
+    const e = new EV.Ship(
       ships[shipId],
       player.x + Math.cos(a) * r,
       player.y + Math.sin(a) * r,

@@ -76,7 +76,7 @@ export function spawnAsteroids() {
     const ang = Math.random() * Math.PI * 2;
     const spd = rand(0.2, 0.6); // drift, px/frame
     S.asteroids.push(
-      EV.makeAsteroid(
+      new EV.Asteroid(
         cx + rand(-B, B),
         cy + rand(-B, B),
         Math.cos(ang) * spd,
@@ -111,7 +111,7 @@ export function spawnAI(atEdge) {
   const r = atEdge ? 1000 + Math.random() * 500 : 400 + Math.random() * 1200;
   const ex = Math.cos(a) * r,
     ey = Math.sin(a) * r;
-  const e = EV.makeShip(ships[shipId], ex, ey, Math.random() * 360);
+  const e = new EV.Ship(ships[shipId], ex, ey, Math.random() * 360);
   e.shipId = shipId;
   e.govt = dudes[dudeId].Govt;
   e.aiType = dudes[dudeId].AIType;
@@ -145,7 +145,7 @@ export function makeEscort(esc) {
   if (!rec) return null;
   const a = Math.random() * Math.PI * 2,
     r = 140 + Math.random() * 120;
-  const e = EV.makeShip(
+  const e = new EV.Ship(
     rec,
     player.x + Math.cos(a) * r,
     player.y + Math.sin(a) * r,
@@ -195,7 +195,7 @@ export function launchFighter(w) {
   const rec = ships[w.rec.AmmoType];
   if (!rec) return false;
   const ahead = EV.rad(player.heading);
-  const e = EV.makeShip(
+  const e = new EV.Ship(
     rec,
     player.x + Math.sin(ahead) * 60,
     player.y - Math.cos(ahead) * 60,
@@ -363,7 +363,7 @@ export function maybeSpawnBountyHunter() {
   if (shipId == null) return;
   const a = Math.random() * Math.PI * 2,
     r = 2200;
-  const e = EV.makeShip(
+  const e = new EV.Ship(
     ships[shipId],
     player.x + Math.cos(a) * r,
     player.y + Math.sin(a) * r,

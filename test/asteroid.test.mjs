@@ -4,35 +4,35 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as EV from '../engine/core.js';
 
-test('makeAsteroid sets a size-appropriate collision radius (small/big)', () => {
-  assert.equal(EV.makeAsteroid(0, 0, 0, 0, 0, 0).r, EV.ASTEROID_RADII[0]);
-  assert.equal(EV.makeAsteroid(0, 0, 0, 0, 1, 0).r, EV.ASTEROID_RADII[1]);
+test('new Asteroid sets a size-appropriate collision radius (small/big)', () => {
+  assert.equal(new EV.Asteroid(0, 0, 0, 0, 0, 0).r, EV.ASTEROID_RADII[0]);
+  assert.equal(new EV.Asteroid(0, 0, 0, 0, 1, 0).r, EV.ASTEROID_RADII[1]);
 });
 
-test('stepAsteroid drifts, spins, and wraps within ±BOUND of the origin', () => {
+test('Asteroid.step drifts, spins, and wraps within ±BOUND of the origin', () => {
   const B = EV.ASTEROID_BOUND;
-  const a = EV.makeAsteroid(B - 1, 0, 2, 0, 1, 5);
-  EV.stepAsteroid(a); // x: B-1 → B+1 → wraps to -(B-1)
+  const a = new EV.Asteroid(B - 1, 0, 2, 0, 1, 5);
+  a.step(); // x: B-1 → B+1 → wraps to -(B-1)
   assert.equal(a.x, -(B - 1), `wrapped: ${a.x}`);
   assert.equal(a.rot, 5, 'spun by spin per frame');
 });
 
-test('stepAsteroid wraps around the player so the field follows them', () => {
+test('Asteroid.step wraps around the player so the field follows them', () => {
   const B = EV.ASTEROID_BOUND;
   const px = 2000; // far from the origin, to tell player-wrap from origin-wrap
   // A rock sitting exactly on the player stays put when wrapped around the player;
   // wrapping around the origin (the bug) would jump it to ~-600.
-  const a = EV.makeAsteroid(px, 0, 0, 0, 0, 0);
-  EV.stepAsteroid(a, px, 0);
+  const a = new EV.Asteroid(px, 0, 0, 0, 0, 0);
+  a.step(px, 0);
   assert.equal(a.x, px, 'stayed on the player, not wrapped to the origin');
   // and one just past the far edge re-enters near the player
-  const b = EV.makeAsteroid(px + B + 10, 0, 0, 0, 0, 0);
-  EV.stepAsteroid(b, px, 0);
+  const b = new EV.Asteroid(px + B + 10, 0, 0, 0, 0, 0);
+  b.step(px, 0);
   assert.ok(Math.abs(b.x - px) <= B && b.x < px, `re-centred near the player: ${b.x}`);
 });
 
 test('rayHitsAsteroids returns the nearest entry distance, or Infinity', () => {
-  const rocks = [EV.makeAsteroid(100, 0, 0, 0, 1, 0)]; // r=14 at x=100
+  const rocks = [new EV.Asteroid(100, 0, 0, 0, 1, 0)]; // r=14 at x=100
   assert.equal(EV.rayHitsAsteroids(0, 0, 1, 0, 500, rocks), 100 - EV.ASTEROID_RADII[1]);
   assert.equal(EV.rayHitsAsteroids(0, 0, 1, 0, 50, rocks), Infinity, 'too short to reach it');
   assert.equal(EV.rayHitsAsteroids(0, 0, -1, 0, 500, rocks), Infinity, 'aimed away');
@@ -41,15 +41,15 @@ test('rayHitsAsteroids returns the nearest entry distance, or Infinity', () => {
 
 test('rayHitsAsteroids: nearest of several, and origin-inside blocks at 0', () => {
   const rocks = [
-    EV.makeAsteroid(300, 0, 0, 0, 1, 0),
-    EV.makeAsteroid(150, 0, 0, 0, 0, 0), // closer
+    new EV.Asteroid(300, 0, 0, 0, 1, 0),
+    new EV.Asteroid(150, 0, 0, 0, 0, 0), // closer
   ];
   assert.equal(EV.rayHitsAsteroids(0, 0, 1, 0, 500, rocks), 150 - EV.ASTEROID_RADII[0]);
   assert.equal(EV.rayHitsAsteroids(150, 0, 1, 0, 500, rocks), 0, 'origin inside → blocked at 0');
 });
 
 test('shotAsteroidImpact returns the swept-segment entry point (no tunnelling)', () => {
-  const rocks = [EV.makeAsteroid(0, 0, 0, 0, 1, 0)]; // r=14 at origin
+  const rocks = [new EV.Asteroid(0, 0, 0, 0, 1, 0)]; // r=14 at origin
   // end-point (x=-30) is past the rock, but the swept segment (prev x=50 → -30)
   // crossed it — a point test alone would miss this. Impact is at the near edge.
   const pt = shotAt(-30, 0, -80, 0, rocks);
