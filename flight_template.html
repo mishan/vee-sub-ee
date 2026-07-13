@@ -99,7 +99,8 @@
     border-radius: 3px; }
   #service .shopcard .name { font-size: 10px; line-height: 1.15; text-align: center;
     max-height: 2.35em; overflow: hidden; }
-  #service .shopcard:hover { border-color: #4a5b82; background: #16203a; }
+  /* :not(:disabled) bumps specificity above the generic #service button:hover rule */
+  #service .shopcard:hover:not(:disabled) { border-color: #4a5b82; background: #16203a; }
   #service .shopcard.sel { border-color: #ffd479; box-shadow: 0 0 6px rgba(255,212,121,.45); color: #fff; }
   .shoppane { flex: 0 0 200px; min-width: 0; }
   .shoppane img { width: 100px; height: 100px; image-rendering: pixelated;

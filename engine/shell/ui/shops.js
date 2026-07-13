@@ -69,17 +69,18 @@ export function renderExchange() {
  * `picBase`) with its name below — larger and labelled, like the original shops.
  * Only items actually available here are shown; `nameFn(id)` gives the label. */
 export function shopGrid(picBase, items, selId, clickFn, nameFn) {
-  const cells = items.map(
-    ({ id }) => html`<button
+  const cells = items.map(({ id }) => {
+    const name = nameFn(id); // one lookup, reused for both the tooltip and label
+    return html`<button
       class="shopcard${id === selId ? ' sel' : ''}"
       data-action="${clickFn}"
       data-arg="${id}"
-      title="${nameFn(id)}"
+      title="${name}"
     >
       <img src="evassets/graphics/PICT_${picBase + (id - 128)}.png" alt="" onerror="this.style.visibility='hidden'" />
-      <span class="name">${nameFn(id)}</span>
-    </button>`,
-  );
+      <span class="name">${name}</span>
+    </button>`;
+  });
   return html`<div class="shopgrid">${cells}</div>`;
 }
 
