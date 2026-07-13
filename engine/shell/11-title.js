@@ -229,6 +229,13 @@ function openPilotBody() {
           <span data-action="del" data-arg="${p.id}" title="Delete pilot" style="float:right;color:#d67"
             >✕</span
           >
+          <span
+            data-action="json"
+            data-arg="${p.id}"
+            title="Export this save as native Vₑ JSON"
+            style="float:right;color:#6bb6ff;margin-right:12px;font-size:0.85em"
+            >⤓ JSON</span
+          >
         </button>`,
       )
     : html`<p style="color:#6f7c94">No saved pilots yet — start a New Pilot or import one.</p>`;
@@ -238,6 +245,27 @@ function openPilotBody() {
       <button data-action="import">Import EV Pilot…</button>
       <button data-action="close">Close</button>
     </div>`;
+}
+/* Download a pilot's stored save as a native Vₑ .json file. This is the
+ * engine's own on-disk shape (cargo map, missions, ship, outfits, legal record,
+ * …) — distinct from the EV Classic pilot-file export — so a bug report can
+ * carry the exact state that triggered it (e.g. a mission cargo-space dispute). */
+function exportPilotJSON(id) {
+  const save = Save.read(id);
+  if (!save) {
+    showMsg('Could not read that pilot from storage.');
+    return;
+  }
+  const base = String(save.name || 'pilot').replace(/[^\w.-]+/g, '_') || 'pilot';
+  const blob = new Blob([JSON.stringify(save, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = base + '.ve.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 const openPilotActions = {
   pick: (id) => {
@@ -253,6 +281,7 @@ const openPilotActions = {
       openPilotDialog.refresh();
     }
   },
+  json: (id) => exportPilotJSON(id),
   import: () => document.getElementById('pilotFile').click(),
   close: () => openPilotDialog.close(),
 };
