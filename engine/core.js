@@ -378,6 +378,30 @@ function shotAsteroidImpact(shot, asteroids) {
   return t < Infinity ? { x: ox + dx * t, y: oy + dy * t } : null;
 }
 
+/* ---- weapon ↔ ship collision (spec: "Combat") ---- */
+
+/* Does a projectile touch a ship this frame? A hit is within the larger of the
+ * shot's proximity radius (ProxRadius, for flak/blast weapons) and the ship's
+ * collision half-size `half` (the shell measures it from the sprite). */
+function shotHitsShip(shot, ship, half) {
+  return Math.hypot(ship.x - shot.x, ship.y - shot.y) < Math.max(shot.rec.ProxRadius, half);
+}
+
+const BEAM_HALF = 8; // beam collision half-width (px), before adding the ship's half-size term
+
+/* How far along a beam (fired from ox,oy toward the unit dir dx,dy, up to
+ * `maxLen`) it first touches `target`, or Infinity if it misses. The beam is a
+ * fat segment: the target counts as hit when its centre is within
+ * BEAM_HALF + half/2 of the ray and the foot of the perpendicular lies within
+ * [0, maxLen]. The shell calls this per candidate and keeps the nearest. */
+function beamHitDist(ox, oy, dx, dy, maxLen, target, half) {
+  const t = (target.x - ox) * dx + (target.y - oy) * dy; // projection onto the ray
+  if (t < 0 || t > maxLen) return Infinity;
+  const px = ox + dx * t,
+    py = oy + dy * t;
+  return Math.hypot(target.x - px, target.y - py) < BEAM_HALF + half / 2 ? t : Infinity;
+}
+
 export {
   FPS,
   maxSpeedOf,
@@ -403,4 +427,6 @@ export {
   shotAsteroidImpact,
   ASTEROID_BOUND,
   ASTEROID_RADII,
+  shotHitsShip,
+  beamHitDist,
 };

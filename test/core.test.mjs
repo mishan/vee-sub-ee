@@ -235,3 +235,23 @@ test('Ship.stepTrader: cruise → brake → landed → depart state machine', ()
   assert.deepEqual([d.vx, d.vy], [0, 0]);
   assert.equal(d.state, 'depart');
 });
+
+/* ---- weapon ↔ ship collision geometry ---- */
+
+test('shotHitsShip: within the larger of the shot prox radius and the ship half', () => {
+  const shot = { x: 0, y: 0, rec: { ProxRadius: 10 } };
+  assert.equal(EV.shotHitsShip(shot, { x: 5, y: 0 }, 3), true); // 5 < max(10,3)
+  assert.equal(EV.shotHitsShip(shot, { x: 12, y: 0 }, 3), false); // 12 ≥ 10
+  assert.equal(EV.shotHitsShip(shot, { x: 8, y: 0 }, 20), true); // half dominates: 8 < 20
+  assert.equal(EV.shotHitsShip(shot, { x: 10, y: 0 }, 0), false); // exactly on the radius (strict <)
+});
+
+test('beamHitDist: distance along the beam to a target, or Infinity on a miss', () => {
+  // beam from the origin along +x (unit dir), up to length 500
+  const hit = (tx, ty, half) => EV.beamHitDist(0, 0, 1, 0, 500, { x: tx, y: ty }, half);
+  assert.equal(hit(100, 0, 4), 100); // dead on the ray → t = 100
+  assert.equal(hit(-50, 0, 4), Infinity); // behind the muzzle (t < 0)
+  assert.equal(hit(600, 0, 4), Infinity); // past the beam's reach (t > 500)
+  assert.equal(hit(100, 20, 4), Infinity); // perpendicular miss (20 ≥ 8 + 2)
+  assert.equal(hit(100, 9, 4), 100); // just inside the fat beam (9 < 8 + 2)
+});
