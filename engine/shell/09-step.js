@@ -31,6 +31,7 @@ import {
 } from './04-combat.js';
 import { keys, touchCtl } from './05-input.js';
 import { hailOpen, onShipDestroyed } from './06-interaction.js';
+import { combatTarget as combatTargetOf, nearest } from './ai-targeting.js';
 import {
   govtAllies,
   govtEnemies,
@@ -107,16 +108,12 @@ class AI {
  * otherwise holding a loose formation. Escorts never target the player's side. */
 class EscortAI extends AI {
   step(s, world) {
-    let tgt = null,
-      best = Infinity;
-    for (const h of world.ships) {
-      if (h === s || h.playerEscort || h.deathT >= 0 || h.disabled || !h.hostile) continue;
-      const d = Math.hypot(h.x - s.x, h.y - s.y);
-      if (d < best) {
-        best = d;
-        tgt = h;
-      }
-    }
+    // Guard the player: engage the nearest ship hostile to them.
+    const tgt = nearest(
+      s,
+      world.ships,
+      (h) => !h.playerEscort && h.deathT < 0 && !h.disabled && h.hostile,
+    );
     if (tgt && !S.gameOver && !S.landedAt) {
       const r = s.stepWarship(tgt.x, tgt.y);
       if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, tgt, true);
@@ -126,51 +123,33 @@ class EscortAI extends AI {
   }
 }
 
-/* Govt hostility between two AI ships (spec: "AI vs AI"). True when `s` should
- * attack `o` on sight: o's govt is s's govt's Enemy, or s's govt is xenophobic
- * (attacks any non-ally — e.g. the Pirates). Same govt or allies never. */
+/* The targeting decisions (govt hostility + who to fight) are pure logic in
+ * ai-targeting.js (DOM-free, unit-tested); GOVT_REL adapts this shell's govt
+ * table to the relations interface those rules expect. */
 const ENGAGE_RANGE = 1600; // ambient warships only chase govt-enemies this close
-const govtFlags = (g) => (govts[g] && govts[g].$sem ? govts[g].$sem.flags : []);
-function aiEnemies(s, o) {
-  const sg = s.govt,
-    og = o.govt;
-  if (sg < 128 || og < 128 || sg === og) return false;
-  // Ally/Enemy are read in both directions, like legal relation() in 13-legal:
-  // either govt naming the other settles it, so the two sides can't disagree.
-  if (govtAllies(sg).includes(og) || govtAllies(og).includes(sg)) return false;
-  if (govtEnemies(sg).includes(og) || govtEnemies(og).includes(sg)) return true;
-  return govtFlags(sg).includes('xenophobic');
-}
+const GOVT_REL = {
+  allies: govtAllies,
+  enemies: govtEnemies,
+  flags: (g) => (govts[g] && govts[g].$sem ? govts[g].$sem.flags : []),
+};
 const foeValid = (s, world) =>
   s.foe && s.foe.deathT < 0 && !s.foe.disabled && world.ships.includes(s.foe);
 
-/* The ship a combat AI should fight this frame, or null: the nearest of the
- * player (only if hostile to it), a foe that has damaged it (any range), and —
- * for ambient warships — the nearest govt-enemy within ENGAGE_RANGE. Mission and
- * pers ships and the player's escorts are left out of ambient targeting. */
+/* Wrapper over the pure combatTarget: reads the live world (player targetability,
+ * the ship's resolved foe) and passes plain data in. Clearing a stale foe stays
+ * here (a state mutation the pure rule mustn't do). */
 function combatTarget(s, world) {
-  let best = null,
-    bd = Infinity;
   const p = world.player;
-  if (s.hostile && p.deathT < 0 && !S.gameOver && !S.landedAt) {
-    best = p;
-    bd = Math.hypot(p.x - s.x, p.y - s.y);
-  }
+  const playerTargetable = p.deathT < 0 && !S.gameOver && !S.landedAt;
   const foe = foeValid(s, world) ? s.foe : (s.foe = null);
   const hunts = s.aiType >= 3 && s.misnId == null && !s.isPers; // ambient warship
-  for (const o of world.ships) {
-    if (o === s || o.deathT >= 0 || o.disabled || o.playerEscort) continue;
-    let elig = o === foe;
-    if (!elig && hunts && o.misnId == null && !o.isPers && aiEnemies(s, o))
-      elig = Math.hypot(o.x - s.x, o.y - s.y) <= ENGAGE_RANGE;
-    if (!elig) continue;
-    const d = Math.hypot(o.x - s.x, o.y - s.y);
-    if (d < bd) {
-      bd = d;
-      best = o;
-    }
-  }
-  return best;
+  return combatTargetOf(s, world.ships, {
+    player: playerTargetable ? p : null,
+    foe,
+    hunts,
+    rel: GOVT_REL,
+    engageRange: ENGAGE_RANGE,
+  });
 }
 
 /* A warship (or brave trader with a grudge): fight the nearest hostile — the

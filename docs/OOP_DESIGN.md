@@ -300,10 +300,10 @@ lands cleanly on top, one screen at a time.
    subclass per branch (`EscortAI`/`WarshipAI`/`FleeAI`/`TraderAI`). The
    per-behavior *movement* (warship/trader/flee) is `Ship` methods
    (`s.stepWarship`/`stepTrader`/`stepFlee`), unit-tested in core.test.mjs; the
-   strategy layer just chooses which to run, picks the target, and fires. What
-   is *not* yet extracted is the strategies' own decision helpers
-   (`combatTarget`, `aiEnemies`, escort target-selection) — see "Testability —
-   next" item 4.
+   strategy layer just chooses which to run, picks the target, and fires. The
+   strategies' own decision helpers (`combatTarget`, `aiEnemies`, escort
+   target-selection) were since extracted to the DOM-free `ai-targeting.js` and
+   unit-tested ("Testability — next" item 4).
 4. **`Dialog` base** for the service screens; migrate `MissionBoard`/`HireBoard`
    (just split out) to self-bound handlers; shrink the global bridge. **Done** —
    every dialog already routed its buttons through the `Dialog` data-action
@@ -377,21 +377,23 @@ pure rules out of each procedural module into a DOM-free sibling that both the
 shell and a test import, passing the data records in as arguments instead of
 reaching for the `DATA` global. In priority order:
 
-1. **Mission rules → `missions-rules.js`.** Highest value: the most branching
-   logic in the shell, the area where the cargo/accept bugs surfaced, and
-   currently zero unit coverage.
-2. **Trade / pricing.** `priceAt`, `techAvailable`, `tradeInValue`, `refuelCost`
-   — self-contained math, an easy win.
+1. **Mission rules → `missions-rules.js` (done).** The branching that decides a
+   mission's destination and whether it's offered — `resolveStel`,
+   `availStelMatch`, `goalSupported`, `govtAllies/Enemies`, the bit-set gates,
+   `formatDate` — is now a DOM-free module with unit tests.
+2. **Trade / pricing → `trade-rules.js` (done).** `priceAt`, `techAvailable`,
+   `isMapOutfit`, `tradeInValue` and the refuel price are pure and unit-tested.
 3. **Legal spread (`13-legal`).** The spread constants are already flagged as
    tuned/approximate; a pure, tested function pins down the reverse-engineered
-   behavior.
-4. **AI targeting decisions (`09-step`).** The per-behavior *movement* is now
-   tested `Ship` methods, but the strategies' *decision* helpers — `combatTarget`
-   (who to fight), `aiEnemies` (govt hostility), and the escort/trader target
-   selection — still read the live entity arrays and govt tables directly, so
-   they're untested. Pulling those into a DOM-free module that takes the ship +
-   a plain list of candidates (plus the govt table) would make the targeting
-   logic unit-testable. Highest effort of the four; do it last.
+   behavior. **The one item still open.**
+4. **AI targeting decisions → `ai-targeting.js` (done).** The per-behavior
+   *movement* is `Ship` methods; the *decision* logic — `combatTarget` (who to
+   fight), `aiEnemies` (govt hostility) and the shared `nearest` selection — is
+   now a DOM-free module taking the ship, a plain candidate array and a
+   govt-relations interface, with unit tests. 09-step keeps thin wrappers that
+   read the live world/govt tables.
+
+Only the legal-spread extraction (3) remains.
 
 A cheaper alternative — a Node harness that stubs `DATA`/`EV`/`document` so the
 existing modules import unchanged — was considered and rejected: it tests
