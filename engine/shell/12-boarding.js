@@ -35,6 +35,7 @@ import { checkDefenseCleared, hailClick, hailOpen, openHail } from './06-interac
 import { renderHail } from './ui/hail.js';
 import { cargoNames, cargoUsed, missionCargoUsed } from './07-trade.js';
 import { misnName, misns } from './08-missions.js';
+import { world } from './09-step.js'; // World owns the ships array (deferred use)
 
 /* Board the nearest disabled ship (spec: "Boarding"). B key. Mission
  * board/rescue targets count toward the goal; any other disabled ship is
@@ -43,7 +44,7 @@ export function boardTarget() {
   if (S.landedAt || S.gameOver || hailOpen) return;
   let best = null,
     bd = 50;
-  for (const s of S.aiShips) {
+  for (const s of world.ships) {
     if (!s.disabled || s.deathT >= 0 || s.looted) continue; // looted ships are done
     const d = Math.hypot(s.x - player.x, s.y - player.y);
     if (d < bd) {
@@ -65,7 +66,7 @@ export function boardTarget() {
   playSnd(390, 0.7); // Airlock — the boarding sound
   if (A) {
     // mission boarding: complete the objective, no plunder dialog
-    S.aiShips.splice(S.aiShips.indexOf(best), 1);
+    world.ships.splice(world.ships.indexOf(best), 1);
     if (best === S.shipTarget) S.shipTarget = null;
     checkDefenseCleared(best.defOf, best);
     A.shipsLeft--;
@@ -181,8 +182,8 @@ export function escortCapturedShip() {
     showMsg('Your fleet is already full — take command instead, or leave it.');
     return;
   }
-  const i = S.aiShips.indexOf(s);
-  if (i >= 0) S.aiShips.splice(i, 1);
+  const i = world.ships.indexOf(s);
+  if (i >= 0) world.ships.splice(i, 1);
   if (S.shipTarget === s) S.shipTarget = null;
   const name = s.misnName || ships[s.shipId].name; // keep any custom display name
   addEscort(s.shipId, name);
@@ -195,8 +196,8 @@ export function escortCapturedShip() {
 /* Take command of a captured hull: you abandon your old ship (and its outfits,
  * per classic) and fly the prize away, freshly repaired and fuelled. */
 export function takeCommand(s) {
-  const i = S.aiShips.indexOf(s);
-  if (i >= 0) S.aiShips.splice(i, 1);
+  const i = world.ships.indexOf(s);
+  if (i >= 0) world.ships.splice(i, 1);
   if (S.shipTarget === s) S.shipTarget = null;
   S.playerShipId = s.shipId;
   player.shipId = S.playerShipId;

@@ -257,7 +257,7 @@ export function grudge(victim, attacker) {
     else s.fleeing = true;
   };
   react(victim);
-  for (const s of S.aiShips) if (s.govt === victim.govt && s.govt >= 128) react(s);
+  for (const s of world.ships) if (s.govt === victim.govt && s.govt >= 128) react(s);
   if (victim.isPers) {
     // a character you fired on won't deal with you
     victim.offered = true;

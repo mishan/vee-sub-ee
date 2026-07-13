@@ -17,6 +17,7 @@ import { applyShipStats, armShip, player } from './04-combat.js';
 import { legalOf, applyGovtDelta, pardonGovt } from './13-legal.js';
 import { rollCargoQty } from './mission-cargo.js';
 import * as rules from './missions-rules.js';
+import { world } from './09-step.js'; // World owns the ships array (deferred use)
 
 /*
  * engine/shell/08-missions.js — part of the browser flight shell.
@@ -222,7 +223,7 @@ export function abortMission(id) {
   if (m.Flags & 0x0040) applyGovtDelta(m.CompGovt, -5 * m.CompReward); // abort reversal
   missionLog.remove(id);
   // clear its mission ships from the system
-  S.aiShips = S.aiShips.filter((s) => s.misnId !== id);
+  world.ships = world.ships.filter((s) => s.misnId !== id);
   showMsg(`Mission abandoned: ${misnName(m, A)}`);
 }
 
@@ -241,7 +242,7 @@ export function maybeSpawnMissionShips(A) {
       spobById(A.travelStel).System === S.SYSTEM_ID) ||
     (A.returnStel && sys === -4 && spobById(A.returnStel).System === S.SYSTEM_ID);
   if (!inThisSystem) return;
-  if (S.aiShips.some((s) => s.misnId === A.id)) return; // already present
+  if (world.ships.some((s) => s.misnId === A.id)) return; // already present
   const dude = dudes[A.shipDude];
   if (!dude) return;
   for (let i = 0; i < A.shipsLeft; i++) {
@@ -277,7 +278,7 @@ export function maybeSpawnMissionShips(A) {
     }
     if (A.shipNameID >= 128 && DATA.strings[A.shipNameID])
       e.misnName = DATA.strings[A.shipNameID].list[i % DATA.strings[A.shipNameID].list.length];
-    S.aiShips.push(e);
+    world.ships.push(e);
   }
 }
 export function dudeShipPairs(dude) {
@@ -336,12 +337,12 @@ export function onMissionShipDisabled(s) {
 export function onMissionEscortArrived(s) {
   const A = missionLog.find(s.misnId);
   if (!A) return;
-  if (!S.aiShips.some((x) => x.misnId === A.id && x !== s))
+  if (!world.ships.some((x) => x.misnId === A.id && x !== s))
     showMsg(`${misnName(misns[A.id], A)}: escort delivered — return for payment.`);
 }
 /* Escort goal met once all escort ships have arrived (none remain) unharmed. */
 export function escortArrived(A) {
-  return A.shipGoal === 3 && !A.escortFailed && !S.aiShips.some((s) => s.misnId === A.id);
+  return A.shipGoal === 3 && !A.escortFailed && !world.ships.some((s) => s.misnId === A.id);
 }
 
 /* Goal met? (used at ReturnStel). */
@@ -403,7 +404,7 @@ export function missionLandingEvents(p) {
 }
 export function removeMission(id) {
   missionLog.remove(id);
-  S.aiShips = S.aiShips.filter((s) => s.misnId !== id);
+  world.ships = world.ships.filter((s) => s.misnId !== id);
 }
 export function checkExpiredMissions() {
   for (const A of [...missionLog.list]) {

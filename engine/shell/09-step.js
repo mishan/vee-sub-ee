@@ -46,12 +46,13 @@ import { introUp } from './11-title.js';
  *
  * The 30 Hz tick lives on a `World` object (docs/OOP_DESIGN.md, phase 2): it
  * owns the live entities and advances them one frame in `step()`. World now
- * physically owns the projectile/effect arrays — `shots`, `beams`, `explosions`
- * and `asteroids` are its own fields (constructor creates them, loadSystem resets
- * them, the shell pushes/reads through `world.*`). The player is a getter onto
- * the 04-combat singleton, and `aiShips`/`spobs` are still on S (a follow-up
- * migrates those). `export const step` stays a thin wrapper so the run loop
- * (17-main) is unchanged.
+ * physically owns the entity arrays — `ships` (the AI ships), `shots`, `beams`,
+ * `explosions` and `asteroids` are its own fields (the constructor creates them,
+ * loadSystem resets them, and the shell pushes/reads through `world.*`). The
+ * player is a getter onto the 04-combat singleton; only `spobs` (the system's
+ * stellar objects, which are system data rather than stepped entities) still
+ * lives on S. `export const step` stays a thin wrapper so the run loop (17-main)
+ * is unchanged.
  *
  * AI ships pick a behavior from a small strategy hierarchy (phase 3): the tick
  * calls `aiFor(ship, world).step(ship, world)` instead of an if/else-if chain on
@@ -64,7 +65,7 @@ import { introUp } from './11-title.js';
  * for the ambient population when a system first loads (alertGrace). */
 S.prevHostiles = 0;
 S.alertGrace = 0;
-export function checkHostileAlert(aiShips = S.aiShips) {
+export function checkHostileAlert(aiShips = []) {
   const n = aiShips.filter((s) => s.hostile && s.deathT < 0).length;
   if (S.alertGrace > 0) S.alertGrace--;
   else if (n > S.prevHostiles) playSnd(370, 0.7); // Red Alert
@@ -75,10 +76,10 @@ export function checkHostileAlert(aiShips = S.aiShips) {
  * the tick. */
 export class World {
   constructor() {
-    // World now physically owns the per-system projectile/effect arrays
-    // (docs/OOP_DESIGN.md phase 2); loadSystem resets them each visit and the
-    // shell pushes/reads through world.*. (aiShips + spobs still live on S — a
-    // follow-up migrates those.)
+    // World physically owns the per-system entity arrays (docs/OOP_DESIGN.md
+    // phase 2); loadSystem resets them each visit and the shell pushes/reads
+    // through world.*. (spobs still lives on S — a follow-up migrates it.)
+    this._ships = [];
     this._shots = [];
     this._beams = [];
     this._explosions = [];
@@ -88,7 +89,10 @@ export class World {
     return player;
   }
   get ships() {
-    return S.aiShips;
+    return this._ships;
+  }
+  set ships(v) {
+    this._ships = v;
   }
   get shots() {
     return this._shots;
@@ -404,7 +408,7 @@ export function loadSystem(systId) {
   S.spobs = Object.entries(DATA.types.spob)
     .filter(([, p]) => p.System === S.SYSTEM_ID)
     .map(([id, p]) => ({ id: +id, x: p.xPos, y: p.yPos, ...p }));
-  S.aiShips = [];
+  world.ships = [];
   world.shots = [];
   world.beams = [];
   world.explosions = [];
