@@ -13,7 +13,7 @@
 
 import { missionLog, wallet, S } from '../01-state.js';
 import { html } from './html.js';
-import { holds } from '../04-combat.js';
+import { fuel, holds, refuelCost, refuelShip } from '../04-combat.js';
 import { cargoUsed, outfitterStock, shipyardStock } from '../07-trade.js';
 import { offeredMissions } from '../08-missions.js';
 import { openService } from './services.js';
@@ -66,7 +66,7 @@ function landedBody() {
         this.src = 'evassets/titles/PICT_' + this.dataset.fb + '.png';
       else this.remove()">`;
   out += html`<h2>${p.name}</h2>
-    <div class="meta">${(m.stellarType || '').replace(/[()]/g, '')}${m.govt ? ' · ' + m.govt : ''}${svc ? ' · ' + svc : ''} · fuel topped up</div>
+    <div class="meta">${(m.stellarType || '').replace(/[()]/g, '')}${m.govt ? ' · ' + m.govt : ''}${svc ? ' · ' + svc : ''}${fuel.full() ? ' · fuel topped up' : ''}</div>
     <div class="desc">${desc && desc.Description ? desc.Description : ''}</div>`;
   // mission events from this landing (deliveries, completions) shown up top
   for (const note of missionNotes)
@@ -89,13 +89,24 @@ function landedBody() {
       ? html`<button class="svc" data-action="service" data-arg="missioncomputer">Mission BBS (${compOffers})</button>`
       : ''
   }</div>`;
+  // Refuelling isn't free and isn't automatic without an Auto-Refueller: offer a
+  // manual top-up when the tank isn't full (disabled if the pilot can't pay).
+  if (!fuel.full())
+    out += html`<div style="margin-top:8px"><button class="svc" data-action="refuel" ${
+      wallet.canAfford(refuelCost()) ? '' : 'disabled'
+    }>Refuel Ship (${refuelCost().toLocaleString('en-US')} cr)</button></div>`;
   out += html`<div class="wallet"><b>${wallet.credits.toLocaleString('en-US')}</b> credits ·
     cargo ${cargoUsed()}/${holds} tons${missionLog.count ? ` · ${missionLog.count} active mission${missionLog.count > 1 ? 's' : ''}` : ''}</div>
     <div class="hint">Take Off ▲ (top-right) — or press Esc</div>`;
   return out;
 }
 
-const landedActions = { service: (kind) => openService(kind) };
+const landedActions = {
+  service: (kind) => openService(kind),
+  refuel: () => {
+    if (refuelShip()) renderPlanetScreen(); // bought fuel → refresh the wallet + button
+  },
+};
 export const landedDialog = new Dialog('landed', 'landedCard', landedBody, landedActions);
 // Re-render the hub in place (e.g. closeService refreshes the wallet line on
 // returning from a shop). Kept as renderPlanetScreen so existing callers, which

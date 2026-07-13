@@ -8,6 +8,7 @@ import {
   showMsg,
   spinOfShip,
   systs,
+  wallet,
 } from './01-state.js';
 import {
   chargeEscortUpkeep,
@@ -48,8 +49,33 @@ player.shipId = S.playerShipId;
 // The pilot's fuel (current level + tank size) is a focused state class; a fresh
 // tank starts full (docs/OOP_DESIGN.md phase 5).
 export const fuel = new Fuel(ships[S.playerShipId].Fuel, EV.JUMP_FUEL);
+if (params.has('fuel')) fuel.current = Math.max(0, Math.min(fuel.max, +params.get('fuel'))); // test
 export let holds = ships[S.playerShipId].Holds;
 S.landedAt = null;
+
+/* ---- refuelling (spec: "Landing") ----
+ * Fuel isn't free at a spaceport: FUEL_UNIT_PRICE per unit topped off (cheaper
+ * than the passing-ship FUEL_PRICE). Landing only auto-refuels if the pilot owns
+ * an Auto-Refueller outfit (modType 'autoRefueller'); otherwise they refuel by
+ * hand from the landing screen. Either way credits are charged. */
+export const FUEL_UNIT_PRICE = 2;
+export const hasAutoRefueller = () =>
+  outfits.entries().some(([oid]) => {
+    const o = DATA.types.outf[oid];
+    return o && o.$sem && o.$sem.modType === 'autoRefueller';
+  });
+// Cost to top the tank off from its current level (0 when already full).
+export const refuelCost = () => (fuel.max - fuel.value) * FUEL_UNIT_PRICE;
+// Top the tank off if the pilot can afford it, charging for the fuel added.
+// Returns true if any fuel was bought. (All-or-nothing — a broke pilot must earn
+// credits first; the landing screen disables the button when it can't be paid.)
+export function refuelShip() {
+  const cost = refuelCost();
+  if (cost <= 0 || !wallet.canAfford(cost)) return false;
+  wallet.spend(cost);
+  fuel.refill();
+  return true;
+}
 
 /* ---- combat state (spec: "Combat") ---- */
 export const weaps = DATA.types.weap;
