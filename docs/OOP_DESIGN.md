@@ -251,7 +251,16 @@ Independent of the class work; each is one branch, verified with lint,
    shows) moved to `ui/landing.js`; `14-landing.js` keeps the flight-side logic
    (`tryLand`/`takeOff`) and imports the dialog + a `setMissionNotes` setter
    back, so the dependency stays one-way (logic → ui) with no cycle.
-   `ui/title.js` still to do (the same logic/presentation split as landing).
+   `ui/title.js` **done** — the same split as landing: the screens (splash/title
+   markup + render helpers, the canvas pilot summary, the About/Open Pilot
+   dialogs, prefs, pilot import) moved to `ui/title.js`; `11-title.js` keeps the
+   intro *state machine* (the `splashShown`/`titleShown` flags read by the sim,
+   `introUp`, and the `showSplash`/`advanceSplash`/`showTitle`/`enterGame`
+   transitions + title-music orchestration), delegating the DOM to the render
+   helpers it imports back. The one gameplay entry point (the Enter Ship binding)
+   stays on the logic side, like the Take Off button. Dependency is one-way
+   (logic → ui); with `10-render`/`14-landing`/`11-title` all under `ui/`, slice 5
+   is complete.
 
 Do the file separation first; the `Dialog`-class conversion (Layer 4) then
 lands cleanly on top, one screen at a time.

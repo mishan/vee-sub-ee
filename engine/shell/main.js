@@ -20,6 +20,7 @@ import './07-trade.js';
 import './08-missions.js';
 import './09-step.js';
 import './ui/render.js';
+import './ui/title.js';
 import './11-title.js';
 import './12-boarding.js';
 import './13-legal.js';
