@@ -2,7 +2,7 @@ import {
   wallet,
   COMMODITIES,
   S,
-  cargo,
+  hold,
   drawGfxFit,
   drawSpin,
   gfxImg,
@@ -375,7 +375,7 @@ export function drawPanel(w, h) {
   panelText(cb.x, cb.y, `Credits: ${wallet.credits.toLocaleString('en-US')}`);
   panelText(cb.x, cb.y + 13, `Jumps left: ${Math.floor(S.fuel / EV.JUMP_FUEL)}`);
   let cy = cb.y + 30;
-  const held = COMMODITIES.map((c, i) => [cargoNames[i], cargo[c]]).filter(([, q]) => q > 0);
+  const held = COMMODITIES.map((c, i) => [cargoNames[i], hold.get(c)]).filter(([, q]) => q > 0);
   if (held.length === 0) panelText(cb.x, cy, `Cargo: ${holds} tons free`, DIMGREEN);
   else
     for (const [name, q] of held.slice(0, 4)) {

@@ -9,6 +9,7 @@
 import { Wallet } from './wallet.js';
 import { LegalRecord } from './legal.js';
 import { MissionLog } from './mission-log.js';
+import { Hold } from './hold.js';
 import { html, raw } from './ui/html.js'; // the html`` primitive lives in the UI leaf now
 /* ---------------- configuration ---------------- */
 
@@ -79,7 +80,7 @@ export const Save = {
       spob: spobId,
       ship: S.playerShipId,
       credits: wallet.credits,
-      cargo,
+      cargo: hold.toJSON(),
       outfits,
       explored: [...explored],
       bits: [...missionLog.bits.keys()].filter((b) => missionLog.bits[b]),
@@ -264,9 +265,7 @@ S.playerShipId = SAVED ? SAVED.ship : +(params.get('ship') || 128); // Shuttlecr
 export const COMMODITIES = ['food', 'industrial', 'medical', 'luxury', 'metal', 'equipment'];
 export const PRICE_MULT = { low: 0.8, medium: 1.0, high: 1.25 };
 export const wallet = new Wallet(SAVED ? SAVED.credits : 10000);
-export const cargo = Object.fromEntries(
-  COMMODITIES.map((c) => [c, (SAVED && SAVED.cargo[c]) || 0]),
-);
+export const hold = new Hold(COMMODITIES, SAVED && SAVED.cargo);
 
 export const outfits = {}; // outf id -> count (pilot inventory)
 if (SAVED && SAVED.outfits) Object.assign(outfits, SAVED.outfits);
