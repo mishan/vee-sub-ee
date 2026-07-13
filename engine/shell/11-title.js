@@ -102,8 +102,9 @@ export function showIntro() {
   introShown = true;
   introPhase = 'graphic';
   showIntroGraphic();
-  // A pointer gesture begins (or, once playing, skips) the intro; keys are routed
-  // here by 05-input's introKey. Kept until the intro ends (removed in finishIntro).
+  // A pointer gesture begins (or, once playing, skips) the intro; key presses
+  // reach the same handler via 05-input, which calls introGesture on any key
+  // while introShown. Kept until the intro ends (removed in finishIntro).
   addEventListener('pointerdown', introGesture, true);
 }
 // One handler for both gestures and keys: the first begins the intro, any after

@@ -20,7 +20,7 @@ export function showIntroGraphic() {
   introEl.style.display = 'flex';
   const p = document.getElementById('introPrompt');
   if (p) {
-    p.textContent = 'Press any key to begin';
+    p.textContent = 'Press any key or tap to begin';
     p.style.display = '';
   }
   document.getElementById('introSkip').style.display = 'none';

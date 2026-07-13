@@ -50,10 +50,21 @@ export function applyFF() {
   showMsg(on ? 'Fast forward (2×) on' : 'Fast forward off');
 }
 export function capsToggle() {
-  // Only in flight — behind the splash/title/hail/service/landing/dead overlays
-  // gameplay keys are swallowed (the splash even advances on any key), so a
-  // Caps Lock press there must not silently arm 2× for when you enter the game.
-  if (S.gameOver || hailOpen || introUp() || S.landedAt || activeView) return;
+  // Only in flight — behind the splash/title/intro/hail/service/landing/map/
+  // missions/dead overlays gameplay keys are swallowed (the splash even advances
+  // on any key), so a Caps Lock press there must not silently arm 2× for when you
+  // enter the game. (The keydown handler also swallows it below the modal guards;
+  // this guard additionally covers the keyup flip, which has no such gating.)
+  if (
+    S.gameOver ||
+    hailOpen ||
+    introUp() ||
+    S.landedAt ||
+    activeView ||
+    S.mapOpen ||
+    S.missionsOpen
+  )
+    return;
   const t = performance.now();
   if (t - capsLatch < 200) return; // absorb the keydown/keyup pair into one flip
   capsLatch = t;
@@ -82,7 +93,6 @@ document.getElementById('ff').addEventListener('keydown', (e) => {
 export const touchCtl = { steer: false, heading: 0, thrust: false, fire: false };
 addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
-  if (e.key === 'CapsLock') capsToggle(); // Caps Lock → toggle double speed
   // Splash/title/intro overlays pause the sim; swallow every gameplay hotkey so
   // the game can't be driven behind them. Any key advances the loading splash;
   // during the intro, the first key begins it and any after skips the rest.
@@ -126,6 +136,10 @@ addEventListener('keydown', (e) => {
     e.preventDefault();
     return;
   }
+  // In flight now — every modal overlay above has returned. Caps Lock toggles
+  // 2× fast-forward here (not at the top of the handler) so it can't change sim
+  // speed behind an overlay; keyup flips it too (capsToggle, debounced).
+  if (e.key === 'CapsLock') capsToggle();
   keys[e.key.toLowerCase()] = true;
   if (k === 'l') tryLand();
   if (k === 'm') toggleMap();
