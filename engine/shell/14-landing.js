@@ -101,6 +101,9 @@ export function renderPlanetScreen() {
 // Closing a landed service (ui/services.closeService) fires this so the hub
 // refreshes without ui/services having to import — and depend on — this module.
 document.addEventListener('ve:serviceclosed', () => renderPlanetScreen());
+// The landing screen's persistent "Take Off" button binds here (self-bound, so
+// it needs no global-onclick bridge).
+document.getElementById('takeoffBtn').addEventListener('click', () => takeOff());
 
 /* L: select the nearest landable planet (brackets show it), or — if it's
  * already the target and we're in range and slow — land. Denials explain

@@ -82,3 +82,6 @@ export function closeService() {
   // cycle with the landing screen (14-landing imports open/closeService).
   document.dispatchEvent(new Event('ve:serviceclosed'));
 }
+// The service panel's persistent "◀ Back" button binds here (self-bound, so it
+// needs no global-onclick bridge).
+document.getElementById('serviceBack').addEventListener('click', () => closeService());
