@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   sprites,
@@ -11,6 +11,20 @@ import {
 
 // ui/sprites.js reads MANIFEST/document/Image/EV only inside its methods, so it
 // imports in node; stub those globals to exercise the frame-crop / scale math.
+// Capture and restore any pre-existing globals so the stubs don't leak into other
+// suites sharing the process.
+const _origGlobals = {
+  document: globalThis.document,
+  Image: globalThis.Image,
+  MANIFEST: globalThis.MANIFEST,
+  EV: globalThis.EV,
+};
+after(() => {
+  for (const [k, v] of Object.entries(_origGlobals)) {
+    if (v === undefined) delete globalThis[k];
+    else globalThis[k] = v;
+  }
+});
 globalThis.document = {
   createElement: () => ({ style: {}, src: '', complete: false }),
   body: { appendChild() {} },
