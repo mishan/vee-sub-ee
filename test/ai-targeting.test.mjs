@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nearest, aiEnemies, combatTarget } from '../engine/shell/ai-targeting.js';
+import { nearest, aiEnemies, combatTarget, aiKind } from '../engine/shell/ai-targeting.js';
 
 // A govt-relations interface (see aiEnemies): 128 & 129 are allies; 128 & 130
 // are enemies; 140 is xenophobic (attacks strangers). Ally/enemy are symmetric.
@@ -20,6 +20,17 @@ const ship = (o) => ({
   hostile: false,
   govt: 130,
   ...o,
+});
+
+test('aiKind: picks the strategy from disposition, in precedence order', () => {
+  // escort beats everything; flee beats warship; then the warship test; else trader
+  assert.equal(aiKind({ playerEscort: true, fleeing: true, aiType: 3 }, true), 'escort');
+  assert.equal(aiKind({ fleeing: true, aiType: 3 }, true), 'flee');
+  assert.equal(aiKind({ aiType: 3 }, false), 'warship'); // an actual warship
+  assert.equal(aiKind({ aiType: 2, hostile: true }, false), 'warship'); // trader gone hostile
+  assert.equal(aiKind({ aiType: 2, hostile: false }, true), 'warship'); // trader with a live foe
+  assert.equal(aiKind({ aiType: 2, hostile: false }, false), 'trader'); // calm trader
+  assert.equal(aiKind({ aiType: 1 }, false), 'trader'); // plain trader
 });
 
 test('nearest: closest eligible candidate, skipping self and the ineligible', () => {

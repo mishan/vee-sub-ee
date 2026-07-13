@@ -15,6 +15,21 @@
  * has them, and tests use plain literals.
  */
 
+/* Which strategy a ship uses this frame, from its disposition (spec: "AI"):
+ *   'escort'  — a player escort, guards the player;
+ *   'flee'    — a frightened ship, running;
+ *   'warship' — fights: an aiType ≥ 3 warship, or an aiType-2 trader that's gone
+ *               hostile to the player or has a live foe (`hasFoe`);
+ *   'trader'  — everything else, cruises/loiters.
+ * Pure dispatch; the shell (ai-strategies) maps the kind to a strategy instance
+ * and resolves `hasFoe` from the live world. Order encodes the precedence. */
+export function aiKind(s, hasFoe) {
+  if (s.playerEscort) return 'escort';
+  if (s.fleeing) return 'flee';
+  if (s.aiType >= 3 || (s.aiType === 2 && (s.hostile || hasFoe))) return 'warship';
+  return 'trader';
+}
+
 /* Nearest candidate to `self` for which `eligible(o)` is true, or null. `self`
  * is skipped. Distance is straight-line; ties go to the earlier candidate. */
 export function nearest(self, candidates, eligible) {

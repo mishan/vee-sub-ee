@@ -255,3 +255,16 @@ test('beamHitDist: distance along the beam to a target, or Infinity on a miss', 
   assert.equal(hit(100, 20, 4), Infinity); // perpendicular miss (20 ≥ 8 + 2)
   assert.equal(hit(100, 9, 4), 100); // just inside the fat beam (9 < 8 + 2)
 });
+
+test('maxWeaponRange: beams reach Speed, projectiles shotSpeed·Count, bays excluded', () => {
+  const beam = { rec: { Guidance: 0, Speed: 200 } }; // beam: range = Speed
+  const turret = { rec: { Guidance: 3, Speed: 150 } }; // turreted beam, same rule
+  const gun = { rec: { Guidance: 1, Speed: 500, Count: 60 } }; // shotSpeed 5 · 60 = 300
+  const bay = { rec: { Guidance: 99, Speed: 9999, Count: 9 } }; // fighter bay — not fire
+  assert.equal(EV.maxWeaponRange({ weapons: [beam] }), 200);
+  assert.equal(EV.maxWeaponRange({ weapons: [turret] }), 150);
+  assert.equal(EV.maxWeaponRange({ weapons: [gun] }), 300);
+  assert.equal(EV.maxWeaponRange({ weapons: [bay] }), 0); // a bay alone gives no fire range
+  assert.equal(EV.maxWeaponRange({ weapons: [beam, gun, bay] }), 300); // max of the real weapons
+  assert.equal(EV.maxWeaponRange({ weapons: [] }), 0);
+});

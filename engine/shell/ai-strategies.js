@@ -18,22 +18,7 @@ import { S } from './01-state.js';
 import { isPort, spawnAI } from './02-spawning.js';
 import { fire } from './04-combat.js';
 import { govtAllies, govtEnemies, govts, onMissionEscortArrived } from './08-missions.js';
-import { combatTarget as combatTargetOf, nearest } from './ai-targeting.js';
-
-// Longest range at which any of a ship's weapons can hit (beams use Speed as
-// range; projectiles Speed·Count). Fighter bays (Guidance 99) don't count.
-function maxWeaponRange(e) {
-  let r = 0;
-  for (const w of e.weapons)
-    if (w.rec.Guidance !== 99)
-      r = Math.max(
-        r,
-        w.rec.Guidance === 0 || w.rec.Guidance === 3
-          ? w.rec.Speed
-          : EV.shotSpeedOf(w.rec) * w.rec.Count,
-      );
-  return r;
-}
+import { aiKind, combatTarget as combatTargetOf, nearest } from './ai-targeting.js';
 
 class AI {
   // eslint-disable-next-line no-unused-vars
@@ -52,7 +37,7 @@ class EscortAI extends AI {
     );
     if (tgt && !S.gameOver && !S.landedAt) {
       const r = s.stepWarship(tgt.x, tgt.y);
-      if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, tgt, true);
+      if (r.aligned && r.dist < EV.maxWeaponRange(s)) fire(s, tgt, true);
     } else {
       s.stepWarship(world.player.x, world.player.y); // shadow the player
     }
@@ -101,7 +86,7 @@ class WarshipAI extends AI {
       return;
     }
     const r = s.stepWarship(t.x, t.y);
-    if (r.aligned && r.dist < maxWeaponRange(s)) fire(s, t, true);
+    if (r.aligned && r.dist < EV.maxWeaponRange(s)) fire(s, t, true);
   }
 }
 
@@ -185,21 +170,18 @@ class TraderAI extends AI {
   }
 }
 
-const escortAI = new EscortAI(),
-  warshipAI = new WarshipAI(),
-  fleeAI = new FleeAI(),
-  traderAI = new TraderAI();
+const STRATEGIES = {
+  escort: new EscortAI(),
+  flee: new FleeAI(),
+  warship: new WarshipAI(),
+  trader: new TraderAI(),
+};
+// WarshipAI cruises via TraderAI when it has no target; grab that one instance.
+const traderAI = STRATEGIES.trader;
 
-/* Pick the strategy for a ship this frame: escorts guard the player; a fleeing
- * ship runs; warships (and brave traders with a grudge) fight via WarshipAI,
- * which resolves whether there's actually a target (player / foe / govt-enemy)
- * and otherwise cruises; everything else trades. */
+/* Pick the strategy for a ship this frame. The kind (escort / flee / warship /
+ * trader) is the pure aiKind decision (ai-targeting.js, unit-tested); this
+ * resolves the ship's live foe for it and maps the kind to the shared instance. */
 export function aiFor(s, world) {
-  if (s.playerEscort) return escortAI;
-  if (s.fleeing) return fleeAI; // surrender / begged-off / wimpy trader running
-  // Warships fight (WarshipAI picks the target: player, foe, or govt-enemy); a
-  // brave trader turns warship once it's hostile to the player (grudge) or
-  // something has become its foe.
-  if (s.aiType >= 3 || (s.aiType === 2 && (s.hostile || foeValid(s, world)))) return warshipAI;
-  return traderAI;
+  return STRATEGIES[aiKind(s, foeValid(s, world))];
 }
