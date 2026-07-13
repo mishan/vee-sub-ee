@@ -104,6 +104,12 @@ function encodeWav(dec) {
   return Buffer.concat([h, data]);
 }
 
+// A resource name is only safe to embed in an output filename if it can't
+// introduce a path separator (which would traverse out of outDir or spawn a
+// subdirectory) or a NUL. Real EV names are plain ("Game Panel"); this guards
+// against a crafted/odd fork writing outside the asset tree.
+const nameSafeForFile = (name) => !/[/\\\0]/.test(name);
+
 /* Decode every PICT in a fork to graphics/titles PNGs; return {dims, fails}. */
 function convertPicts(pictById, outDir) {
   fs.mkdirSync(outDir, { recursive: true });
@@ -118,7 +124,14 @@ function convertPicts(pictById, outDir) {
       // resource_dasm emits PICT_<id>_<name>.png and evconvert.sh adds the
       // suffix-free alias; write both so either lookup resolves.
       fs.writeFileSync(path.join(outDir, `PICT_${id}.png`), png);
-      if (r.name) fs.writeFileSync(path.join(outDir, `PICT_${id}_${r.name}.png`), png);
+      if (r.name) {
+        if (nameSafeForFile(r.name))
+          fs.writeFileSync(path.join(outDir, `PICT_${id}_${r.name}.png`), png);
+        else
+          fails.push(
+            `PICT ${id}: unsafe resource name ${JSON.stringify(r.name)} — named alias skipped`,
+          );
+      }
       dims.set(id, { w: img.width, h: img.height });
     } catch (e) {
       fails.push(`PICT ${id}${r.name ? ` (${r.name})` : ''}: ${e.message}`);
@@ -135,13 +148,20 @@ function convertSnds(fork, outDir) {
   const fails = [];
   if (snd)
     for (const r of snd.resources) {
-      const dec = decodeSnd(r.data());
-      if (dec.error || (!dec.pcm8 && !dec.pcm16)) {
-        fails.push(`snd ${r.id}${r.name ? ` (${r.name})` : ''}: ${dec.error || 'no PCM'}`);
-        continue;
+      // decodeSnd (and the DataView reads under it) can throw on malformed or
+      // truncated resource bytes; catch per-snd so one bad resource can't abort
+      // the whole asset build — record it and carry on, like convertPicts.
+      try {
+        const dec = decodeSnd(r.data());
+        if (dec.error || (!dec.pcm8 && !dec.pcm16)) {
+          fails.push(`snd ${r.id}${r.name ? ` (${r.name})` : ''}: ${dec.error || 'no PCM'}`);
+          continue;
+        }
+        fs.writeFileSync(path.join(outDir, `snd_${r.id}.wav`), encodeWav(dec));
+        ok++;
+      } catch (e) {
+        fails.push(`snd ${r.id}${r.name ? ` (${r.name})` : ''}: ${e.message}`);
       }
-      fs.writeFileSync(path.join(outDir, `snd_${r.id}.wav`), encodeWav(dec));
-      ok++;
     }
   return { ok, fails };
 }
