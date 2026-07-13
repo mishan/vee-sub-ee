@@ -80,8 +80,11 @@ complete their arrival on touchdown (see "Spawning").
 
 ## Landing (player)
 
-Eligible: nearest spob with `$sem.canLand`, distance < 60 px, and
-`|v| ≤ 0.9 px/frame`. On takeoff the player is placed at
+Eligible: nearest spob with `$sem.canLand`, distance < 120 px, and
+`|v| ≤ 0.9 px/frame`. (The original is forgiving about how close you must be
+to a planet to land; the earlier 60 px was too tight and made landing feel
+fussy, so the radius was widened to 120 px. The speed cap is unchanged.)
+On takeoff the player is placed at
 `(spob.x, spob.y − 40)`, heading 0, **velocity 0** (launch stationary,
 not drifting). Landing refuels the ship to capacity (see Hyperjump).
 

@@ -89,13 +89,13 @@ test('Ship.integrate advances position by velocity (no drag)', () => {
 
 test('Ship.canLand: near a spob and slow enough', () => {
   const spob = { x: 0, y: 0 };
-  const s = new Ship(SHUTTLE, 30, 0, 0); // dist 30 < 60
+  const s = new Ship(SHUTTLE, 30, 0, 0); // dist 30 < 120
   s.vx = 0;
   s.vy = 0.5; // speed 0.5 ≤ 0.9
   assert.equal(s.canLand(spob), true);
   s.vy = 1.5; // too fast
   assert.equal(s.canLand(spob), false);
-  const far = new Ship(SHUTTLE, 100, 0, 0); // dist 100 ≥ 60
+  const far = new Ship(SHUTTLE, 150, 0, 0); // dist 150 ≥ 120
   assert.equal(far.canLand(spob), false);
 });
 

@@ -38,6 +38,19 @@ if (SAVED && SAVED.spob != null) {
     landedDialog.open(); // renders the hub, shows the panel, binds its actions
     showMsg('Pilot restored.');
   }
+} else if (SAVED && SAVED.spob == null) {
+  // Brand-new pilot (never docked): start in flight just off the start planet,
+  // close enough that landing on it is an easy first move — the intro shows the
+  // ship launching from here, and the first tutorial message says to land. The
+  // default makeShip position (0,300) can be far from the planet, so nudge onto
+  // it. Pick the system's first landable spob (Levo, for the classic start).
+  const start = S.spobs.find((sp) => !sp.$sem || sp.$sem.canLand);
+  if (start) {
+    player.x = start.x;
+    player.y = start.y - 220; // a short hop above the planet
+    player.vx = player.vy = 0;
+    player.heading = 0;
+  }
 }
 // Escorts only materialise when in flight; if we restored docked, takeOff()
 // spawns them (after it places the player on the launch pad).
