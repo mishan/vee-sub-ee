@@ -330,9 +330,15 @@ zero shell or DOM risk. If it feels right, we proceed to `World`.
 
 - **Timing (done):** implemented in stacked branches, Phase 1 first, each
   shipping green — exactly as recommended.
-- **Compatibility layer (done):** the old `EV.thrust(ship)`-style free exports
-  were **not** kept; call sites use methods and the free functions are gone, so
-  there's one way to do each thing and no dead API.
+- **Compatibility layer (outstanding):** the original intent was to delete the
+  old `EV.thrust(ship)`-style free functions once call sites moved to methods.
+  In practice the free-function exports (`thrust`, `steerToward`, `stepShot`,
+  `stepWarship`, `makeShip`) were **kept** as thin wrappers over the
+  `Ship`/`Projectile` methods, and the shell (and core's own AI steppers) still
+  call them — e.g. `EV.thrust(this.player)` in 09-step, `EV.makeShip(…)` in
+  02-spawning. Migrating those call sites to methods and removing the wrappers
+  is still to do; it pairs naturally with the AI-strategy extraction in
+  "Testability — next" below.
 - **UI/logic separation (done):** presentation lives in `engine/shell/ui/`; the
   first slice was `ui/shops.js` and the rest followed.
 - **`GameState` shape (done):** a few focused classes rather than one big

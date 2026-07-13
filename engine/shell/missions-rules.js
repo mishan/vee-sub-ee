@@ -32,7 +32,9 @@ export function govtEnemies(g, govts) {
 /* Which goal types can we actually complete? Others aren't offered. Pure over
  * the mission record. */
 export function goalSupported(m) {
-  if (m.ShipCount > 0 && m.ShipGoal >= 0) return [0, 1, 2, 3, 4, 5, 6].includes(m.ShipGoal);
+  // Ship goals are the contiguous range 0..6; the guard already pins ShipGoal >= 0,
+  // so an upper-bound check is all that's needed (no per-call array allocation).
+  if (m.ShipCount > 0 && m.ShipGoal >= 0) return m.ShipGoal <= 6;
   return true; // cargo delivery / plain go-to
 }
 
