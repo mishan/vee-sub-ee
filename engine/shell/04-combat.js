@@ -21,7 +21,7 @@ import { attenuate, masterVol, playSnd, sndEl, stopSnd } from './03-sound.js';
 import { checkExpiredMissions, govts, onMissionShipDisabled } from './08-missions.js';
 import { PF } from './15-pers.js';
 import { applyGovtDelta } from './13-legal.js';
-import { loadSystem } from './09-step.js';
+import { loadSystem, world } from './09-step.js';
 import { Fuel } from './fuel.js';
 import { refuelCost as refuelCostOf } from './trade-rules.js';
 
@@ -81,10 +81,8 @@ export function refuelShip() {
 
 /* ---- combat state (spec: "Combat") ---- */
 export const weaps = DATA.types.weap;
-S.shots = [];
-S.beams = [];
-S.explosions = [];
-S.asteroids = []; // drifting rocks (spec: "Asteroids"); (re)filled by loadSystem
+// The shots/beams/explosions/asteroids arrays are owned by the World (09-step)
+// now — its constructor creates them and loadSystem resets them per system.
 S.gameOver = false;
 
 // ammo pool key for a weapon record (AmmoType 0-63 -> weapon 128+n's pool)
@@ -186,7 +184,7 @@ export function fire(e, target, primary) {
       // beam
       if (pk && !((e.pools[pk] || 0) > 0)) continue;
       if (pk) e.pools[pk]--;
-      S.beams.push({ owner: e, rec: w.rec, life: w.rec.Count, turreted: g === 3, target });
+      world.beams.push({ owner: e, rec: w.rec, life: w.rec.Count, turreted: g === 3, target });
       w.cool = w.rec.Reload + w.rec.Count;
       if (w.rec.Sound >= 0) playSnd(200 + w.rec.Sound, attenuate(e.x, e.y));
       continue;
@@ -208,7 +206,7 @@ export function fire(e, target, primary) {
       const shot = new EV.Projectile(w.rec, e, aim);
       shot.owner = e;
       shot.homing = g === 1 || g === 2 ? target : null;
-      S.shots.push(shot);
+      world.shots.push(shot);
       fired = true;
     }
     if (fired) {
@@ -221,7 +219,7 @@ export function fire(e, target, primary) {
 export function spawnExplosion(x, y, type) {
   const spin = 400 + Math.max(0, Math.min(type, 2));
   const meta = MANIFEST.spins[spin];
-  if (meta) S.explosions.push({ x, y, spin, f: 0, frames: meta.frames, tick: 0 });
+  if (meta) world.explosions.push({ x, y, spin, f: 0, frames: meta.frames, tick: 0 });
 }
 /* Begin a ship's destruction: the fireball plays immediately over the ship
  * as it breaks up (was flash-then-boom, which looked backwards). The ship

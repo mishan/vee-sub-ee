@@ -2,6 +2,7 @@ import { wallet, COMMODITIES, S, hold, ships, spinOfShip, spinOfSpob, systs } fr
 import { drawGfxFit, drawSpin, gfxImg, preloadSprites, sprites } from './sprites.js';
 import { html } from './html.js';
 import { fuel, holds, player, poolKey } from '../04-combat.js';
+import { world } from '../09-step.js'; // World owns the projectile/effect arrays
 import { updateTouchUI } from '../05-input.js';
 import { distTo } from '../06-interaction.js';
 import { cargoNames } from '../07-trade.js';
@@ -462,7 +463,7 @@ export function render() {
       );
     }
   }
-  for (const a of S.asteroids) {
+  for (const a of world.asteroids) {
     const [x, y] = toScreen(a.x, a.y);
     if (x < -40 || x > w + 40 || y < -40 || y > h + 40) continue; // cull off-screen
     drawAsteroid(a, x, y);
@@ -506,7 +507,7 @@ export function render() {
     '-6': '#ff50ff',
     '-7': '#ffff50',
   };
-  for (const b of S.beams) {
+  for (const b of world.beams) {
     const [x1, y1] = toScreen(b.owner.x, b.owner.y);
     const a = EV.rad(b.heading),
       len = b.len ?? b.rec.Speed;
@@ -518,7 +519,7 @@ export function render() {
     ctx.stroke();
     ctx.lineWidth = 1;
   }
-  for (const shot of S.shots) {
+  for (const shot of world.shots) {
     const [x, y] = toScreen(shot.x, shot.y);
     if (x < -40 || x > w + 40 || y < -40 || y > h + 40) continue;
     const spin = 200 + shot.rec.Graphic;
@@ -528,7 +529,7 @@ export function render() {
       ctx.fillRect(x - 1, y - 1, 2, 2);
     }
   }
-  for (const ex of S.explosions) {
+  for (const ex of world.explosions) {
     const [x, y] = toScreen(ex.x, ex.y);
     const meta = MANIFEST.spins[ex.spin];
     const s = sprites.get(ex.spin);

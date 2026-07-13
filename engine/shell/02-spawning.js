@@ -6,6 +6,7 @@ import { refreshView } from './ui/dialog.js';
 import { dudeShipPairs, govtAllies, govts } from './08-missions.js';
 import { isCriminalWith, legalOf } from './13-legal.js';
 import { introUp } from './11-title.js';
+import { world } from './09-step.js'; // World owns the asteroids array now (deferred use)
 
 /*
  * engine/shell/02-spawning.js — part of the browser flight shell.
@@ -49,14 +50,14 @@ export function warpIntoSystem(e, tx = 0, ty = 0) {
 export const isPort = (p) => !!(p && p.$sem && p.$sem.canLand && !p.$sem.uninhabited);
 export const portsHere = () => S.spobs.filter(isPort);
 
-/* Populate S.asteroids for the current system (spec: "Asteroids"). The syst
+/* Populate the world's asteroid field for the current system (spec: "Asteroids"). The syst
  * `Asteroids` field is a *density level* (0 = none, 2–10 = light→heavy), not a
  * count: a light field still has many rocks. We scatter that many around the
  * player within ±BOUND; the per-frame wrap (core Asteroid.step) then keeps the
  * field centred on the player as they fly. Ambient scenery, regenerated per visit
  * and never saved. */
 export function spawnAsteroids() {
-  S.asteroids = [];
+  world.asteroids = [];
   const density = S.syst && S.syst.Asteroids > 0 ? S.syst.Asteroids : 0;
   if (!density) return;
   const n = 4 + density * 2; // level 2 (light) ≈ 8, level 10 (heavy) ≈ 24
@@ -67,7 +68,7 @@ export function spawnAsteroids() {
   for (let i = 0; i < n; i++) {
     const ang = Math.random() * Math.PI * 2;
     const spd = rand(0.2, 0.6); // drift, px/frame
-    S.asteroids.push(
+    world.asteroids.push(
       new EV.Asteroid(
         cx + rand(-B, B),
         cy + rand(-B, B),

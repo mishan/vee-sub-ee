@@ -45,12 +45,13 @@ import { introUp } from './11-title.js';
  * Normative behavior: engine/ENGINE_SPEC.md.
  *
  * The 30 Hz tick lives on a `World` object (docs/OOP_DESIGN.md, phase 2): it
- * owns the live entities — the player, AI ships, shots, beams, explosions — and
- * advances them one frame in `step()`. The collections are still physically
- * stored on S for now (loadSystem rebuilds them per system); World exposes them
- * through getters, so the tick reads its entities through one object and later
- * phases can migrate ownership onto it. `export const step` stays a thin wrapper
- * so the run loop (17-main) is unchanged.
+ * owns the live entities and advances them one frame in `step()`. World now
+ * physically owns the projectile/effect arrays — `shots`, `beams`, `explosions`
+ * and `asteroids` are its own fields (constructor creates them, loadSystem resets
+ * them, the shell pushes/reads through `world.*`). The player is a getter onto
+ * the 04-combat singleton, and `aiShips`/`spobs` are still on S (a follow-up
+ * migrates those). `export const step` stays a thin wrapper so the run loop
+ * (17-main) is unchanged.
  *
  * AI ships pick a behavior from a small strategy hierarchy (phase 3): the tick
  * calls `aiFor(ship, world).step(ship, world)` instead of an if/else-if chain on
@@ -71,9 +72,18 @@ export function checkHostileAlert(aiShips = S.aiShips) {
 }
 
 /* The live flight simulation for the current system. It owns the entities and
- * the tick; the collections are read through getters (still backed by S until a
- * later phase moves storage here). */
+ * the tick. */
 export class World {
+  constructor() {
+    // World now physically owns the per-system projectile/effect arrays
+    // (docs/OOP_DESIGN.md phase 2); loadSystem resets them each visit and the
+    // shell pushes/reads through world.*. (aiShips + spobs still live on S — a
+    // follow-up migrates those.)
+    this._shots = [];
+    this._beams = [];
+    this._explosions = [];
+    this._asteroids = [];
+  }
   get player() {
     return player;
   }
@@ -81,16 +91,28 @@ export class World {
     return S.aiShips;
   }
   get shots() {
-    return S.shots;
+    return this._shots;
+  }
+  set shots(v) {
+    this._shots = v;
   }
   get beams() {
-    return S.beams;
+    return this._beams;
+  }
+  set beams(v) {
+    this._beams = v;
   }
   get explosions() {
-    return S.explosions;
+    return this._explosions;
+  }
+  set explosions(v) {
+    this._explosions = v;
   }
   get asteroids() {
-    return S.asteroids;
+    return this._asteroids;
+  }
+  set asteroids(v) {
+    this._asteroids = v;
   }
 
   /* One 30 Hz tick: advance the player, the AI ships, then resolve combat
@@ -383,13 +405,13 @@ export function loadSystem(systId) {
     .filter(([, p]) => p.System === S.SYSTEM_ID)
     .map(([id, p]) => ({ id: +id, x: p.xPos, y: p.yPos, ...p }));
   S.aiShips = [];
-  S.shots = [];
-  S.beams = [];
-  S.explosions = [];
+  world.shots = [];
+  world.beams = [];
+  world.explosions = [];
   // Asteroids block weapons fire (spec: "Asteroids"). Defer the actual spawn to
   // the first live tick: the caller places the player *after* loadSystem, so
   // spawning now would centre the field on the pre-placement position.
-  S.asteroids = [];
+  world.asteroids = [];
   S.asteroidsPending = true;
   S.navTarget = null;
   S.shipTarget = null;
