@@ -109,6 +109,7 @@ export function openHail(kind, obj) {
   hailOpen = true;
   S.hailTarget = { kind, obj };
   hailDialog.open(); // renders hailBody and shows the panel + binds the delegation
+  playSnd(150, 0.5); // ding as the comm channel opens
 }
 export function closeHail() {
   clearTimeout(hailCloseTimer);

@@ -8,7 +8,14 @@ import { closeService } from './ui/services.js';
 import { openActiveMissions, closeActiveMissions } from './ui/active-missions.js';
 import { takeOff, tryLand } from './14-landing.js';
 import { boardTarget } from './12-boarding.js';
-import { advanceSplash, introUp, splashShown, titleShown } from './11-title.js';
+import {
+  advanceSplash,
+  introGesture,
+  introShown,
+  introUp,
+  splashShown,
+  titleShown,
+} from './11-title.js';
 import { closeMap, toggleMap } from './ui/map.js';
 
 /*
@@ -76,8 +83,14 @@ export const touchCtl = { steer: false, heading: 0, thrust: false, fire: false }
 addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (e.key === 'CapsLock') capsToggle(); // Caps Lock → toggle double speed
-  // Splash/title overlays pause the sim; swallow every gameplay hotkey so the
-  // game can't be driven behind them. Any key advances the loading splash.
+  // Splash/title/intro overlays pause the sim; swallow every gameplay hotkey so
+  // the game can't be driven behind them. Any key advances the loading splash;
+  // during the intro, the first key begins it and any after skips the rest.
+  if (introShown) {
+    introGesture();
+    e.preventDefault();
+    return;
+  }
   if (splashShown) {
     advanceSplash();
     e.preventDefault();
@@ -261,7 +274,13 @@ export function updateTouchUI() {
   // `no-fly` gates flight-only chrome on both desktop (the 2× pill) and touch
   // (the joystick/action bar), so it is toggled before the touch-only guard.
   const flying =
-    !splashShown && !titleShown && !S.landedAt && !S.gameOver && !hailOpen && !activeView;
+    !splashShown &&
+    !titleShown &&
+    !introShown &&
+    !S.landedAt &&
+    !S.gameOver &&
+    !hailOpen &&
+    !activeView;
   document.body.classList.toggle('no-fly', !flying);
   if (!TOUCH) return;
   touchEl.classList.toggle('map', flying && S.mapOpen);

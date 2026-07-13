@@ -11,7 +11,10 @@ import {
   spinsNeededFor,
   strictPlay,
   systs,
+  tutSeen,
+  tutorialActive,
 } from './01-state.js';
+import { tutorial } from './ui/tutorial.js';
 import { maybeSpawnBountyHunter, spawnAI, isPort } from './02-spawning.js';
 import { attenuate, playSnd, stopAllLoops } from './03-sound.js';
 import {
@@ -321,6 +324,11 @@ export class World {
         nearestSpobInfo().dist >= EV.JUMP_MIN_DIST;
       if (jumpReady && !S.jumpReady) playSnd(150, 0.5); // ding on entering jump range
       S.jumpReady = jumpReady;
+      // New-pilot tutorial: once you've drifted far enough that the nearest planet
+      // has left the radar (~2600 px, its half-range) — the point the nav arrow
+      // shows — nudge toward the map/jump. Self-guards to fire once.
+      if (tutorialActive && !tutSeen.has('drift') && nearestSpobInfo().dist > 2600)
+        tutorial('drift');
       if (S.jump && this.player.deathT >= 0) abortJump(); // no jumping out of a fireball
       if (S.jump && S.jump.phase === 'engage') {
         const ready = EV.stepJumpEngage(this.player, mapBearingTo(S.jump.destId));

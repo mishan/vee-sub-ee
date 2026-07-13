@@ -96,6 +96,13 @@ export const Save = {
       escorts,
       persDone: [...persDone],
       persGrudge: [...persGrudge],
+      // Whether the new-pilot intro (launch graphic + story crawl) has played —
+      // it runs once, the first time a brand-new pilot is flown. Preserved here so
+      // a later land/takeoff save doesn't reset it and replay the intro. tutorial/
+      // tutSeen track the onboarding hint banners the same way.
+      introSeen,
+      tutorial: tutorialActive,
+      tutSeen: [...tutSeen],
       // Carry the stashed source file forward (set by the pilot importer) so the
       // pilot can be exported back to an original-EV file byte-faithfully.
       origin: SAVED && SAVED.origin,
@@ -232,6 +239,17 @@ export const Save = {
     }
     return ok;
   },
+  // Merge a few fields into the active pilot's stored save in place, without a
+  // full capture. Used for the new-pilot intro/tutorial flags, which change in
+  // flight (not docked), where there's no meaningful position to capture yet.
+  patch(fields) {
+    const id = this._get(this.ACTIVE);
+    if (!id) return;
+    const p = this.read(id);
+    if (!p) return;
+    Object.assign(p, fields);
+    this._set(this.slot(id), p);
+  },
   // Add a new pilot slot and make it active (New Pilot / import). Returns its id.
   create(obj) {
     const id = this._newId();
@@ -285,6 +303,26 @@ export const pilotBorn = SAVED && SAVED.born ? SAVED.born : Date.now();
 export const pilotName = (SAVED && SAVED.name) || '';
 export const shipName = (SAVED && SAVED.shipName) || '';
 export const strictPlay = SAVED ? !!SAVED.strict : false;
+// Whether the one-time new-pilot intro has played for this pilot (see 11-title's
+// intro sequence). markIntroSeen() flips it and persists immediately.
+export let introSeen = SAVED ? !!SAVED.introSeen : false;
+export function markIntroSeen() {
+  introSeen = true;
+  Save.patch({ introSeen: true });
+}
+/* New-pilot onboarding tutorial (spec: "New-pilot intro"): a few one-time hint
+ * banners. `tutorialActive` is armed only for pilots that played the intro, so
+ * established pilots never see them; `tutSeen` records which steps have shown. */
+export let tutorialActive = SAVED ? !!SAVED.tutorial : false;
+export const tutSeen = new Set(SAVED && SAVED.tutSeen ? SAVED.tutSeen : []);
+export function armTutorial() {
+  tutorialActive = true;
+  Save.patch({ tutorial: true });
+}
+export function markTutorialStep(step) {
+  tutSeen.add(step);
+  Save.patch({ tutSeen: [...tutSeen] });
+}
 /* legal record per system (spec: "Legal record") — negative = evil, positive
  * = good; a system with no stored record defaults to its govt's InitialRec.
  * Missions and combat move it (see 13-legal.js applyGovtDelta). */

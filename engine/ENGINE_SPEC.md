@@ -721,7 +721,30 @@ once gameplay begins.) Any test-param run (see Persistence) skips
 the intro so headless screenshots go straight to the game; `?title`/`?splash`
 force the splash, `?titlemenu` jumps to the menu.
 
-## Touch controls (shell responsibility; browser leg)
+## New-pilot intro (shell responsibility; browser leg)
+
+The first time a **brand-new pilot** is flown — gated on a persistent
+`introSeen` flag (and never having docked), so it plays once and never for an
+established pilot — a one-time intro runs before flight instead of the title
+menu, echoing the original. Two screens: the **launch graphic** (PICT 8200
+"Intro" in EV Titles) holds under an ambient bed (snd 30003 "Transition"), then
+segues to the **story crawl** — STR# 20000 "Intro Text" scrolled bottom-to-top
+over black (fading at the edges) under drums (snd 30001 "Drum Intro" once, into
+a looping snd 30002 "Drum Loop"), ending on "Good luck, captain." The first
+gesture begins it (unlocking audio, like the splash); any gesture after skips
+the rest. Finishing (or skipping) drops into flight **just off the start world**
+(Levo, within landing range), marks `introSeen`, and arms the onboarding
+tutorial. Like the splash/title, the intro pauses the sim and swallows gameplay
+keys while up. `?intro` forces it; `?nointro` (and test-param runs) skip it.
+
+**Onboarding tutorial.** Armed only for pilots that saw the intro (so it never
+bothers an established pilot), a few one-time hint banners fire where relevant,
+each shown once (tracked in `tutSeen`, persisted): **welcome** on entering
+flight (land on Levo), **depart** on the first takeoff (open the map, jump), and
+**drift** once you stray far enough that the nearest planet leaves the radar
+(~2600 px, where the nav arrow appears). The wording is **clean-room** — the
+original's guidance is baked (obfuscated) into the EV application, not the
+scenario data, so the shell provides its own equivalent hints, not EV's text.
 
 On touch devices (detected via `pointer: coarse` / `ontouchstart` /
 `maxTouchPoints`, forceable with `?mobile=1`, off with `?mobile=0`) the shell
