@@ -346,7 +346,7 @@ export class World {
       if (tutorialActive && !tutSeen.has('drift') && nearDist > 2600) tutorial('drift');
       if (S.jump && this.player.deathT >= 0) abortJump(); // no jumping out of a fireball
       if (S.jump && S.jump.phase === 'engage') {
-        const ready = EV.stepJumpEngage(this.player, mapBearingTo(S.jump.destId));
+        const ready = this.player.stepJumpEngage(mapBearingTo(S.jump.destId));
         S.jump.t++;
         // spec: aligned+fast AND drive spun up AND clear of stellars
         if (
@@ -356,11 +356,11 @@ export class World {
         )
           S.jump = { destId: S.jump.destId, phase: 'streak', t: 0 };
       } else if (S.jump && S.jump.phase === 'streak') {
-        EV.thrust(this.player);
-        EV.integrate(this.player);
+        this.player.thrust();
+        this.player.integrate();
         if (++S.jump.t >= EV.JUMP_STREAK_FRAMES) completeJump();
       } else if (this.player.deathT >= 0) {
-        EV.integrate(this.player); // breaking up: drift while the death timer runs
+        this.player.integrate(); // breaking up: drift while the death timer runs
         if (--this.player.deathT <= 0) {
           spawnExplosion(this.player.x, this.player.y, this.player.deathDelay >= 60 ? 2 : 1);
           playSnd(303);
@@ -392,13 +392,13 @@ export class World {
           else if (diff < -this.player.turn * 0.5) cl = true;
         }
         if (touchCtl.thrust) cThrust = true;
-        EV.stepPlayer(this.player, {
+        this.player.stepPlayer({
           left: cl,
           right: cr,
           retro: keys['arrowdown'] || keys['s'],
           thrust: cThrust,
         });
-        EV.stepShields(this.player, this.player.shieldMax, this.player.shieldRe);
+        this.player.regenShields(this.player.shieldMax, this.player.shieldRe);
         for (const w of this.player.weapons) if (w.cool > 0) w.cool--;
         if (keys[' '] || touchCtl.fire) fire(this.player, S.shipTarget, true);
         if (keys['x'] && this.player.selSecondary) fire(this.player, S.shipTarget, false);
@@ -413,7 +413,7 @@ export class World {
     for (const s of [...this.ships]) {
       if (s.deathT >= 0) {
         // disintegrating (fireball already going)
-        EV.integrate(s);
+        s.integrate();
         // secondary blasts flicker across a bigger hull as it comes apart
         if (s.deathDelay >= 30 && s.deathT % 7 === 0)
           spawnExplosion(s.x + (Math.random() - 0.5) * 24, s.y + (Math.random() - 0.5) * 24, 0);
@@ -459,17 +459,17 @@ export class World {
           const k = Math.max(s.maxSpeed / sp, 0.92);
           s.vx *= k;
           s.vy *= k;
-          EV.integrate(s);
+          s.integrate();
           s.warpIn--;
           continue;
         }
         s.warpIn = 0; // dropped to sub-light (or entered at rest) → hand to AI
       }
       if (s.disabled) {
-        EV.integrate(s);
+        s.integrate();
         continue;
       }
-      EV.stepShields(s, s.shieldMax, s.shieldRe);
+      s.regenShields(s.shieldMax, s.shieldRe);
       for (const w of s.weapons) if (w.cool > 0) w.cool--;
       // Behavior is a strategy chosen from the ship's current disposition
       // (escort / hostile-to-player / fleeing / trader) — see the AI classes.
@@ -486,10 +486,10 @@ export class World {
     const friendly = (a, b) => alliedTo(a) && alliedTo(b);
     // Asteroids drift/spin (spec: "Asteroids"); they never touch ships, only fire.
     // Wrap around the player so the field always surrounds them in-system.
-    for (const a of this.asteroids) EV.stepAsteroid(a, this.player.x, this.player.y);
+    for (const a of this.asteroids) a.step(this.player.x, this.player.y);
 
     for (const shot of [...this.shots]) {
-      const alive = EV.stepShot(shot, shot.homing);
+      const alive = shot.step(shot.homing);
       let hit = false;
       for (const v of everyone) {
         if (v === shot.owner || v.deathT >= 0 || friendly(shot.owner, v)) continue;

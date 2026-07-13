@@ -2,14 +2,13 @@
  * engine/core.js — DOM-free EV flight core. Normative behavior lives in
  * engine/ENGINE_SPEC.md; this file implements it.
  *
- * Entities are classes: `Ship` (kinematics, landing, hyperjump, damage) and
- * `Projectile` (shot flight). The math lives in their methods; the older
- * free-function exports (`thrust(s)`, `stepShot(shot, target)`, …) are kept as
- * thin wrappers that delegate to those methods, so the shell keeps working
- * unchanged while call sites migrate. The wrappers are duck-typed (they use
- * `Ship.prototype.method.call`), so they also work on the plain state objects
- * some call sites pass. See docs/OOP_DESIGN.md; these wrappers go away once
- * callers move to methods.
+ * Entities are classes: `Ship` (kinematics, landing, hyperjump, damage),
+ * `Projectile` (shot flight) and `Asteroid`. The math lives in their methods,
+ * and callers use those methods directly (`ship.thrust()`, `shot.step(target)`,
+ * `new EV.Ship(rec, x, y, h)`). The old `EV.thrust(ship)`-style free-function
+ * wrappers and the make* factories are gone — one way to do each thing (see
+ * docs/OOP_DESIGN.md). The AI steppers below are still free functions (they
+ * become strategy objects in Phase 3); they drive a ship through its methods.
  *
  * An ES module: esbuild bundles it (npm run build:engine) into
  * engine/core.bundle.js — an IIFE that exposes the exports as the browser global
@@ -301,32 +300,10 @@ function shotAsteroidImpact(shot, asteroids) {
   return t < Infinity ? { x: ox + dx * t, y: oy + dy * t } : null;
 }
 
-/* ---- factories (the shell constructs entities through these) ---- */
-const makeShip = (rec, x, y, heading) => new Ship(rec, x, y, heading);
-const makeShot = (rec, shooter, aim) => new Projectile(rec, shooter, aim);
-const makeAsteroid = (x, y, vx, vy, size, spin) => new Asteroid(x, y, vx, vy, size, spin);
-const stepAsteroid = (a, px, py) => Asteroid.prototype.step.call(a, px, py);
-
-/* ---- free-function compatibility wrappers (delegate to the methods) ----
- * Kept until every call site uses methods; then deleted (see docs/OOP_DESIGN.md).
- * `.call` keeps them working on the plain objects a few callers still pass. */
-const thrust = (s) => Ship.prototype.thrust.call(s);
-const steerToward = (s, desired) => Ship.prototype.steerToward.call(s, desired);
-const retrograde = (s) => Ship.prototype.retrograde.call(s);
-const integrate = (s) => Ship.prototype.integrate.call(s);
-const stepPlayer = (s, c) => Ship.prototype.stepPlayer.call(s, c);
-const canLand = (s, spob) => Ship.prototype.canLand.call(s, spob);
-const placeAtTakeoff = (s, spob) => Ship.prototype.placeAtTakeoff.call(s, spob);
-const stepJumpEngage = (s, mapBearing) => Ship.prototype.stepJumpEngage.call(s, mapBearing);
-const placeAtArrival = (s, inBearing) => Ship.prototype.placeAtArrival.call(s, inBearing);
-const applyDamage = (st, rec) => Ship.prototype.takeDamage.call(st, rec);
-const stepShields = (st, shieldMax, shieldRe) =>
-  Ship.prototype.regenShields.call(st, shieldMax, shieldRe);
-const stepShot = (shot, target) => Projectile.prototype.step.call(shot, target);
-
 /* ==================== AI (spec: "AI …") ====================
  * Still free functions over a ship; Phase 3 (docs/OOP_DESIGN.md) turns these
- * into strategy objects. They drive a ship through the wrappers above. */
+ * into strategy objects. They drive a ship through its methods. `s` is always a
+ * `Ship` instance (the shell makes every entity with `new EV.Ship(…)`). */
 
 /* AI trader state machine (spec: "AI trader"). States on s.state:
  *   'cruise' → 'brake' → 'landed' (motionless above the planet) → 'depart'.
@@ -349,7 +326,7 @@ function stepTrader(s, target) {
     return true;
   }
   if (!target) {
-    integrate(s);
+    s.integrate();
     return true;
   }
   const dx = target.x - s.x,
@@ -359,14 +336,14 @@ function stepTrader(s, target) {
   // brake distance + coast while turning 180° to retrograde + pad
   const stopDist = (speed * speed) / (2 * s.accel) + speed * (180 / s.turn) + 40;
   if (s.state === 'cruise') {
-    const aligned = steerToward(s, bearing(dx, dy));
+    const aligned = s.steerToward(bearing(dx, dy));
     if (dist > stopDist) {
-      if (aligned) thrust(s);
+      if (aligned) s.thrust();
     } else s.state = 'brake';
   } else if (s.state === 'brake') {
-    const aligned = steerToward(s, retrograde(s));
+    const aligned = s.steerToward(s.retrograde());
     if (speed > 0.15) {
-      if (aligned) thrust(s);
+      if (aligned) s.thrust();
     } else if (dist < 80) {
       // touchdown: sit motionless above the planet for a few seconds
       s.state = 'landed';
@@ -377,10 +354,10 @@ function stepTrader(s, target) {
     } else s.state = 'cruise';
   } else if (s.state === 'depart') {
     // head out to the edge target (set by the shell) and build up speed
-    const aligned = steerToward(s, bearing(dx, dy));
-    if (aligned) thrust(s);
+    const aligned = s.steerToward(bearing(dx, dy));
+    if (aligned) s.thrust();
   }
-  integrate(s);
+  s.integrate();
   return true;
 }
 
@@ -388,17 +365,17 @@ function stepTrader(s, target) {
  * integrate. Returns {aligned, dist} so the shell decides firing. */
 function stepWarship(s, ex, ey) {
   const dist = Math.hypot(ex - s.x, ey - s.y);
-  const aligned = steerToward(s, bearing(ex - s.x, ey - s.y));
-  if ((dist > 260 && aligned) || dist < 120) thrust(s);
-  integrate(s);
+  const aligned = s.steerToward(bearing(ex - s.x, ey - s.y));
+  if ((dist > 260 && aligned) || dist < 120) s.thrust();
+  s.integrate();
   return { aligned, dist };
 }
 
 /* Flee: turn tail to the threat and burn. */
 function stepFlee(s, ex, ey) {
-  const aligned = steerToward(s, norm(bearing(ex - s.x, ey - s.y) + 180));
-  if (aligned) thrust(s);
-  integrate(s);
+  const aligned = s.steerToward(norm(bearing(ex - s.x, ey - s.y) + 180));
+  if (aligned) s.thrust();
+  s.integrate();
 }
 
 export {
@@ -412,37 +389,21 @@ export {
   bearing,
   Ship,
   Projectile,
-  makeShip,
-  thrust,
-  steerToward,
-  retrograde,
-  integrate,
-  stepPlayer,
   stepTrader,
   LAND_DIST,
   LAND_SPEED,
-  canLand,
-  placeAtTakeoff,
   JUMP_FUEL,
   JUMP_STREAK_FRAMES,
   ARRIVE_DIST,
   JUMP_WARMUP_FRAMES,
   JUMP_MIN_DIST,
-  stepJumpEngage,
-  placeAtArrival,
   HOMING_TURN,
   shotSpeedOf,
-  makeShot,
-  stepShot,
   Asteroid,
-  makeAsteroid,
-  stepAsteroid,
   rayHitsAsteroids,
   shotAsteroidImpact,
   ASTEROID_BOUND,
   ASTEROID_RADII,
-  applyDamage,
-  stepShields,
   stepWarship,
   stepFlee,
 };

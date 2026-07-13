@@ -42,7 +42,7 @@ if (SAVED && SAVED.spob != null) {
   // Brand-new pilot (never docked): start in flight just off the start planet,
   // close enough that landing on it is an easy first move — the intro shows the
   // ship launching from here, and the first tutorial message says to land. The
-  // default makeShip position (0,300) can be far from the planet, so nudge onto
+  // default new Ship position (0,300) can be far from the planet, so nudge onto
   // it. Pick the system's first landable spob (Levo, for the classic start).
   const start = S.spobs.find((sp) => !sp.$sem || sp.$sem.canLand);
   if (start) {

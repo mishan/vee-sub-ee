@@ -76,7 +76,7 @@ export function takeOff() {
   // Rebuild the system fresh: the ships that were here when you landed are
   // gone; loadSystem respawns the ambient population and any mission ships.
   loadSystem(S.SYSTEM_ID);
-  EV.placeAtTakeoff(player, spob); // then place on the pad (loadSystem doesn't move you)
+  player.placeAtTakeoff(spob); // then place on the pad (loadSystem doesn't move you)
   spawnEscorts(); // launch the fleet alongside the player
   tutorial('depart'); // new-pilot hint on first departure (self-guards to once)
 }

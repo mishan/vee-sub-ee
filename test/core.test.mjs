@@ -40,13 +40,12 @@ test('frameIndex picks the nearest sprite frame, wrapping', () => {
   assert.equal(EV.frameIndex(-10, 36), 35); // negative wraps
 });
 
-test('new Ship normalizes heading and derives stats (== makeShip)', () => {
+test('new Ship normalizes heading and derives stats', () => {
   const s = new Ship(SHUTTLE, 5, 7, -90);
   assert.equal(s.heading, 270);
   assert.deepEqual([s.x, s.y, s.vx, s.vy], [5, 7, 0, 0]);
   close(s.maxSpeed, 2.75);
   assert.equal(s.turn, 4);
-  assert.ok(EV.makeShip(SHUTTLE, 0, 0, 0) instanceof Ship); // factory returns a Ship
 });
 
 test('Ship.thrust pushes along heading and clamps to maxSpeed', () => {
@@ -174,7 +173,6 @@ test('new Projectile: beams inherit shooter heading, guided/unguided get muzzle 
   close(gun.vx, 5);
   close(gun.vy, 0); // Speed/100 muzzle velocity along aim (90° = +x)
   assert.equal(gun.life, 60);
-  assert.ok(EV.makeShot({ Guidance: 0, Speed: 500, Count: 1 }, shooter, 0) instanceof Projectile);
 });
 
 test('Projectile.step: homing turns toward target and expires with life', () => {
@@ -196,26 +194,4 @@ test('stepWarship reports distance/alignment and thrusts in the bands', () => {
   close(r.dist, 300);
   assert.equal(r.aligned, true);
   assert.equal(s.thrusting, true);
-});
-
-// The shell still calls the free functions; verify they delegate identically to
-// the methods (same mutation), so the compatibility layer is safe until removed.
-test('legacy free-function wrappers delegate to methods', () => {
-  const viaFn = new Ship(SHUTTLE, 0, 0, 0);
-  const viaMethod = new Ship(SHUTTLE, 0, 0, 0);
-  EV.thrust(viaFn);
-  viaMethod.thrust();
-  assert.deepEqual([viaFn.vx, viaFn.vy], [viaMethod.vx, viaMethod.vy]);
-
-  assert.equal(EV.steerToward(new Ship(SHUTTLE, 0, 0, 0), 3), true);
-  assert.equal(EV.retrograde(Object.assign(new Ship(SHUTTLE, 0, 0, 0), { vx: 1, vy: 0 })), 270);
-  assert.equal(EV.canLand(new Ship(SHUTTLE, 10, 0, 0), { x: 0, y: 0 }), true);
-
-  // wrappers also work on the plain state objects some call sites still pass
-  const plain = { shields: 0, armor: 30, armorMax: 30 };
-  assert.equal(EV.applyDamage(plain, { MassDmg: 8, EnergyDmg: 0 }), 'hit');
-  assert.equal(plain.armor, 22);
-  const regen = { shields: 0 };
-  EV.stepShields(regen, 100, 1);
-  assert.equal(regen.shields, 1);
 });

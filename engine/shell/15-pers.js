@@ -120,7 +120,7 @@ export function maybeSpawnPers() {
   const pr = pers[id];
   const a = Math.random() * Math.PI * 2,
     r = 600 + Math.random() * 1400;
-  const e = EV.makeShip(ships[pr.ShipType], Math.cos(a) * r, Math.sin(a) * r, Math.random() * 360);
+  const e = new EV.Ship(ships[pr.ShipType], Math.cos(a) * r, Math.sin(a) * r, Math.random() * 360);
   e.shipId = pr.ShipType;
   e.govt = pr.Govt >= 128 ? pr.Govt : 0;
   e.aiType = pr.AIType >= 1 ? pr.AIType : 1;
