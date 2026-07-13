@@ -68,6 +68,10 @@ export function gfxImg(pictId) {
       e.ready = true;
     };
     img.onerror = () => {
+      // Terminal state: mark it ready too, so a failed load is distinguishable
+      // from "still loading". drawGfxFit still checks e.bad, so it won't draw a
+      // broken image — but it stops treating the failure as perpetually pending.
+      e.ready = true;
       e.bad = true;
     };
     gfxCache.set(pictId, e);
