@@ -21,6 +21,7 @@ import {
   systemsWithinJumps,
 } from './04-combat.js';
 import { refreshView } from './ui/dialog.js';
+import * as rules from './trade-rules.js';
 
 /*
  * engine/shell/07-trade.js — part of the browser flight shell.
@@ -38,10 +39,12 @@ export const missionCargoUsed = () =>
   missionLog.list.reduce((n, a) => n + (a.cargoLoaded ? a.cargoQty : 0), 0);
 export const cargoUsed = () => hold.used() + missionCargoUsed();
 
-export function priceAt(spob, i) {
-  const lvl = spob.$sem && spob.$sem.prices[COMMODITIES[i]];
-  return lvl && PRICE_MULT[lvl] ? Math.round(basePrices[i] * PRICE_MULT[lvl]) : null;
-}
+// The pure pricing/tech/trade-in math lives in trade-rules.js (DOM-free,
+// unit-tested); these wrappers thread this module's data tables. The price
+// tables are constant, so hoist them once instead of rebuilding the object on
+// every priceAt call (the exchange calls it per good, per render).
+const PRICE_TABLES = { commodities: COMMODITIES, priceMult: PRICE_MULT, basePrices };
+export const priceAt = (spob, i) => rules.priceAt(spob, i, PRICE_TABLES);
 export function trade(i, qty) {
   if (!S.landedAt) return;
   const price = priceAt(S.landedAt, i);
@@ -59,10 +62,7 @@ export function trade(i, qty) {
  * trade/outfit/shipyard *logic* the dialogs act on. */
 
 /* tech availability (spec: spöb TechLevel gate + SpecialTech exact match) */
-export function techAvailable(itemTech, p) {
-  if (itemTech <= p.TechLevel) return true;
-  return [p.SpecialTech1, p.SpecialTech2, p.SpecialTech3].includes(itemTech);
-}
+export const techAvailable = rules.techAvailable;
 
 /* ---- outfitter ---- */
 
@@ -71,7 +71,7 @@ export const outfitName = (id) =>
 
 /* A "map" outfit (ModType 16, e.g. the Regional Map) isn't a kept item: buying it
  * charts the region — every system within its ModVal jumps of the current one. */
-export const isMapOutfit = (o) => !!(o && o.$sem && o.$sem.modType === 'map');
+export const isMapOutfit = rules.isMapOutfit;
 // Would buying this map here chart any system not already known? (Drives whether
 // it's purchasable — once the region is explored there's nothing left to buy.)
 export function mapRevealsSomething(o) {
@@ -152,15 +152,8 @@ export const shipyardName = (id) =>
  * the cost of the new ship minus 25% of the original cost of your current
  * ship and upgrades." */
 export function tradeInValue() {
-  return Math.round(
-    0.25 *
-      (ships[S.playerShipId].Cost +
-        outfits
-          .entries()
-          .reduce(
-            (n, [oid, c]) => n + (DATA.types.outf[oid] ? DATA.types.outf[oid].Cost * c : 0),
-            0,
-          )),
+  return rules.tradeInValue(ships[S.playerShipId].Cost, outfits.entries(), (oid) =>
+    DATA.types.outf[oid] ? DATA.types.outf[oid].Cost : 0,
   );
 }
 export function buyShip(id) {
