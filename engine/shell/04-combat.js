@@ -23,6 +23,7 @@ import { PF } from './15-pers.js';
 import { applyGovtDelta } from './13-legal.js';
 import { loadSystem } from './09-step.js';
 import { Fuel } from './fuel.js';
+import { refuelCost as refuelCostOf } from './trade-rules.js';
 
 /*
  * engine/shell/04-combat.js — part of the browser flight shell.
@@ -64,8 +65,9 @@ export const hasAutoRefueller = () =>
     const o = DATA.types.outf[oid];
     return o && o.$sem && o.$sem.modType === 'autoRefueller';
   });
-// Cost to top the tank off from its current level (0 when already full).
-export const refuelCost = () => (fuel.max - fuel.value) * FUEL_UNIT_PRICE;
+// Cost to top the tank off from its current level (0 when already full). The
+// per-unit math is the pure refuelCost in trade-rules.js (unit-tested).
+export const refuelCost = () => refuelCostOf(fuel.value, fuel.max, FUEL_UNIT_PRICE);
 // Top the tank off if the pilot can afford it, charging for the fuel added.
 // Returns true if any fuel was bought. (All-or-nothing — a broke pilot must earn
 // credits first; the landing screen disables the button when it can't be paid.)
