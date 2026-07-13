@@ -1,7 +1,7 @@
 import { S, SAVED, TEST_MODE, params, showMsg } from './01-state.js';
 import { spawnEscorts } from './02-spawning.js';
 import { loopSnd } from './03-sound.js';
-import { applyShipStats, beginJump, fuelMax, player } from './04-combat.js';
+import { applyShipStats, beginJump, fuel, player } from './04-combat.js';
 import { fastForward, keys } from './05-input.js';
 import { cyclePlanetTarget, cycleShipTarget } from './06-interaction.js';
 import { openService } from './ui/services.js';
@@ -31,7 +31,7 @@ if (SAVED && SAVED.spob != null) {
     player.x = p.x;
     player.y = p.y;
     S.landedAt = p;
-    S.fuel = fuelMax;
+    fuel.refill();
     player.shields = player.shieldMax;
     player.armor = player.armorMax;
     if (p.CustSndID >= 0) S.ambientSnd = loopSnd(p.CustSndID, 0.6);

@@ -1,7 +1,7 @@
 import { wallet, S, dominated, dudes, persDone, ships, showMsg } from './01-state.js';
 import { weighted } from './02-spawning.js';
 import { playSnd } from './03-sound.js';
-import { armShip, commitCrime, creditKill, fuelMax, penaltyOf, player } from './04-combat.js';
+import { armShip, commitCrime, creditKill, fuel, penaltyOf, player } from './04-combat.js';
 import {
   acceptMission,
   descText,
@@ -205,7 +205,7 @@ export function requestAssistance(s) {
     hailSay(pickFrom(3000, 95, 99) || pickFrom(3000, 50, 59));
     return;
   }
-  if (S.fuel >= fuelMax) {
+  if (fuel.full()) {
     hailSay(pickFrom(3000, 70, 74) || 'You look fine to me.');
     return;
   }
@@ -226,7 +226,7 @@ export function payFuel(full) {
     return;
   }
   wallet.spend(price);
-  S.fuel = fuelMax;
+  fuel.refill();
   S.hailTarget.mode = 'main';
   hailSay(
     (full ? pickFrom(3000, 100, 104) : pickFrom(3000, 115, 119)) +

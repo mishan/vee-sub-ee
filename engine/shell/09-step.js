@@ -21,6 +21,7 @@ import {
   abortJump,
   completeJump,
   fire,
+  fuel,
   hitShip,
   mapBearingTo,
   nearestSpobInfo,
@@ -335,7 +336,7 @@ export class World {
         !S.jump &&
         S.jumpDest != null &&
         !!systs[S.jumpDest] &&
-        S.fuel >= EV.JUMP_FUEL &&
+        fuel.canJump() &&
         nearDist >= EV.JUMP_MIN_DIST;
       if (jumpReady && !S.jumpReady) playSnd(150, 0.5); // ding on entering jump range
       S.jumpReady = jumpReady;
