@@ -474,7 +474,14 @@ export function preloadSprites(spinIds) {
   }
 }
 export function drawSpin(ctx, spinId, x, y, headingDeg) {
-  const s = sprites.get(spinId);
+  let s = sprites.get(spinId);
+  if (!s) {
+    // Lazy-load on first sight: some hulls (mission-, pers-, and fighter-spawned
+    // ships) aren't in the per-system preload set, so without this they'd render
+    // invisible — only their thruster flame and target bracket would show.
+    preloadSprites([spinId]);
+    s = sprites.get(spinId);
+  }
   if (!s || !s.ready) return;
   const { frameW, frameH, xTiles, frames } = s.meta;
   const fi = EV.frameIndex(headingDeg, frames);
