@@ -19,6 +19,8 @@ import { effectiveShip, holds } from '../04-combat.js';
 import {
   cargoNames,
   cargoUsed,
+  isMapOutfit,
+  mapRevealsSomething,
   outfitName,
   outfitterStock,
   priceAt,
@@ -106,22 +108,29 @@ export function renderOutfitter() {
   if (S.selOutfitId != null) {
     const o = DATA.types.outf[S.selOutfitId];
     const own = outfits[S.selOutfitId] || 0;
+    const isMap = isMapOutfit(o);
+    // A map charts a region once; it's buyable only while it reveals something new.
     const canBuy =
       techAvailable(o.TechLevel, p) &&
       wallet.canAfford(o.Cost) &&
-      (o.Max <= 0 || own < o.Max) &&
-      (o.Mass <= 0 || s.freeMass >= o.Mass);
+      (isMap
+        ? mapRevealsSomething(o)
+        : (o.Max <= 0 || own < o.Max) && (o.Mass <= 0 || s.freeMass >= o.Mass));
     pane = html`<div class="shoppane">
       <img src="evassets/graphics/PICT_${6000 + (S.selOutfitId - 128)}.png" onerror="this.style.visibility='hidden'">
       <h3>${outfitName(S.selOutfitId)}</h3>
-      <div class="row">${o.$sem ? o.$sem.modType : ''}${o.Max > 0 ? ` · max ${o.Max}` : ''}</div>
+      <div class="row">${o.$sem ? o.$sem.modType : ''}${!isMap && o.Max > 0 ? ` · max ${o.Max}` : ''}</div>
       <div class="row">Cost: <b>${o.Cost.toLocaleString('en-US')}</b> cr</div>
       <div class="row">Mass: <b>${o.Mass}</b> tons</div>
-      <div class="row">Owned: <b>${own}</b></div>
+      ${
+        isMap
+          ? html`<div class="row">Charts systems within <b>${o.ModVal}</b> jump${o.ModVal > 1 ? 's' : ''}</div>`
+          : html`<div class="row">Owned: <b>${own}</b></div>`
+      }
       <div class="desc">${outfitDesc(S.selOutfitId)}</div>
       <div style="margin-top:10px">
         <button class="svc" data-action="buyOutfit" data-arg="${S.selOutfitId}:1" ${canBuy ? '' : 'disabled'}>Buy</button>
-        <button class="svc" data-action="buyOutfit" data-arg="${S.selOutfitId}:-1" ${own < 1 ? 'disabled' : ''}>Sell</button>
+        ${isMap ? '' : html`<button class="svc" data-action="buyOutfit" data-arg="${S.selOutfitId}:-1" ${own < 1 ? 'disabled' : ''}>Sell</button>`}
       </div></div>`;
   }
   return html`<h2>Outfitter</h2><div class="meta">${p.name} · tech ${p.TechLevel}</div>
