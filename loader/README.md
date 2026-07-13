@@ -51,9 +51,10 @@ build (`evconvert.sh` + `evsprites.sh` + `evexport.js`) uses.
 | `evsprite.js` | composite a sprite PICT + mask PICT into one transparent sheet |
 | `evbuild.js` | browser `evexport`/`evatlas`: build the engine `DATA` + sprite `MANIFEST` |
 | `launch.js` | render assets to PNG/WAV in Cache Storage, assemble `flight.html`, register the SW, launch |
-| `sw.js` | service worker: serve the cached game subtree |
+| `sw.js` | service worker: precache the loader app shell (offline / installable) + serve the cached game subtree |
+| `manifest.webmanifest`, `icons/` | PWA manifest and app icons (our own Vₑ mark — no game content) |
 | `nodeshim.js` | tiny `Buffer` shim so `evrsrc.js`/`semantics.js` (used by the CLI build too) run unchanged in the browser |
-| `index.html` | the loader page (drag-and-drop, gallery, launch) |
+| `index.html` | the loader page (drag-and-drop, gallery, launch, install button) |
 | `verify.js` | check the decoders/decompressor against the reference output (Node) |
 
 The engine is loaded verbatim: `launch.js` injects the built `DATA`/`MANIFEST`
@@ -122,10 +123,28 @@ it carries a `BUILD_VERSION` (in `launch.js`) — **bump it whenever the engine 
 decoders change** so returning visitors rebuild rather than play a stale cache.
 Re-importing a different copy overwrites the cache as usual.
 
+## Install (PWA)
+
+The loader ships a web-app manifest (`manifest.webmanifest`) and the service
+worker precaches the loader **app shell** — `index.html`, its in-scope scripts,
+the manifest and icons — into a versioned `ve-shell` cache. So Vₑ is an
+installable PWA: the browser offers an **⤓ Install app** button, and once
+installed it opens **offline**. Navigations are network-first (an online visit
+always gets the freshest loader, offline falls back to the cached page); other
+in-scope assets are stale-while-revalidate. Bump `SHELL` (`ve-shell-vN`) in
+`sw.js` when the loader shell changes so installed clients refresh.
+
+One scope caveat: a service worker can only serve requests under its own path,
+and the loader's decoders live at the repo root (`../evrsrc.js`,
+`../semantics.js`, `../schemas/*`) — outside `loader/`. So **importing a fresh
+`.sit` needs the network**, but **playing an already-built game works offline**:
+that path (resume banner → play) touches only in-scope files plus the `ve-game`
+cache the first import wrote.
+
 ## Remaining polish
 
-- **PWA install + export bundle**: with the build already cached, an offline
-  install prompt and an "export bundle" button are natural next steps.
+- **Export bundle**: with the build already cached, an "export bundle" button
+  (download the assembled game as a static folder) is a natural next step.
 - **Name suggestions**: the loader passes `NAMES = null` (generic New-Pilot
   defaults); optionally read STR# 128 from the "Escape Velocity" app in the
   `.sit` for the original suggestions.

@@ -96,12 +96,12 @@
     return toHex(await crypto.subtle.digest('SHA-256', buf));
   }
 
-  // Register the game SW and resolve once it's activated. We can't await
-  // navigator.serviceWorker.ready: that waits for a worker controlling THIS
-  // page, but the loader lives outside the SW scope (game/), so `ready` would
-  // never resolve here. Track the returned registration's own worker instead.
+  // Register the SW (scope: the whole loader/ subtree — app shell + game/) and
+  // resolve once it's activated. Track the returned registration's own worker
+  // rather than awaiting navigator.serviceWorker.ready, so this resolves even on
+  // the very first visit before a worker controls the page.
   async function registerSW() {
-    const reg = await navigator.serviceWorker.register('sw.js', { scope: 'game/' });
+    const reg = await navigator.serviceWorker.register('sw.js');
     const w = reg.installing || reg.waiting || reg.active;
     if (!w || w.state === 'activated') return reg;
     await new Promise((resolve) => {

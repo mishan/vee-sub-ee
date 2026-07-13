@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vₑ — load your Escape Velocity</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0c1120">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vₑ">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <style>
   :root { color-scheme: dark; }
   body { margin: 0; background: #05070c; color: #cfe3ff; font: 15px/1.5 system-ui, sans-serif; }
@@ -60,6 +67,7 @@
 <div class="wrap">
   <h1>Vₑ — Escape Velocity, recreated</h1>
   <p class="sub">Drop your own copy of the classic Mac game and it's decoded right here in your browser — nothing is uploaded.</p>
+  <button id="installBtn" class="play" style="display:none;margin-bottom:18px;padding:7px 14px;font-size:13px;background:#14243f;border-color:#2a3550" title="Install Vₑ as an app that opens offline">⤓ Install app</button>
 
   <div id="resume">
     <button class="play" id="resumeBtn" style="background:#1c6e3a;border-color:#2f9c57;font-size:16px;padding:12px 22px">▶ Play — already loaded on this device</button>
@@ -373,6 +381,38 @@ async function load(file) {
   // "Load a different copy" just focuses the drop zone; importing overwrites the cache.
   $('#reimport').onclick = e => { e.preventDefault(); drop.scrollIntoView({ behavior: 'smooth', block: 'center' }); drop.classList.add('hover'); setTimeout(() => drop.classList.remove('hover'), 600); };
   banner.style.display = 'flex';
+})();
+
+/* ---- PWA: register the service worker up front so the app shell is cached for
+   offline use and the browser can offer to install. (launch.js re-registers and
+   awaits activation when building/playing; register() is idempotent.) ---- */
+if ('serviceWorker' in navigator) {
+  addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+/* Install prompt: stash the deferred event, reveal the button, and prompt on
+   click. Hidden once installed or when already running as an installed app. */
+(function installPrompt() {
+  const btn = $('#installBtn');
+  const standalone =
+    matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  let deferred = null;
+  addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault(); // keep the event so we can trigger it from our own button
+    deferred = e;
+    if (!standalone) btn.style.display = 'inline-block';
+  });
+  btn.onclick = async () => {
+    if (!deferred) return;
+    btn.disabled = true;
+    deferred.prompt();
+    await deferred.userChoice.catch(() => {});
+    deferred = null;
+    btn.style.display = 'none';
+  };
+  addEventListener('appinstalled', () => {
+    deferred = null;
+    btn.style.display = 'none';
+  });
 })();
 
 /* ---- build the engine from the decoded data and launch it (see launch.js) ---- */

@@ -241,16 +241,20 @@ flight core is DOM-free JavaScript.
   assets (headless screenshot); the SW's cached serving is verified
   cross-instance. **First-run caching** is in: a versioned completion marker in
   Cache Storage lets a return visit replay the built game without re-importing
-  the `.sit`. Format notes + credits in `loader/README.md`. Remaining polish:
-  PWA install + an "export bundle" button, read name suggestions from the app's
-  STR# 128, 2 cosmetic edge-alpha sprites.
+  the `.sit`. **PWA install** is in: a web-app manifest + icons, and the SW
+  precaches the loader app shell into a versioned `ve-shell` cache, so Vₑ
+  installs and opens **offline** (import needs the network — the root decoders
+  are outside the SW scope — but playing an already-built game does not).
+  Format notes + credits in `loader/README.md`. Remaining polish: an "export
+  bundle" button, read name suggestions from the app's STR# 128, 2 cosmetic
+  edge-alpha sprites.
 
 ## Next
 
-1. **Distribution loader — polish** (core + first-run caching delivered; see the
-   loader milestone and `loader/README.md`): PWA install + an "export bundle"
-   button, and optional original name suggestions (STR# 128 from the app inside
-   the `.sit`).
+1. **Distribution loader — polish** (core + first-run caching + PWA install
+   delivered; see the loader milestone and `loader/README.md`): an "export
+   bundle" button, and optional original name suggestions (STR# 128 from the app
+   inside the `.sit`).
 2. **Also open**: real Mac pilot-file read/write via `buildFork` (import/export
    original EV pilots); BlastRadius area damage and other deferred combat bits.
 
