@@ -3,6 +3,7 @@ import { html } from './html.js';
 import { HIRE_ROSTER, MAX_ESCORTS, hireFee, shipClassDesc, upkeepOf } from '../02-spawning.js';
 import { holds } from '../04-combat.js';
 import { cargoUsed } from '../07-trade.js';
+import { cargoNeededToAccept } from '../mission-cargo.js';
 import { refreshView } from './dialog.js';
 import {
   offeredMissions,
@@ -174,13 +175,14 @@ export function renderHireBoard() {
 }
 
 export function doAcceptMission(id) {
+  // Check for exactly the cargo acceptMission will load: the resolved offer the
+  // briefing showed (cargoNeededToAccept), NOT a fresh reading of the raw
+  // template. getOffer rolls a random-cargo mission (CargoQty ≤ −2) to
+  // abs(CargoQty)×(0.5–1.5), so the old abs(CargoQty) over-counted low rolls and
+  // falsely rejected missions that actually fit. getOffer is cached per offer,
+  // so this is the same resolution the player saw and that will be loaded.
   const m = misns[id];
-  const need =
-    m.CargoType >= 0 && m.CargoQty && m.PickupMode === 0
-      ? m.CargoQty <= -2
-        ? Math.abs(m.CargoQty)
-        : m.CargoQty
-      : 0;
+  const need = cargoNeededToAccept(m, getOffer(id, S.landedAt));
   if (need > holds - cargoUsed()) {
     showMsg('Not enough cargo space for this mission.');
     return;

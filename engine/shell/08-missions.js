@@ -15,6 +15,7 @@ import {
 import { weighted } from './02-spawning.js';
 import { applyShipStats, armShip, player } from './04-combat.js';
 import { legalOf, applyGovtDelta, pardonGovt } from './13-legal.js';
+import { rollCargoQty } from './mission-cargo.js';
 
 /*
  * engine/shell/08-missions.js — part of the browser flight shell.
@@ -234,10 +235,7 @@ export function getOffer(id, here) {
   const key = `${id}@${here ? here.id : ''}`;
   if (missionLog.resolvedOffers[key]) return missionLog.resolvedOffers[key];
   const m = misns[id];
-  const qty =
-    m.CargoQty <= -2
-      ? Math.round(Math.abs(m.CargoQty) * (0.5 + Math.random()))
-      : Math.max(m.CargoQty, 0);
+  const qty = rollCargoQty(m.CargoQty);
   const o = {
     id,
     travelStel: resolveStel(m.TravelStel, here),
