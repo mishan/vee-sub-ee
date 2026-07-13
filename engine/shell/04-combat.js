@@ -350,6 +350,30 @@ export function linkedSystems() {
   return out;
 }
 
+/* Every system within `jumps` hyperspace hops of `startId` (inclusive), by BFS
+ * over the Con links — used to chart a region when a map outfit is bought
+ * (spec: "Outfitter"). */
+export function systemsWithinJumps(startId, jumps) {
+  const seen = new Set([startId]);
+  let frontier = [startId];
+  for (let d = 0; d < jumps; d++) {
+    const next = [];
+    for (const id of frontier) {
+      const s = systs[id];
+      if (!s) continue;
+      for (let i = 1; i <= 16; i++) {
+        const c = s['Con' + i];
+        if (c >= 128 && systs[c] && !seen.has(c)) {
+          seen.add(c);
+          next.push(c);
+        }
+      }
+    }
+    frontier = next;
+  }
+  return seen;
+}
+
 export function mapBearingTo(destId) {
   const a = systs[S.SYSTEM_ID],
     b = systs[destId];

@@ -10,8 +10,16 @@ import {
   ships,
   showMsg,
   spinOfShip,
+  explored,
 } from './01-state.js';
-import { applyShipStats, effectiveShip, fuelMax, holds, player } from './04-combat.js';
+import {
+  applyShipStats,
+  effectiveShip,
+  fuelMax,
+  holds,
+  player,
+  systemsWithinJumps,
+} from './04-combat.js';
 import { refreshView } from './ui/dialog.js';
 
 /*
@@ -61,9 +69,35 @@ export function techAvailable(itemTech, p) {
 export const outfitName = (id) =>
   DATA.strings[5000].list[id - 128] || (DATA.types.outf[id] ? 'outfit ' + id : null);
 
+/* A "map" outfit (ModType 16, e.g. the Regional Map) isn't a kept item: buying it
+ * charts the region — every system within its ModVal jumps of the current one. */
+export const isMapOutfit = (o) => !!(o && o.$sem && o.$sem.modType === 'map');
+// Would buying this map here chart any system not already known? (Drives whether
+// it's purchasable — once the region is explored there's nothing left to buy.)
+export function mapRevealsSomething(o) {
+  if (!isMapOutfit(o)) return false;
+  for (const id of systemsWithinJumps(S.SYSTEM_ID, o.ModVal)) if (!explored.has(id)) return true;
+  return false;
+}
+
 export function buyOutfit(id, qty) {
   const o = DATA.types.outf[id];
   if (!o) return;
+  // Map outfits are one-shot region charts, not inventory (spec: "Outfitter").
+  if (isMapOutfit(o)) {
+    if (qty <= 0 || !wallet.canAfford(o.Cost)) return;
+    const added = [];
+    for (const sid of systemsWithinJumps(S.SYSTEM_ID, o.ModVal))
+      if (!explored.has(sid)) added.push(sid);
+    if (!added.length) return; // whole region already known → nothing to buy
+    for (const sid of added) explored.add(sid);
+    wallet.settle(o.Cost);
+    showMsg(
+      `${outfitName(id)}: charted ${added.length} nearby system${added.length > 1 ? 's' : ''}.`,
+    );
+    refreshView();
+    return;
+  }
   const s = effectiveShip();
   if (qty > 0) {
     if (o.Max > 0 && (outfits[id] || 0) + qty > o.Max) qty = o.Max - (outfits[id] || 0);

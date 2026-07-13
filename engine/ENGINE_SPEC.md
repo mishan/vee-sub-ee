@@ -333,7 +333,12 @@ e.g. Mass Expansion — frees space); effects applied per ModType (semantics
 .js): cargoSpace→Holds, fuelCapacity→Fuel, shieldCapacity/armor/accelBoost
 /speedBoost/turnBoost→the corresponding shïp stat, recomputed through the
 standard stat conversions. Outfits sell back at full cost at any
-outfitter. Ships (bible, shïp Cost): "the cost of buying a ship is always
+outfitter. **Map outfits** (ModType 16, e.g. the Regional Map) are the
+exception: buying one is a one-shot **region chart** rather than a kept item —
+it adds every system within its `ModVal` jumps of the current system to the
+player's known map (fog of war), and is offered for purchase only while at least
+one of those systems is still unexplored (so it can't be re-bought once the
+region is charted, and can't be sold). Ships (bible, shïp Cost): "the cost of buying a ship is always
 the cost of the new ship minus **25% of the original cost of your current
 ship and upgrades**"; outfits do not transfer (they're part of the
 trade-in); cargo must fit the new hull; fuel arrives full.
