@@ -11,7 +11,7 @@ import {
   wallet,
   COMMODITIES,
   S,
-  cargo,
+  hold,
   escorts,
   outfits,
   preloadSprites,
@@ -33,7 +33,7 @@ import {
 } from './04-combat.js';
 import { checkDefenseCleared, hailClick, hailOpen, openHail } from './06-interaction.js';
 import { renderHail } from './ui/hail.js';
-import { cargoNames, cargoUsed } from './07-trade.js';
+import { cargoNames, cargoUsed, missionCargoUsed } from './07-trade.js';
 import { misnName, misns } from './08-missions.js';
 
 /* Board the nearest disabled ship (spec: "Boarding"). B key. Mission
@@ -117,7 +117,7 @@ export function lootVessel() {
         continue;
       } // goods aboard, but no hold space
       const take = Math.min(1 + Math.floor(Math.random() * 4), free);
-      cargo[COMMODITIES[i]] += take;
+      hold.adjust(COMMODITIES[i], take);
       free -= take;
       got.push(`${take}t ${cargoNames[i]}`);
     }
@@ -213,10 +213,5 @@ export function takeCommand(s) {
   S.fuel = fuelMax;
   player.shields = player.shieldMax;
   player.armor = player.armorMax;
-  for (const c of COMMODITIES) cargo[c] = Math.min(cargo[c], holds); // clamp to new hold
-  while (cargoUsed() > holds) {
-    const c = COMMODITIES.find((x) => cargo[x] > 0);
-    if (!c) break;
-    cargo[c]--;
-  }
+  hold.clampTo(holds - missionCargoUsed()); // dump cargo that won't fit the new hull
 }

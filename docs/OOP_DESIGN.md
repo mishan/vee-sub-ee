@@ -291,8 +291,11 @@ lands cleanly on top, one screen at a time.
    shell export is exposed as a global (EV/DATA/MANIFEST/NAMES stay ambient from
    the flight.html `<script>`).
 5. **`GameState`** — fold `S` onto a class cluster by cluster (credits/cargo,
-   legal record, missions), adding methods that guard invariants. (Wallet,
-   LegalRecord and MissionLog are already extracted; the rest of `S` remains.)
+   legal record, missions), adding methods that guard invariants. **In progress**
+   — `Wallet` (credits), `LegalRecord`, `MissionLog` and now `Hold` (the cargo
+   hold) are extracted as focused classes with their own tests. What remains on
+   the `S` bag is mostly transient per-frame/session state (targets, jump,
+   flags); further clusters (e.g. fuel, outfits inventory) can follow.
 
 Phases 1–2 are pure internal structure and reversible. 3–5 change real seams
 and each deserves its own branch + Copilot review, in the usual stacked order.
@@ -315,5 +318,6 @@ zero shell or DOM risk. If it feels right, we proceed to `World`.
 - **UI/logic separation (decided):** presentation moves into an
   `engine/shell/ui/` subfolder (see the section above). Planned only for now —
   no extraction yet; recommended first slice is `ui/shops.js`.
-- **Open — `GameState` shape:** one class, or a few focused ones (Wallet,
-  LegalRecord, MissionLog) composed together? (I lean toward a few focused ones.)
+- **Decided — `GameState` shape:** a few focused classes rather than one big
+  `GameState`. `Wallet`, `LegalRecord`, `MissionLog` and `Hold` are each their
+  own DOM-free, unit-tested class; the `S` bag keeps the transient glue.

@@ -4,7 +4,7 @@ import {
   COMMODITIES,
   PRICE_MULT,
   S,
-  cargo,
+  hold,
   outfits,
   preloadSprites,
   ships,
@@ -28,7 +28,7 @@ export const cargoNames = DATA.strings[4000].list.slice(0, 6);
 export const basePrices = DATA.strings[4004].list.slice(0, 6).map(Number);
 export const missionCargoUsed = () =>
   missionLog.list.reduce((n, a) => n + (a.cargoLoaded ? a.cargoQty : 0), 0);
-export const cargoUsed = () => COMMODITIES.reduce((n, c) => n + cargo[c], 0) + missionCargoUsed();
+export const cargoUsed = () => hold.used() + missionCargoUsed();
 
 export function priceAt(spob, i) {
   const lvl = spob.$sem && spob.$sem.prices[COMMODITIES[i]];
@@ -39,8 +39,8 @@ export function trade(i, qty) {
   const price = priceAt(S.landedAt, i);
   if (price == null) return;
   if (qty > 0) qty = Math.min(qty, holds - cargoUsed(), Math.floor(wallet.credits / price));
-  else qty = Math.max(qty, -cargo[COMMODITIES[i]]);
-  cargo[COMMODITIES[i]] += qty;
+  else qty = Math.max(qty, -hold.get(COMMODITIES[i]));
+  hold.adjust(COMMODITIES[i], qty);
   wallet.settle(qty * price); // buy (qty>0) charges, sell (qty<0) credits
   refreshView();
 }
@@ -78,12 +78,9 @@ export function buyOutfit(id, qty) {
   if (!outfits[id]) delete outfits[id];
   wallet.settle(qty * o.Cost); // buy (qty>0) charges, sell (qty<0) credits
   applyShipStats();
-  // cargo can't exceed a shrunken hold: dump overflow (paid nothing for it)
-  while (cargoUsed() > holds) {
-    const c = COMMODITIES.find((c) => cargo[c] > 0);
-    if (!c) break;
-    cargo[c]--;
-  }
+  // cargo can't exceed a shrunken hold: dump overflow (paid nothing for it),
+  // leaving room for any mission cargo aboard.
+  hold.clampTo(holds - missionCargoUsed());
   refreshView();
 }
 

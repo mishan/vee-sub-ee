@@ -13,7 +13,7 @@
  * normalize it (clamp a stale/empty selection to the first item), so they are
  * not side-effect-free.
  */
-import { S, cargo, COMMODITIES, outfits, ships, wallet } from '../01-state.js';
+import { S, hold, COMMODITIES, outfits, ships, wallet } from '../01-state.js';
 import { html } from './html.js';
 import { effectiveShip, holds } from '../04-combat.js';
 import {
@@ -41,7 +41,7 @@ export function renderExchange() {
   const rows = [];
   for (let i = 0; i < 6; i++) {
     const price = priceAt(p, i);
-    const held = cargo[COMMODITIES[i]];
+    const held = hold.get(COMMODITIES[i]);
     if (price == null && !held) continue;
     // A spöb without price semantics still lists commodities the player is
     // carrying (price "—"); guard m.prices the way priceAt does so it can't throw.
