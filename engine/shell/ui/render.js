@@ -134,40 +134,21 @@ export function spriteHalf(spinId, fallback) {
   return (m ? Math.max(m.frameW, m.frameH) : fallback) / 2 + 6;
 }
 
-/* A lumpy grey asteroid (spec: "Asteroids"). Its outline is a fixed irregular
- * polygon derived from the rock's seed, so the shape holds steady as it spins; a
- * shaded rim and a lighter facet give it a bit of relief. Pure scenery — drawn at
- * the entity layer, but ships and fire pass straight over it. */
+/* An asteroid, drawn with EV's own rotating rock sprite (spïn 800 small / 801
+ * big); a.rot picks the tumble frame so it spins. Falls back to a plain grey disc
+ * only while the sprite is still loading (or if the asset is missing). Pure
+ * scenery at the entity layer — ships and fire pass straight over it. */
 export function drawAsteroid(a, x, y) {
-  const n = 11;
-  const lump = (i) => {
-    // stable per-vertex value in ~[0.68, 1.0] from the rock's seed and index
-    const h = (((a.seed ^ (i * 0x9e3779b1)) >>> 0) * 1103515245 + 12345) >>> 0;
-    return 0.68 + (((h >>> 16) & 0xff) / 255) * 0.32;
-  };
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(EV.rad(a.rot));
-  ctx.beginPath();
-  for (let i = 0; i < n; i++) {
-    const ang = (i / n) * Math.PI * 2;
-    const rr = a.r * lump(i);
-    const vx = Math.cos(ang) * rr,
-      vy = Math.sin(ang) * rr;
-    if (i === 0) ctx.moveTo(vx, vy);
-    else ctx.lineTo(vx, vy);
+  const spinId = 800 + a.size; // 800 = Small Asteroids, 801 = Big Asteroids
+  const s = sprites.get(spinId);
+  if (s && s.ready) {
+    drawSpin(ctx, spinId, x, y, a.rot);
+    return;
   }
-  ctx.closePath();
+  ctx.beginPath();
+  ctx.arc(x, y, a.r, 0, Math.PI * 2);
   ctx.fillStyle = '#7a7a80';
   ctx.fill();
-  ctx.lineWidth = 1.2;
-  ctx.strokeStyle = '#3c3c44';
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(196,198,206,.28)'; // top-left facet highlight
-  ctx.beginPath();
-  ctx.ellipse(-a.r * 0.28, -a.r * 0.28, a.r * 0.42, a.r * 0.3, -0.6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
 }
 
 /* ---- classic sidebar: PICT 128 "Game Panel" (144×480) from EV Titles.
@@ -201,8 +182,9 @@ export const panelImg = (() => {
   }
   // warm the canvas PICT cache too (target pics are drawn on the canvas)
   for (const id of Object.keys(ships)) gfxImg(3000 + (id - 128));
-  // combat sprites: every weapon graphic + the three explosion sets
-  const combatSpins = new Set([400, 401, 402]);
+  // combat sprites: every weapon graphic + the three explosion sets, plus the
+  // two asteroid rock sheets (spïn 800 small / 801 big).
+  const combatSpins = new Set([400, 401, 402, 800, 801]);
   for (const w of Object.values(DATA.types.weap))
     if (w.Graphic >= 0 && w.Graphic <= 63) combatSpins.add(200 + w.Graphic);
   preloadSprites(combatSpins);
@@ -288,8 +270,7 @@ export function drawPanel(w, h) {
     ctx.arc(x, y, 3, 0, 7);
     ctx.stroke();
   }
-  // asteroids show as faint grey specks so the field is legible on radar
-  for (const a of S.asteroids) blip(a, '#9a9aa2', 1.5);
+  // (asteroids are deliberately not shown on radar — they're passive scenery)
   // …and ships are brighter green dots (the selected target blinks yellow).
   for (const s of S.aiShips) {
     const isTarget = s === S.shipTarget;

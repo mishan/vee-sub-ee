@@ -58,27 +58,31 @@ export const isPort = (p) => !!(p && p.$sem && p.$sem.canLand && !p.$sem.uninhab
 export const portsHere = () => S.spobs.filter(isPort);
 
 /* Populate S.asteroids for the current system (spec: "Asteroids"). The syst
- * `Asteroids` field (0 = none, 2–10 light→heavy) sets the count; each rock gets a
- * random size, a slow drift + spin, and a stable shape seed. Ambient scenery,
- * regenerated per visit and never saved. */
+ * `Asteroids` field is a *density level* (0 = none, 2–10 = light→heavy), not a
+ * count: a light field still has many rocks. We scatter that many around the
+ * player within ±BOUND; the per-frame wrap (core Asteroid.step) then keeps the
+ * field centred on the player as they fly. Ambient scenery, regenerated per visit
+ * and never saved. */
 export function spawnAsteroids() {
   S.asteroids = [];
   const density = S.syst && S.syst.Asteroids > 0 ? S.syst.Asteroids : 0;
   if (!density) return;
+  const n = 4 + density * 2; // level 2 (light) ≈ 8, level 10 (heavy) ≈ 24
   const B = EV.ASTEROID_BOUND;
+  const cx = player.x || 0,
+    cy = player.y || 0;
   const rand = (lo, hi) => lo + Math.random() * (hi - lo);
-  for (let i = 0; i < density; i++) {
+  for (let i = 0; i < n; i++) {
     const ang = Math.random() * Math.PI * 2;
-    const spd = rand(0.05, 0.2); // slow drift, px/frame
+    const spd = rand(0.2, 0.6); // drift, px/frame
     S.asteroids.push(
       EV.makeAsteroid(
-        rand(-B, B),
-        rand(-B, B),
+        cx + rand(-B, B),
+        cy + rand(-B, B),
         Math.cos(ang) * spd,
         Math.sin(ang) * spd,
-        Math.floor(Math.random() * 3), // size 0/1/2
-        rand(-0.6, 0.6), // spin, deg/frame
-        (Math.random() * 0x7fffffff) | 0, // shape seed
+        Math.floor(Math.random() * 2), // size 0 small / 1 big (EV spïn 800 / 801)
+        rand(-0.8, 0.8), // spin, deg/frame
       ),
     );
   }

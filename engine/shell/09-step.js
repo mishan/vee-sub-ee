@@ -476,7 +476,8 @@ export class World {
     const alliedTo = (o) => o === this.player || o.playerEscort;
     const friendly = (a, b) => alliedTo(a) && alliedTo(b);
     // Asteroids drift/spin (spec: "Asteroids"); they never touch ships, only fire.
-    for (const a of this.asteroids) EV.stepAsteroid(a);
+    // Wrap around the player so the field always surrounds them in-system.
+    for (const a of this.asteroids) EV.stepAsteroid(a, this.player.x, this.player.y);
 
     for (const shot of [...this.shots]) {
       const alive = EV.stepShot(shot, shot.homing);

@@ -225,34 +225,37 @@ class Projectile {
 
 /* ---- asteroids (spec: "Asteroids") ----
  * Inert cover: rocks that drift and spin but never touch ships; their only effect
- * is to block weapons fire (projectiles absorbed, beams stopped short). Size 0/1/2
- * is small/medium/large with the matching collision radius. */
-const ASTEROID_BOUND = 3000; // rocks wrap within ±this (px) so the field stays put
-const ASTEROID_RADII = [11, 18, 28]; // collision radius by size
+ * is to block weapons fire (projectiles absorbed, beams stopped short). Size 0/1
+ * is small/big, matching EV's two asteroid sprites (spïn 800/801) and a collision
+ * radius. The field wraps around the player (see step) so it always surrounds them
+ * while they're in an asteroid system. */
+const ASTEROID_BOUND = 1300; // rocks wrap within ±this (px) of the player
+const ASTEROID_RADII = [10, 14]; // collision radius by size (small / big)
 
 class Asteroid {
-  constructor(x, y, vx, vy, size, spin, seed) {
+  constructor(x, y, vx, vy, size, spin) {
     this.x = x;
     this.y = y;
     this.vx = vx;
     this.vy = vy;
     this.size = size;
-    this.r = ASTEROID_RADII[size] ?? ASTEROID_RADII[1];
+    this.r = ASTEROID_RADII[size] ?? ASTEROID_RADII[0];
     this.rot = 0;
-    this.spin = spin; // deg/frame
-    this.seed = seed; // stable per-rock shape seed (the renderer derives the outline)
+    this.spin = spin; // deg/frame (drives the sprite's rotation frame)
   }
 
-  /* Drift and spin one frame, wrapping toroidally so the field doesn't disperse. */
-  step() {
+  /* Drift and spin one frame, wrapping toroidally within ±BOUND of the point
+   * (px,py) — the player — so the field follows them and never disperses. With no
+   * point given it wraps around the origin. */
+  step(px = 0, py = 0) {
     this.x += this.vx;
     this.y += this.vy;
     this.rot = norm(this.rot + this.spin);
-    const B = ASTEROID_BOUND;
-    if (this.x > B) this.x -= 2 * B;
-    else if (this.x < -B) this.x += 2 * B;
-    if (this.y > B) this.y -= 2 * B;
-    else if (this.y < -B) this.y += 2 * B;
+    const B = ASTEROID_BOUND,
+      W = 2 * B;
+    const wrap = (d) => ((((d + B) % W) + W) % W) - B; // fold into [-B, B)
+    this.x = px + wrap(this.x - px);
+    this.y = py + wrap(this.y - py);
   }
 }
 
@@ -295,8 +298,7 @@ function shotHitsAsteroid(shot, asteroids) {
 /* ---- factories (the shell constructs entities through these) ---- */
 const makeShip = (rec, x, y, heading) => new Ship(rec, x, y, heading);
 const makeShot = (rec, shooter, aim) => new Projectile(rec, shooter, aim);
-const makeAsteroid = (x, y, vx, vy, size, spin, seed) =>
-  new Asteroid(x, y, vx, vy, size, spin, seed);
+const makeAsteroid = (x, y, vx, vy, size, spin) => new Asteroid(x, y, vx, vy, size, spin);
 const stepAsteroid = (a) => Asteroid.prototype.step.call(a);
 
 /* ---- free-function compatibility wrappers (delegate to the methods) ----

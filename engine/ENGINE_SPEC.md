@@ -468,14 +468,17 @@ matching weapon). Space fires all primary weapons; Q cycles secondary
 
 ## Asteroids
 
-Systems with a nonzero **`Asteroids`** field (0 = none; 2–10 = light→heavy in
-the data) carry a drifting field of rocks. On entering a system the shell spawns
-`Asteroids`-many asteroids at random positions within a fixed square (±3000 px of
-the system origin), each with a random **size** (0/1/2 = small/medium/large, with
-collision radii ≈ 11/18/28 px), a slow random drift velocity (~0.05–0.2 px/frame),
-and a slow spin. Each frame they integrate and **wrap toroidally** within the
-±3000 box, so the field stays put rather than dispersing. Asteroids are purely
-ambient scenery generated per visit — they are not saved and carry no data.
+Systems with a nonzero **`Asteroids`** field carry a drifting field of rocks. The
+field is a **density level**, not a count (0 = none; 2–10 = light→heavy), so even a
+light field has many rocks. On entering a system the shell scatters
+`4 + 2·level` asteroids (light ≈ 8, heavy ≈ 24) around the player within ±1300 px,
+each a random **size** (0 = small / 1 = big, collision radii ≈ 10/14 px), a random
+drift (~0.2–0.6 px/frame), and a slow spin. Each frame they integrate and **wrap
+toroidally within ±1300 px of the player**, so the field follows the ship and
+always surrounds them while they're in an asteroid system. Asteroids are ambient
+scenery generated per visit — never saved, and **not shown on radar**. They are
+drawn with EV's own rotating rock sprites (spïn 800 small / 801 big; the spin
+angle picks the tumble frame).
 
 **No ship collision.** Asteroids never touch ships: the player and AI fly
 straight through them. Their only gameplay effect is on weapons, which makes them
