@@ -107,7 +107,7 @@ export function renderOutfitter() {
   let pane = '';
   if (S.selOutfitId != null) {
     const o = DATA.types.outf[S.selOutfitId];
-    const own = outfits[S.selOutfitId] || 0;
+    const own = outfits.count(S.selOutfitId);
     const isMap = isMapOutfit(o);
     // A map charts a region once; it's buyable only while it reveals something new.
     const canBuy =

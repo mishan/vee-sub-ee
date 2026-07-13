@@ -99,7 +99,7 @@ export function armShip(e, rec) {
 /* Player loadout = stock + outfitter weapons/ammo (rebuilt on refit). */
 export function rebuildPlayerWeapons() {
   armShipKeepingCondition(player, effectiveShip());
-  for (const [oid, n] of Object.entries(outfits)) {
+  for (const [oid, n] of outfits.entries()) {
     const o = DATA.types.outf[oid];
     if (!o || !n || !o.$sem) continue;
     if (o.$sem.modType === 'weapon' && weaps[o.ModVal]) {
@@ -287,7 +287,7 @@ export function effectiveShip() {
   let h = rec.Holds,
     fm = rec.Fuel,
     massUsed = 0;
-  for (const [id, n] of Object.entries(outfits)) {
+  for (const [id, n] of outfits.entries()) {
     const o = DATA.types.outf[id];
     if (!o || !n) continue;
     massUsed += o.Mass * n;
