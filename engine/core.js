@@ -223,9 +223,89 @@ class Projectile {
   }
 }
 
+/* ---- asteroids (spec: "Asteroids") ----
+ * Inert cover: rocks that drift and spin but never touch ships; their only effect
+ * is to block weapons fire (projectiles absorbed, beams stopped short). Size 0/1
+ * is small/big, matching EV's two asteroid sprites (spïn 800/801) and a collision
+ * radius. The field wraps around the player (see step) so it always surrounds them
+ * while they're in an asteroid system. */
+const ASTEROID_BOUND = 1300; // rocks wrap within ±this (px) of the player
+const ASTEROID_RADII = [10, 14]; // collision radius by size (small / big)
+
+class Asteroid {
+  constructor(x, y, vx, vy, size, spin) {
+    this.x = x;
+    this.y = y;
+    this.vx = vx;
+    this.vy = vy;
+    this.size = size;
+    this.r = ASTEROID_RADII[size] ?? ASTEROID_RADII[0];
+    this.rot = 0;
+    this.spin = spin; // deg/frame (drives the sprite's rotation frame)
+  }
+
+  /* Drift and spin one frame, wrapping toroidally within ±BOUND of the point
+   * (px,py) — the player — so the field follows them and never disperses. With no
+   * point given it wraps around the origin. */
+  step(px = 0, py = 0) {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.rot = norm(this.rot + this.spin);
+    const B = ASTEROID_BOUND,
+      W = 2 * B;
+    const wrap = (d) => ((((d + B) % W) + W) % W) - B; // fold into [-B, B)
+    this.x = px + wrap(this.x - px);
+    this.y = py + wrap(this.y - py);
+  }
+}
+
+/* Nearest distance along a unit ray (ox,oy) + t·(dx,dy), t∈[0,maxLen], at which it
+ * first enters an asteroid — or Infinity if none is hit. Origin-inside counts as 0.
+ * Drives both beam blocking and the swept-segment test for projectiles. */
+function rayHitsAsteroids(ox, oy, dx, dy, maxLen, asteroids) {
+  let best = Infinity;
+  for (const a of asteroids) {
+    const mx = a.x - ox,
+      my = a.y - oy;
+    const tc = mx * dx + my * dy; // asteroid centre projected onto the ray
+    if (tc - a.r > maxLen) continue; // disc begins past the ray's end
+    if (tc + a.r < 0) continue; // disc ends before the ray's start
+    const perp2 = mx * mx + my * my - tc * tc; // perpendicular distance²
+    const r2 = a.r * a.r;
+    if (perp2 > r2) continue; // ray misses the disc
+    let t = tc - Math.sqrt(r2 - perp2); // entry point along the ray
+    if (t < 0) t = 0; // origin already inside → blocked here
+    if (t <= maxLen && t < best) best = t;
+  }
+  return best;
+}
+
+/* Where a shot's swept path (previous → current position) first enters an
+ * asteroid this frame, as {x, y}, or null if it hits none. Testing the swept
+ * segment stops a fast shot from tunnelling a thin rock; returning the entry
+ * point (not just a boolean) lets the shell play the impact effect where the rock
+ * actually stopped the shot, not at its post-step position. */
+function shotAsteroidImpact(shot, asteroids) {
+  const len = Math.hypot(shot.vx, shot.vy);
+  if (len < 1e-6) {
+    // a resting shot (e.g. a dropped mine): plain point-in-disc test
+    for (const a of asteroids)
+      if ((a.x - shot.x) ** 2 + (a.y - shot.y) ** 2 < a.r * a.r) return { x: shot.x, y: shot.y };
+    return null;
+  }
+  const dx = shot.vx / len,
+    dy = shot.vy / len;
+  const ox = shot.x - shot.vx, // where the shot was last frame
+    oy = shot.y - shot.vy;
+  const t = rayHitsAsteroids(ox, oy, dx, dy, len, asteroids);
+  return t < Infinity ? { x: ox + dx * t, y: oy + dy * t } : null;
+}
+
 /* ---- factories (the shell constructs entities through these) ---- */
 const makeShip = (rec, x, y, heading) => new Ship(rec, x, y, heading);
 const makeShot = (rec, shooter, aim) => new Projectile(rec, shooter, aim);
+const makeAsteroid = (x, y, vx, vy, size, spin) => new Asteroid(x, y, vx, vy, size, spin);
+const stepAsteroid = (a, px, py) => Asteroid.prototype.step.call(a, px, py);
 
 /* ---- free-function compatibility wrappers (delegate to the methods) ----
  * Kept until every call site uses methods; then deleted (see docs/OOP_DESIGN.md).
@@ -354,6 +434,13 @@ export {
   shotSpeedOf,
   makeShot,
   stepShot,
+  Asteroid,
+  makeAsteroid,
+  stepAsteroid,
+  rayHitsAsteroids,
+  shotAsteroidImpact,
+  ASTEROID_BOUND,
+  ASTEROID_RADII,
   applyDamage,
   stepShields,
   stepWarship,

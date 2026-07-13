@@ -57,6 +57,37 @@ export function warpIntoSystem(e, tx = 0, ty = 0) {
 export const isPort = (p) => !!(p && p.$sem && p.$sem.canLand && !p.$sem.uninhabited);
 export const portsHere = () => S.spobs.filter(isPort);
 
+/* Populate S.asteroids for the current system (spec: "Asteroids"). The syst
+ * `Asteroids` field is a *density level* (0 = none, 2–10 = light→heavy), not a
+ * count: a light field still has many rocks. We scatter that many around the
+ * player within ±BOUND; the per-frame wrap (core Asteroid.step) then keeps the
+ * field centred on the player as they fly. Ambient scenery, regenerated per visit
+ * and never saved. */
+export function spawnAsteroids() {
+  S.asteroids = [];
+  const density = S.syst && S.syst.Asteroids > 0 ? S.syst.Asteroids : 0;
+  if (!density) return;
+  const n = 4 + density * 2; // level 2 (light) ≈ 8, level 10 (heavy) ≈ 24
+  const B = EV.ASTEROID_BOUND;
+  const cx = player.x || 0,
+    cy = player.y || 0;
+  const rand = (lo, hi) => lo + Math.random() * (hi - lo);
+  for (let i = 0; i < n; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const spd = rand(0.2, 0.6); // drift, px/frame
+    S.asteroids.push(
+      EV.makeAsteroid(
+        cx + rand(-B, B),
+        cy + rand(-B, B),
+        Math.cos(ang) * spd,
+        Math.sin(ang) * spd,
+        Math.floor(Math.random() * 2), // size 0 small / 1 big (EV spïn 800 / 801)
+        rand(-0.8, 0.8), // spin, deg/frame
+      ),
+    );
+  }
+}
+
 export function spawnAI(atEdge) {
   const pairsD = [];
   for (let i = 1; i <= 4; i++) {

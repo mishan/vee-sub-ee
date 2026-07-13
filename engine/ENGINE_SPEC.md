@@ -466,6 +466,39 @@ other and never make an AI take one of them as a foe.
 matching weapon). Space fires all primary weapons; Q cycles secondary
 (MiscFlags 0x0002) weapons, X fires the selected one.
 
+## Asteroids
+
+Systems with a nonzero **`Asteroids`** field carry a drifting field of rocks. The
+field is a **density level**, not a count (0 = none; 2–10 = light→heavy), so even a
+light field has many rocks. On entering a system the shell scatters
+`4 + 2·level` asteroids (light ≈ 8, heavy ≈ 24) around the player within ±1300 px,
+each a random **size** (0 = small / 1 = big, collision radii ≈ 10/14 px), a random
+drift (~0.2–0.6 px/frame), and a slow spin. Each frame they integrate and **wrap
+toroidally within ±1300 px of the player**, so the field follows the ship and
+always surrounds them while they're in an asteroid system. Asteroids are ambient
+scenery generated per visit — never saved, and **not shown on radar**. They are
+drawn with EV's own rotating rock sprites (spïn 800 small / 801 big; the spin
+angle picks the tumble frame).
+
+**No ship collision.** Asteroids never touch ships: the player and AI fly
+straight through them. Their only gameplay effect is on weapons, which makes them
+usable as cover.
+
+**They block all weapons fire** (both sides'):
+
+- A **projectile** (bullet / missile / rocket / torpedo) is absorbed the frame its
+  swept path (previous → current position) crosses any asteroid disc — tested as a
+  segment so a fast shot can't tunnel through. On absorption the shot is removed
+  and its `ExplodType` explosion (if any) plays at the impact point; it deals no
+  damage. A ship sheltering behind an asteroid is safe.
+- A **beam** is a ray from the owner's nose. It stops at the nearest asteroid it
+  enters within its length: the beam is drawn only up to that point and damages no
+  ship beyond it. A ship is hit only when no asteroid lies closer along the ray
+  than the ship.
+
+Asteroids are **indestructible** — weapons are consumed by them but never damage
+or break them; they are permanent cover for the life of the system visit.
+
 ## Audio (shell responsibility)
 
 Sound IDs follow the classic files (names baked into the resources):
