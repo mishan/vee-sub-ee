@@ -280,26 +280,32 @@ function rayHitsAsteroids(ox, oy, dx, dy, maxLen, asteroids) {
   return best;
 }
 
-/* Did this shot cross an asteroid on the frame it just moved through? Tests the
- * swept segment (previous → current) so a fast shot can't tunnel a thin rock. */
-function shotHitsAsteroid(shot, asteroids) {
+/* Where a shot's swept path (previous → current position) first enters an
+ * asteroid this frame, as {x, y}, or null if it hits none. Testing the swept
+ * segment stops a fast shot from tunnelling a thin rock; returning the entry
+ * point (not just a boolean) lets the shell play the impact effect where the rock
+ * actually stopped the shot, not at its post-step position. */
+function shotAsteroidImpact(shot, asteroids) {
   const len = Math.hypot(shot.vx, shot.vy);
   if (len < 1e-6) {
     // a resting shot (e.g. a dropped mine): plain point-in-disc test
     for (const a of asteroids)
-      if ((a.x - shot.x) ** 2 + (a.y - shot.y) ** 2 < a.r * a.r) return true;
-    return false;
+      if ((a.x - shot.x) ** 2 + (a.y - shot.y) ** 2 < a.r * a.r) return { x: shot.x, y: shot.y };
+    return null;
   }
+  const dx = shot.vx / len,
+    dy = shot.vy / len;
   const ox = shot.x - shot.vx, // where the shot was last frame
     oy = shot.y - shot.vy;
-  return rayHitsAsteroids(ox, oy, shot.vx / len, shot.vy / len, len, asteroids) < Infinity;
+  const t = rayHitsAsteroids(ox, oy, dx, dy, len, asteroids);
+  return t < Infinity ? { x: ox + dx * t, y: oy + dy * t } : null;
 }
 
 /* ---- factories (the shell constructs entities through these) ---- */
 const makeShip = (rec, x, y, heading) => new Ship(rec, x, y, heading);
 const makeShot = (rec, shooter, aim) => new Projectile(rec, shooter, aim);
 const makeAsteroid = (x, y, vx, vy, size, spin) => new Asteroid(x, y, vx, vy, size, spin);
-const stepAsteroid = (a) => Asteroid.prototype.step.call(a);
+const stepAsteroid = (a, px, py) => Asteroid.prototype.step.call(a, px, py);
 
 /* ---- free-function compatibility wrappers (delegate to the methods) ----
  * Kept until every call site uses methods; then deleted (see docs/OOP_DESIGN.md).
@@ -432,7 +438,7 @@ export {
   makeAsteroid,
   stepAsteroid,
   rayHitsAsteroids,
-  shotHitsAsteroid,
+  shotAsteroidImpact,
   ASTEROID_BOUND,
   ASTEROID_RADII,
   applyDamage,

@@ -313,6 +313,14 @@ export class World {
     // frozen while docked and rebuilt fresh on takeoff; the galaxy map pauses it
     // while you plan a route.
     if (S.gameOver || hailOpen || introUp() || S.landedAt || S.mapOpen || S.missionsOpen) return;
+    // Asteroids are spawned on the first live tick after a (re)load, by which point
+    // the caller (jump arrival / takeoff / boot) has placed the player — so the
+    // field is centred on the ship from its first drawn frame rather than the
+    // pre-placement position (spec: "Asteroids").
+    if (S.asteroidsPending) {
+      spawnAsteroids();
+      S.asteroidsPending = false;
+    }
     maybeSpawnBountyHunter();
     checkHostileAlert(this.ships);
     if (!S.landedAt) {
@@ -492,9 +500,14 @@ export class World {
         }
       }
       // An asteroid in the shot's swept path absorbs it (no damage): cover works.
-      if (!hit && this.asteroids.length && EV.shotHitsAsteroid(shot, this.asteroids)) {
-        if (shot.rec.ExplodType >= 0) spawnExplosion(shot.x, shot.y, shot.rec.ExplodType);
-        hit = true;
+      // The impact effect plays where the rock stopped it (the segment entry
+      // point), not at the shot's post-step position past the rock.
+      if (!hit && this.asteroids.length) {
+        const pt = EV.shotAsteroidImpact(shot, this.asteroids);
+        if (pt) {
+          if (shot.rec.ExplodType >= 0) spawnExplosion(pt.x, pt.y, shot.rec.ExplodType);
+          hit = true;
+        }
       }
       if (hit || !alive) this.shots.splice(this.shots.indexOf(shot), 1);
     }
@@ -561,7 +574,11 @@ export function loadSystem(systId) {
   S.shots = [];
   S.beams = [];
   S.explosions = [];
-  spawnAsteroids(); // drifting rocks that block weapons fire (spec: "Asteroids")
+  // Asteroids block weapons fire (spec: "Asteroids"). Defer the actual spawn to
+  // the first live tick: the caller places the player *after* loadSystem, so
+  // spawning now would centre the field on the pre-placement position.
+  S.asteroids = [];
+  S.asteroidsPending = true;
   S.navTarget = null;
   S.shipTarget = null;
   S.alertGrace = 45;

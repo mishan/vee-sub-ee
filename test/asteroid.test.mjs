@@ -19,11 +19,16 @@ test('stepAsteroid drifts, spins, and wraps within ±BOUND of the origin', () =>
 
 test('stepAsteroid wraps around the player so the field follows them', () => {
   const B = EV.ASTEROID_BOUND;
-  const px = 1000;
-  const a = EV.makeAsteroid(px + B + 10, 0, 0, 0, 0, 0); // just past the far edge
+  const px = 2000; // far from the origin, to tell player-wrap from origin-wrap
+  // A rock sitting exactly on the player stays put when wrapped around the player;
+  // wrapping around the origin (the bug) would jump it to ~-600.
+  const a = EV.makeAsteroid(px, 0, 0, 0, 0, 0);
   EV.stepAsteroid(a, px, 0);
-  assert.ok(Math.abs(a.x - px) <= B, `re-centred near the player: ${a.x}`);
-  assert.ok(a.x < px, 'wrapped to the near side of the player');
+  assert.equal(a.x, px, 'stayed on the player, not wrapped to the origin');
+  // and one just past the far edge re-enters near the player
+  const b = EV.makeAsteroid(px + B + 10, 0, 0, 0, 0, 0);
+  EV.stepAsteroid(b, px, 0);
+  assert.ok(Math.abs(b.x - px) <= B && b.x < px, `re-centred near the player: ${b.x}`);
 });
 
 test('rayHitsAsteroids returns the nearest entry distance, or Infinity', () => {
@@ -43,18 +48,24 @@ test('rayHitsAsteroids: nearest of several, and origin-inside blocks at 0', () =
   assert.equal(EV.rayHitsAsteroids(150, 0, 1, 0, 500, rocks), 0, 'origin inside → blocked at 0');
 });
 
-test('shotHitsAsteroid sweeps the segment so a fast shot cannot tunnel', () => {
+test('shotAsteroidImpact returns the swept-segment entry point (no tunnelling)', () => {
   const rocks = [EV.makeAsteroid(0, 0, 0, 0, 1, 0)]; // r=14 at origin
   // end-point (x=-30) is past the rock, but the swept segment (prev x=50 → -30)
-  // crossed it — the point test alone would miss this.
-  assert.equal(shotAt(-30, 0, -80, 0, rocks), true, 'segment x=50→-30 crosses origin rock');
-  assert.equal(shotAt(300, 0, 80, 0, rocks), false, 'clear this frame (x=220→300)');
-  // a resting shot (mine) inside a rock is caught by the point test
-  assert.equal(shotAt(5, 0, 0, 0, rocks), true);
-  assert.equal(shotAt(300, 0, 0, 0, rocks), false);
+  // crossed it — a point test alone would miss this. Impact is at the near edge.
+  const pt = shotAt(-30, 0, -80, 0, rocks);
+  assert.ok(pt, 'segment x=50→-30 crosses origin rock');
+  assert.deepEqual(
+    pt,
+    { x: EV.ASTEROID_RADII[1], y: 0 },
+    'impact at the rock edge, not the shot end',
+  );
+  assert.equal(shotAt(300, 0, 80, 0, rocks), null, 'clear this frame (x=220→300)');
+  // a resting shot (mine) inside a rock reports its own position as the impact
+  assert.deepEqual(shotAt(5, 0, 0, 0, rocks), { x: 5, y: 0 });
+  assert.equal(shotAt(300, 0, 0, 0, rocks), null);
 });
 
 // helper: a shot at (x,y) that moved by (vx,vy) this frame
 function shotAt(x, y, vx, vy, rocks) {
-  return EV.shotHitsAsteroid({ x, y, vx, vy }, rocks);
+  return EV.shotAsteroidImpact({ x, y, vx, vy }, rocks);
 }
