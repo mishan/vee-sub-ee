@@ -11,6 +11,7 @@ import { S, missionLog, persDone, persGrudge, ships, systs } from './01-state.js
 import { systemGovt } from './02-spawning.js';
 import { armShip, poolKey, weaps } from './04-combat.js';
 import { govtAllies, govtEnemies, misns, missionAvailable, pers, playerAI } from './08-missions.js';
+import { world } from './09-step.js'; // World owns the ships array (deferred use)
 
 /* ---------- përs (named characters) & ship-offered missions ----------
  * A mïsn with AvailLoc 2 is carried by a përs ship (bible): you hail the
@@ -134,5 +135,5 @@ export function maybeSpawnPers() {
   e.persFlags = pr.Flags;
   e.commQuote = pr.CommQuote;
   e.warpIn = 18;
-  S.aiShips.push(e);
+  world.ships.push(e);
 }

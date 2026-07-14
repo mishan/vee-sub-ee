@@ -260,7 +260,7 @@ export function drawPanel(w, h) {
   }
   // (asteroids are deliberately not shown on radar — they're passive scenery)
   // …and ships are brighter green dots (the selected target blinks yellow).
-  for (const s of S.aiShips) {
+  for (const s of world.ships) {
     const isTarget = s === S.shipTarget;
     blip(s, isTarget && blinkOn ? '#ffd479' : RADAR_GREEN, isTarget ? 3 : 2);
   }
@@ -468,7 +468,7 @@ export function render() {
     if (x < -40 || x > w + 40 || y < -40 || y > h + 40) continue; // cull off-screen
     drawAsteroid(a, x, y);
   }
-  for (const s of S.aiShips) {
+  for (const s of world.ships) {
     const [x, y] = toScreen(s.x, s.y);
     if (x < -100 || x > w + 100 || y < -100 || y > h + 100) continue;
     // disintegration: fade the hull out under the fireball (not a hard flicker)
@@ -556,7 +556,7 @@ export function render() {
   // boardable disabled mission ship in range?
   const boardable = S.landedAt
     ? null
-    : S.aiShips.find(
+    : world.ships.find(
         (s) =>
           s.misnId != null &&
           s.disabled &&

@@ -13,6 +13,7 @@ import {
 } from './08-missions.js';
 import { PF, persOffersToPlayer, shipMissionAvailable, systemSpob } from './15-pers.js';
 import { hailDialog, renderHail } from './ui/hail.js';
+import { world } from './09-step.js'; // World owns the ships array (deferred use)
 
 /*
  * engine/shell/06-interaction.js — part of the browser flight shell.
@@ -57,12 +58,12 @@ export function cyclePlanetTarget() {
   playSnd(150, 0.5);
 }
 export function cycleShipTarget() {
-  if (!S.aiShips.length) {
+  if (!world.ships.length) {
     showMsg('No ships on scope.');
     S.shipTarget = null;
     return;
   }
-  const sorted = [...S.aiShips].sort((a, b) => distTo(a) - distTo(b));
+  const sorted = [...world.ships].sort((a, b) => distTo(a) - distTo(b));
   const i = S.shipTarget ? sorted.indexOf(S.shipTarget) : -1;
   S.shipTarget = i + 1 < sorted.length ? sorted[i + 1] : null;
   if (!S.shipTarget) showMsg('Target cleared.');
@@ -94,7 +95,7 @@ export const subdued = new Set(); // spob ids whose defense fleet you've just cl
  * either way that ship is out of the fight. */
 export function checkDefenseCleared(defOf, excluding) {
   if (defOf == null) return;
-  if (S.aiShips.some((x) => x !== excluding && x.defOf === defOf)) return;
+  if (world.ships.some((x) => x !== excluding && x.defOf === defOf)) return;
   subdued.add(defOf);
   const p = spobById(defOf);
   if (p) showMsg(`${p.name}'s defenses are broken — hail it to demand tribute.`);
@@ -139,7 +140,7 @@ export function demandTribute(p) {
     return;
   }
   // still defended? refuse and scramble the defense fleet.
-  const defendersHere = S.aiShips.some((s) => s.defOf === p.id);
+  const defendersHere = world.ships.some((s) => s.defOf === p.id);
   if (defWave(p) > 0 && !subdued.has(p.id)) {
     hailSay(pickFrom(3002, 10, 14) || 'You will regret this.');
     if (!defendersHere) spawnDefenseFleet(p);
@@ -180,7 +181,7 @@ export function spawnDefenseFleet(p) {
     e.warpIn = 18;
     e.target = S.spobs.length ? S.spobs[Math.floor(Math.random() * S.spobs.length)] : null;
     armShip(e, ships[shipId]);
-    S.aiShips.push(e);
+    world.ships.push(e);
   }
   showMsg(`${p.name} launches its defense fleet!`);
 }
@@ -270,8 +271,8 @@ export function demandSurrender(s) {
   // same consequences as boarding: it's piracy, and the ship is gone once
   // plundered (was repeatable free loot, and left defenders "in the fight").
   commitCrime(s.govt, penaltyOf(s.govt, 'BoardPenalty'));
-  const i = S.aiShips.indexOf(s);
-  if (i >= 0) S.aiShips.splice(i, 1);
+  const i = world.ships.indexOf(s);
+  if (i >= 0) world.ships.splice(i, 1);
   if (S.shipTarget === s) S.shipTarget = null;
   checkDefenseCleared(s.defOf, s);
   showMsg(`You plunder the disabled ship. (+${loot.toLocaleString('en-US')} cr)`);

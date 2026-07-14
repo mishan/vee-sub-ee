@@ -127,7 +127,7 @@ export function spawnAI(atEdge) {
   // Arrivals warp in from off-screen at speed and decelerate; the already-present
   // ambient population is just there (no warp-in).
   if (atEdge) warpIntoSystem(e, 0, 0);
-  S.aiShips.push(e);
+  world.ships.push(e);
 }
 
 /* ---------------- player escorts (spec: "Escorts") ------------------- */
@@ -159,7 +159,7 @@ export function makeEscort(esc) {
   e.warpIn = 0;
   armShip(e, rec);
   preloadSprites([spinOfShip(esc.shipId)]);
-  S.aiShips.push(e);
+  world.ships.push(e);
   return e;
 }
 /* Re-materialise the player's whole fleet on system entry / takeoff. */
@@ -208,14 +208,14 @@ export function launchFighter(w) {
   e.warpIn = 0;
   armShip(e, rec);
   preloadSprites([spinOfShip(e.shipId)]);
-  S.aiShips.push(e);
+  world.ships.push(e);
   w.have--;
   return true;
 }
 /* Recall living fighters: each returns to a bay of its type, restoring ammo. */
 export function recallFighters() {
   let back = 0;
-  for (const s of [...S.aiShips]) {
+  for (const s of [...world.ships]) {
     if (!s.fighter || s.deathT >= 0) continue;
     const bay =
       player.weapons.find((w) => w.id === s.bayWeapId && w.have < w.n) ||
@@ -223,14 +223,14 @@ export function recallFighters() {
         (w) => w.rec.Guidance === 99 && w.rec.AmmoType === s.shipId && w.have < w.n,
       );
     if (bay) bay.have++; // docks; if no bay has room the fighter just leaves
-    S.aiShips.splice(S.aiShips.indexOf(s), 1);
+    world.ships.splice(world.ships.indexOf(s), 1);
     if (S.shipTarget === s) S.shipTarget = null;
     back++;
   }
   if (back) showMsg(`Recalled ${back} fighter${back > 1 ? 's' : ''}.`);
   else showMsg('No fighters deployed.');
 }
-export const fightersOut = () => S.aiShips.some((s) => s.fighter && s.deathT < 0);
+export const fightersOut = () => world.ships.some((s) => s.fighter && s.deathT < 0);
 
 /* ---- escort-for-hire economics (spec: "Escorts for hire") ----
  * The bible describes the hire dialog but not the price, so the fee and the
@@ -280,10 +280,10 @@ export function dismissEscort(id) {
   const i = escorts.findIndex((e) => e.id === id);
   if (i < 0) return;
   escorts.splice(i, 1);
-  const s = S.aiShips.find((x) => x.escId === id);
+  const s = world.ships.find((x) => x.escId === id);
   if (s) {
-    const j = S.aiShips.indexOf(s);
-    if (j >= 0) S.aiShips.splice(j, 1);
+    const j = world.ships.indexOf(s);
+    if (j >= 0) world.ships.splice(j, 1);
   }
   refreshView();
 }
@@ -300,10 +300,10 @@ export function chargeEscortUpkeep() {
     }
     const i = escorts.indexOf(e);
     if (i >= 0) escorts.splice(i, 1);
-    const s = S.aiShips.find((x) => x.escId === e.id);
+    const s = world.ships.find((x) => x.escId === e.id);
     if (s) {
-      const j = S.aiShips.indexOf(s);
-      if (j >= 0) S.aiShips.splice(j, 1);
+      const j = world.ships.indexOf(s);
+      if (j >= 0) world.ships.splice(j, 1);
     }
     quit++;
   }
@@ -335,7 +335,7 @@ export function maybeSpawnBountyHunter() {
   if (S.landedAt || S.gameOver || player.deathT >= 0) return;
   const g = systemGovt();
   if (!isCriminalWith(S.SYSTEM_ID)) return;
-  const present = S.aiShips.filter((s) => s.bounty).length;
+  const present = world.ships.filter((s) => s.bounty).length;
   // more evil → more hunters, capped; low per-frame chance
   const cap = Math.min(
     1 + Math.floor(-legalOf(S.SYSTEM_ID) / Math.max(govts[g].CrimeTol, 1) / 4),
@@ -375,6 +375,6 @@ export function maybeSpawnBountyHunter() {
     names && names.length ? names[Math.floor(Math.random() * names.length)] : 'Bounty Hunter';
   // A bounty hunter hyperspaces in after you, bearing down from off-screen.
   warpIntoSystem(e, player.x, player.y);
-  S.aiShips.push(e);
+  world.ships.push(e);
   showMsg('A bounty hunter has jumped in!');
 }
