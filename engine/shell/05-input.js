@@ -13,6 +13,7 @@ import {
   introGesture,
   introShown,
   introUp,
+  returnToMenu,
   splashShown,
   titleShown,
 } from './11-title.js';
@@ -183,19 +184,25 @@ addEventListener('keydown', (e) => {
     e.preventDefault();
     if (!S.landedAt) cycleShipTarget();
   }
-  if (e.key === 'Escape') {
-    if (hailOpen) closeHail();
-    else if (activeView) closeService();
-    else if (S.mapOpen) closeMap();
-    else if (S.jump && (S.jump.phase === 'brake' || S.jump.phase === 'engage')) abortJump();
-    else if (S.landedAt) takeOff();
-    else if (S.shipTarget) {
+  // Backtick clears the current target (ship first, then nav) — the job Escape
+  // used to do, freed up so Escape can back out to the menu.
+  if (e.key === '`' && !S.landedAt) {
+    if (S.shipTarget) {
       S.shipTarget = null;
       showMsg('Target cleared.');
     } else if (S.navTarget) {
       S.navTarget = null;
       showMsg('Navigation target cleared.');
     }
+  }
+  if (e.key === 'Escape') {
+    // Modal overlays are handled by the early returns above; here we're in
+    // flight/landed: close a service dialog, abort a spin-up, take off, or —
+    // from plain flight — back out to the title menu.
+    if (activeView) closeService();
+    else if (S.jump && (S.jump.phase === 'brake' || S.jump.phase === 'engage')) abortJump();
+    else if (S.landedAt) takeOff();
+    else returnToMenu();
   }
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
 });
