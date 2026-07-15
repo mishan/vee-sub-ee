@@ -37,6 +37,16 @@ export function setVolume(delta) {
   showMsg(`Volume ${Math.round(masterVol * 100)}%`);
   playSnd(150, 0.6); // audible reference beep at the new level
 }
+/* Comm beeps (snd names are just "Beep1..5"; roles confirmed by Misha):
+ *   COMM_SND  151 — comm / landing reply (the port or a hailed ship speaking)
+ *   ERROR_SND 153 — action refused (too far / too fast to land, etc.)
+ *   HAIL_SND  154 — hailing frequencies opening
+ * The spaceport landing radio uses the same COMM_SND as a ship's comm reply, so
+ * the two radios sound identical (spec: "Landing", "Audio"). */
+export const COMM_SND = 151;
+export const ERROR_SND = 153;
+export const HAIL_SND = 154;
+
 export const sndCache = new Map();
 export function sndEl(id) {
   let a = sndCache.get(id);

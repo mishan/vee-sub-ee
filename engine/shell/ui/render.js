@@ -6,6 +6,7 @@ import { world } from '../09-step.js'; // World owns the projectile/effect array
 import { updateTouchUI } from '../05-input.js';
 import { distTo } from '../06-interaction.js';
 import { cargoNames } from '../07-trade.js';
+import { landingDenied } from '../14-landing.js';
 
 /*
  * engine/shell/ui/render.js — the canvas HUD/scene renderer (was 10-render.js).
@@ -455,12 +456,9 @@ export function render() {
     drawSpin(ctx, spinOfSpob(p), x, y, 0);
     if (p === S.navTarget) {
       const ok = !p.$sem || p.$sem.canLand;
-      drawBrackets(
-        x,
-        y,
-        spriteHalf(spinOfSpob(p), 48),
-        ok ? 'rgba(120,230,140,.9)' : 'rgba(150,160,180,.7)',
-      );
+      // Landable planet target → blue reticle (spec: "Landing"); a non-landable
+      // stellar target stays muted grey.
+      drawBrackets(x, y, spriteHalf(spinOfSpob(p), 48), ok ? '#17b1fc' : 'rgba(150,160,180,.7)');
     }
   }
   for (const a of world.asteroids) {
@@ -581,8 +579,16 @@ export function render() {
       : boardable
         ? 'Press B to board'
         : near
-          ? speed > EV.LAND_SPEED
-            ? `Slow down to land on ${near.name}`
-            : `Press L to land on ${near.name}`
+          ? (() => {
+              // "dock at" a station, "land on" a planet (spöb station flag).
+              const st = near.$sem && near.$sem.station;
+              const verb = st ? 'dock' : 'land';
+              const prep = st ? 'at' : 'on';
+              return landingDenied(near)
+                ? `${near.name} denies you ${st ? 'docking' : 'landing'}`
+                : speed > EV.LAND_SPEED
+                  ? `Slow down to ${verb} ${prep} ${near.name}`
+                  : `Press L to ${verb} ${prep} ${near.name}`;
+            })()
           : '';
 }

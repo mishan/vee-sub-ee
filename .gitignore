@@ -4,6 +4,7 @@ EV_data/
 # Generated from EV_data by the pipeline; contain copyrighted content
 evdata.json
 evassets/
+beep-sounds/
 galaxy.html
 flight.html
 

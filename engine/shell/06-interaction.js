@@ -1,6 +1,6 @@
 import { wallet, S, dominated, dudes, persDone, ships, showMsg } from './01-state.js';
 import { weighted } from './02-spawning.js';
-import { playSnd } from './03-sound.js';
+import { HAIL_SND, playSnd } from './03-sound.js';
 import { armShip, commitCrime, creditKill, fuel, penaltyOf, player } from './04-combat.js';
 import {
   acceptMission,
@@ -110,7 +110,7 @@ export function openHail(kind, obj) {
   hailOpen = true;
   S.hailTarget = { kind, obj };
   hailDialog.open(); // renders hailBody and shows the panel + binds the delegation
-  playSnd(150, 0.5); // ding as the comm channel opens
+  playSnd(HAIL_SND, 0.5); // hailing frequencies open
 }
 export function closeHail() {
   clearTimeout(hailCloseTimer);
