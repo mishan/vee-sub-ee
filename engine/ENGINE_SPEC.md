@@ -224,13 +224,23 @@ warping and resumes 2× on arrival (the toggle state is preserved, not cleared).
 ## Map knowledge (fog of war)
 
 The player starts in **Levo (sÿst 128)** knowing only that system. Each
-arrival adds the system to the explored set. On the map, **only explored
-systems and their direct neighbours are shown at all** — deeper unknown systems
-aren't drawn (you see one jump into the fog, no further). Explored systems get
-their legal-status colour (see "Galaxy map") and full detail; a neighbour of an
-explored system is a dimmer, labelled dot you can select and jump to. Links
-render when either endpoint is explored. (Classic's `VisBit` conditional
-visibility: deferred.)
+arrival adds the system to the explored set. On the map, **explored systems,
+their direct neighbours, and active mission destinations are shown** — every
+other unknown system stays hidden (you see one jump into the fog, no further).
+Explored systems get their legal-status colour (see "Galaxy map"), full detail,
+and their **name label**. An unexplored system — a neighbour, or a mission
+destination out in the fog — is a dimmer dot with **no label and no name**
+(anywhere: the map and the info panel both read "Uncharted" until you visit);
+its name is revealed only on arrival. Links render when either endpoint is
+explored.
+
+**Mission destinations are always shown**, even deep in unexplored space, as a
+**disconnected, unlabeled guide node** (no links, no name) with the mission
+**marker** beside it, drawn at the system's true map position — so a new player
+knows which direction to head to find the objective. Selecting one reads
+"Uncharted · Mission destination". (This is the piece the fog would otherwise
+hide, and it matches the original.) (Classic's `VisBit` conditional visibility:
+deferred.)
 
 ## Galaxy map (shell; browser leg)
 
@@ -260,11 +270,13 @@ the govt-128 fallback), so they're blue/red like any inhabited system — **not*
 gray. The system you're **currently in** gets a filled green dot inside its
 ring; the **selected** system gets a green square targeting reticle; a routed /
 armed jump target gets a green ring. Active-mission destination systems get a
-red ✕. The right panel shows the
-selected system's name (titled "Destination System" when it's a reachable jump
-target, else "Selected System"), and — for an inhabited, explored system —
-Government, Legal Status, Goods Traded and Services; the bottom bar shows Ports,
-Navigation Hazards (asteroid-field density / sensor interference) and the
+red marker beside them — **shown even when the system is unexplored** (the
+fog-of-war guide node; see "Map knowledge"). The right panel shows the selected
+system's name (titled "Destination System" when it's a reachable jump target,
+else "Selected System") — or **"Uncharted"** with no name for an unexplored one
+(then "Mission destination" / "Unexplored") — and, for an inhabited, explored
+system, Government, Legal Status, Goods Traded and Services; the bottom bar shows
+Ports, Navigation Hazards (asteroid-field density / sensor interference) and the
 combat rating + (4-digit-year) date.
 
 **Routing.** Clicking a system adjacent to the current one starts a jump route
