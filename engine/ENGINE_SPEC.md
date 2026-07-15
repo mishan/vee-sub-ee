@@ -828,7 +828,20 @@ menu labels; the shell places transparent hotspots over them:
   reloads to the menu.
 - **Open Pilot** / **Enter Ship** — dismiss the title and resume the loaded
   pilot (docked at the saved spöb, or in flight if none). **They do nothing
-  without a loaded pilot** (New Pilot must create one first).
+  without a loaded pilot** (New Pilot must create one first) — *except* when the
+  menu was reached by backing out of a game in progress (see below), where
+  **Enter Ship** always resumes the running game.
+
+**Backing out to the menu (in flight).** `Esc` from plain flight (no dialog,
+jump, or landing open) returns to the **title menu** — but silently: unlike the
+boot path it does **not** start or arm the title theme, since the player is
+coming from inside a running game. The sim pauses as usual; **Enter Ship**
+resumes exactly where they left off (a `resumable` flag makes this work even for
+a brand-new pilot with no save slot yet). `Esc` still does its context jobs
+first — close a service dialog, abort a jump spin-up, or take off when landed —
+so it only reaches the menu from open flight. Clearing a target — the job `Esc`
+used to do — moves to the **backtick** (`` ` ``) key: it drops the ship target,
+or the nav target if no ship is targeted.
 - **Strict Play**: on death the pilot is deleted (no R-restore); the
   game-over hint says so.
 - **Set Prefs** — toggles sound.

@@ -86,9 +86,23 @@ export function showTitle() {
 export function enterGame() {
   if (!titleShown) return;
   titleShown = false;
+  resumable = false;
   hideTitleMenu();
   stopTitleMusic();
   render();
+}
+
+/* Back out of a game already in progress to the title menu (Esc from flight).
+ * Unlike the boot path this does NOT start or arm the title theme — the player
+ * is coming from inside the game, so the menu stays silent. `resumable` lets
+ * Enter Ship drop straight back into the running game, even for a brand-new
+ * pilot whose SAVED slot doesn't exist yet. */
+export let resumable = false;
+export function returnToMenu() {
+  if (introUp()) return; // already on a boot screen / menu
+  resumable = true;
+  titleShown = true;
+  showTitleMenu();
 }
 
 /* ---------------- new-pilot intro (spec: "New-pilot intro") ----------------
@@ -144,6 +158,9 @@ export function finishIntro() {
 // transition logic (mirrors the Take Off button living with 14-landing). A
 // loaded pilot enters the game; otherwise nudge toward New/Open Pilot.
 document.getElementById('hotEnter').onclick = () => {
-  if (SAVED) enterGame();
+  // Resume a game we backed out of (Esc → menu) even for a new pilot with no
+  // SAVED slot; otherwise the boot rule: a loaded pilot enters, else nudge to
+  // New/Open Pilot.
+  if (resumable || SAVED) enterGame();
   else needPilot();
 };
