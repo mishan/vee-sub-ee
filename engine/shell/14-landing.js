@@ -8,8 +8,9 @@
  * esbuild bundles the shell modules (entry: main.js). Normative: ENGINE_SPEC.md.
  */
 
-import { S, savePilot, showMsg } from './01-state.js';
+import { S, pilotBorn, savePilot, showMsg } from './01-state.js';
 import { enforcesHere, spawnEscorts } from './02-spawning.js';
+import { formatDate } from './missions-rules.js';
 import { COMM_SND, ERROR_SND, loopSnd, playSnd, stopAllLoops } from './03-sound.js';
 import { hasAutoRefueller, player, rebuildPlayerWeapons, refuelShip } from './04-combat.js';
 import { distTo, nearestLandable } from './06-interaction.js';
@@ -183,6 +184,7 @@ export function takeOff() {
   // gone; loadSystem respawns the ambient population and any mission ships.
   loadSystem(S.SYSTEM_ID);
   player.placeAtTakeoff(spob); // then place on the pad (loadSystem doesn't move you)
+  showMsg(`Taking off from ${spob.name} on ${formatDate(S.gameDay, pilotBorn)}.`);
   spawnEscorts(); // launch the fleet alongside the player
   tutorial('depart'); // new-pilot hint on first departure (self-guards to once)
 }

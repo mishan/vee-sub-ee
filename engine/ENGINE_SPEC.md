@@ -115,6 +115,9 @@ reads for a planet.
   land. Touchdown itself is silent (no beep — the planet's ambient loop takes
   over).
 
+On **takeoff**, the shell announces `Taking off from <spöb> on <date>` (the
+in-game calendar date, `formatDate`), mirroring the arrival banner.
+
 Each **port reply** (acknowledge / clear / deny / welcome) plays the comm-reply
 beep `COMM_SND` (151) — the same beep a hailed ship's reply uses, so the port
 radio sounds like a ship hail. A **local refusal** (too far, too fast) instead
