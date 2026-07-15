@@ -188,22 +188,38 @@ warping and resumes 2× on arrival (the toggle state is preserved, not cleared).
   1. Player selects a linked destination (map). Requires fuel ≥ 100 and
      **distance > 800 px from every spöb** (JUMP_MIN_DIST, approximation
      of classic's "too close to a stellar object" rule) — both to engage
-     and to enter hyperspace.
-  2. Engage: autopilot steers toward the destination system's map bearing
-     (`atan2(dx, −dy)` on galaxy-map coordinates) and forces thrust. The
-     hyperdrive warm-up starts now (Warp Up sound, 8.3 s).
-  3. The ship enters hyperspace only when (a) aligned within one
-     frame-step of turn at ≥ 95% maxSpeed, (b) **220 frames
-     (JUMP_WARMUP_FRAMES) have elapsed since engaging** — the drive has
-     to spin up; the autopilot cruises toward the destination meanwhile —
-     and (c) clear of stellars. Then the 30-frame outbound streak plays
-     (timed to land on the sound's final whoosh: 220 + 30 = 250 frames ≈
-     the 8.3 s Warp Up).
-  4. Arrival: player is placed 700 px from the system center on the
+     and to enter hyperspace. A **refused attempt** — no destination
+     selected, destination not within jump range, not enough fuel, or too
+     close to a spöb — plays the **error chime** (`ERROR_SND`) with the
+     specific reason, and no jump starts.
+  2. **Brake** (only if the ship is moving on engage): the autopilot points
+     retrograde and burns to a near-stop first — the original slows before
+     it engages the hyperdrive — silently (no Warp Up yet). From a
+     standstill this is skipped. Aborting here (Esc) cancels the jump.
+  3. **Engage**: the Warp Up sound (8.3 s) starts; the autopilot steers
+     toward the destination's map bearing (`atan2(dx, −dy)` on galaxy-map
+     coordinates) and, once pointed there, burns. The speed ceiling **ramps
+     from cruise (maxSpeed) up to `(1+JUMP_BOOST)×`** over the spin-up,
+     back-loaded (`p²`), so the ship charges slowly then accelerates hard —
+     it does **not** plateau at cruise the way it used to.
+  4. It enters hyperspace once (a) aligned within one turn-step and (b)
+     **JUMP_WARMUP_FRAMES (440 @ 60 Hz) have elapsed** since engaging. The
+     no-jump ring is **only checked at initiation**, not during the sequence:
+     once engaged, a jump proceeds to completion even if the ship drifts back
+     inside the ring (matching the original — no further delay). Then the
+     **JUMP_STREAK_FRAMES (60) final dash** plays at the peak speed ceiling and
+     cuts to arrival (440 + 60 = 500 ≈ the 8.3 s Warp Up). Star-streaks are
+     drawn from the ship's *actual* over-cruise speed, so they build through the
+     dash and are absent otherwise. Aborting engage (Esc) cuts the Warp Up sound
+     and **clamps the ship back to cruise speed** (the rising cap can leave it
+     over-cruise).
+  5. Arrival: player is placed 700 px from the system center on the
      bearing back toward the origin system, same heading, velocity =
      maxSpeed along the inbound bearing; fuel −= 100. (700 keeps arrival
-     within sight of the inner planets; was 1800, which felt stranded.)
-     Aborting the engage/warm-up (Esc) cuts the Warp Up sound.
+     within sight of the inner planets; was 1800, which felt stranded.) The
+     shell announces `Entering the <system> system on <date>` (the
+     just-advanced in-game calendar date, `formatDate`) — the arrival banner
+     the takeoff message mirrors.
 
 ## Map knowledge (fog of war)
 

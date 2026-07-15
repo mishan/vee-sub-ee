@@ -47,6 +47,10 @@ const JUMP_WARMUP_FRAMES = 440; // ~7.3s hyperdrive spin-up before the streak;
 // warmup + streak = 500 frames / 60 Hz = 8.3s, matching the Warp Up sound (these
 // are doubled from the old 30 Hz values so the cinematic keeps its real duration)
 const JUMP_MIN_DIST = 800; // no jumping this close to a spöb (approx.)
+// The hyperspace run accelerates the ship well past cruise: the speed ceiling
+// ramps from maxSpeed up to (1+JUMP_BOOST)× over the spin-up, so it charges
+// slowly then rockets away before the cut to arrival (spec: "Hyperjump").
+const JUMP_BOOST = 7;
 
 /* ---- combat (spec: "Combat") ---- */
 const HOMING_TURN = 3; // deg/frame (approximation, see spec)
@@ -73,13 +77,16 @@ class Ship {
     this.thrusting = false;
   }
 
-  thrust() {
+  /* Burn along the current heading. `cap` bounds the resulting speed — normally
+   * the ship's own maxSpeed, but the jump run passes a higher, rising cap so the
+   * ship accelerates past cruise to a high hyperspace speed (see stepJumpEngage). */
+  thrust(cap = this.maxSpeed) {
     this.vx += Math.sin(rad(this.heading)) * this.accel;
     this.vy -= Math.cos(rad(this.heading)) * this.accel;
     const v = Math.hypot(this.vx, this.vy);
-    if (v > this.maxSpeed) {
-      this.vx *= this.maxSpeed / v;
-      this.vy *= this.maxSpeed / v;
+    if (v > cap) {
+      this.vx *= cap / v;
+      this.vy *= cap / v;
     }
     this.thrusting = true;
   }
@@ -129,16 +136,29 @@ class Ship {
     this.vy = 0; // launch stationary, not adrift
   }
 
-  /* Autopilot one frame of jump engagement toward mapBearing (galaxy-map
-   * bearing to destination). Returns true once ready to enter hyperspace:
-   * aligned within one turn-step and at ≥95% max speed. */
-  stepJumpEngage(mapBearing) {
-    this.steerToward(mapBearing);
-    this.thrust();
+  /* Autopilot one frame of jump engagement toward mapBearing (galaxy-map bearing
+   * to destination). Steers onto the bearing and, once pointed there, burns —
+   * with `cap` the current speed ceiling (the shell ramps this up over the
+   * spin-up so the ship accelerates from a slow charge to a high hyperspace speed
+   * before the cut, rather than plateauing at cruise). Returns true once aligned
+   * within one turn-step. */
+  stepJumpEngage(mapBearing, cap = this.maxSpeed) {
+    const aligned = this.steerToward(mapBearing); // within 1.5 turn-steps → start the burn
+    if (aligned) this.thrust(cap);
     this.integrate();
     let diff = norm(mapBearing - this.heading);
     if (diff > 180) diff -= 360;
-    return Math.abs(diff) <= this.turn && Math.hypot(this.vx, this.vy) >= 0.95 * this.maxSpeed;
+    return Math.abs(diff) <= this.turn;
+  }
+
+  /* Autopilot one frame of pre-jump braking: point retrograde and burn to kill
+   * the ship's momentum (the original slows to a near-stop before it engages the
+   * hyperdrive). Returns true once effectively stopped. */
+  stepJumpBrake() {
+    const facing = this.steerToward(this.retrograde()); // line up against our velocity
+    if (facing) this.thrust();
+    this.integrate();
+    return Math.hypot(this.vx, this.vy) <= this.accel; // one burn from a standstill
   }
 
   /* Arrival placement in the destination system. inBearing = map bearing from
@@ -437,6 +457,7 @@ export {
   ARRIVE_DIST,
   JUMP_WARMUP_FRAMES,
   JUMP_MIN_DIST,
+  JUMP_BOOST,
   HOMING_TURN,
   shotSpeedOf,
   Asteroid,

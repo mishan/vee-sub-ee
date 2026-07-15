@@ -4,12 +4,14 @@ import {
   params,
   persGrudge,
   legal,
+  pilotBorn,
   ships,
   showMsg,
   spinOfShip,
   systs,
   wallet,
 } from './01-state.js';
+import { formatDate } from './missions-rules.js';
 import {
   chargeEscortUpkeep,
   fightersOut,
@@ -17,7 +19,7 @@ import {
   recallFighters,
   spawnEscorts,
 } from './02-spawning.js';
-import { attenuate, masterVol, playSnd, sndEl, stopSnd } from './03-sound.js';
+import { ERROR_SND, attenuate, masterVol, playSnd, sndEl, stopSnd } from './03-sound.js';
 import { checkExpiredMissions, govts, onMissionShipDisabled } from './08-missions.js';
 import { PF } from './15-pers.js';
 import { applyGovtDelta } from './13-legal.js';
@@ -438,21 +440,14 @@ export function clearArrivalOfSpobs() {
   }
 }
 export let warpSnd = null;
-export function beginJump() {
-  if (S.jump || S.landedAt) return;
-  if (S.jumpDest == null || !linkedSystems().includes(S.jumpDest)) return;
-  if (!fuel.canJump()) {
-    showMsg('Not enough fuel to jump.');
-    return;
-  }
-  const near = nearestSpobInfo();
-  if (near.spob && near.dist < EV.JUMP_MIN_DIST) {
-    showMsg(`You are too close to ${near.spob.name} to engage your hyperdrive.`);
-    return;
-  }
-  S.jump = { destId: S.jumpDest, phase: 'engage', t: 0 };
-  // Warp Up (8.3s spin-up) — kept as a handle so it can be cut on abort;
-  // routed through masterVol like every other sound, and adjustable live.
+// A refused jump attempt: the error chime + the reason (spec: "Hyperjump").
+function jumpDenied(msg) {
+  showMsg(msg);
+  playSnd(ERROR_SND, 0.5);
+}
+// Start the Warp Up (8.3s spin-up) sound. Kept as a handle so it can be cut on
+// abort; routed through masterVol like every other sound, adjustable live.
+export function startWarpSound() {
   if (S.soundOn && masterVol > 0) {
     warpSnd = sndEl(128).cloneNode();
     warpSnd._baseVol = 1;
@@ -460,10 +455,53 @@ export function beginJump() {
     warpSnd.play().catch(() => {});
   } else warpSnd = null;
 }
+// Confirm the ship is clear of the no-jump ring (spec: "Hyperjump"), refusing
+// with the error chime if not. Shared by beginJump and the post-brake re-check.
+function clearOfStellars() {
+  const near = nearestSpobInfo();
+  if (near.spob && near.dist < EV.JUMP_MIN_DIST) {
+    jumpDenied(`You are too close to ${near.spob.name} to engage your hyperdrive.`);
+    return false;
+  }
+  return true;
+}
+export function beginJump() {
+  if (S.jump || S.landedAt) return; // already jumping / docked — nothing to do
+  if (S.jumpDest == null) {
+    jumpDenied('No hyperspace destination selected.');
+    return;
+  }
+  if (!linkedSystems().includes(S.jumpDest)) {
+    jumpDenied('That system is not within hyperspace range.');
+    return;
+  }
+  if (!fuel.canJump()) {
+    jumpDenied('Not enough fuel to jump.');
+    return;
+  }
+  if (!clearOfStellars()) return;
+  // If the ship is under way, brake to a stop first (silently), then spin up the
+  // hyperdrive; from a standstill the spin-up starts immediately.
+  if (Math.hypot(player.vx, player.vy) > player.accel) {
+    S.jump = { destId: S.jumpDest, phase: 'brake', t: 0 };
+  } else {
+    player.vx = player.vy = 0;
+    S.jump = { destId: S.jumpDest, phase: 'engage', t: 0 };
+    startWarpSound();
+  }
+}
 export function abortJump() {
   S.jump = null;
   stopSnd(warpSnd);
   warpSnd = null;
+  // The engage phase uses a rising speed cap, so an aborted jump can leave the
+  // ship above maxSpeed; clamp back to cruise so normal flight (and the render's
+  // "no streaks below/at cruise" rule) hold.
+  const v = Math.hypot(player.vx, player.vy);
+  if (v > player.maxSpeed) {
+    player.vx *= player.maxSpeed / v;
+    player.vy *= player.maxSpeed / v;
+  }
 }
 export function completeJump() {
   const from = S.SYSTEM_ID;
@@ -485,4 +523,5 @@ export function completeJump() {
   chargeEscortUpkeep(); // pay the fleet's salaries; the unpaid quit here
   warpSnd = null; // Warp Up ends naturally as the streak completes
   playSnd(130); // Warp Out
+  showMsg(`Entering the ${S.syst.name} system on ${formatDate(S.gameDay, pilotBorn)}.`);
 }
