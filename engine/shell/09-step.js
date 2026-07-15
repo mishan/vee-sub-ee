@@ -31,6 +31,7 @@ import {
 } from './04-combat.js';
 import { keys, touchCtl } from './05-input.js';
 import { hailOpen, onShipDestroyed } from './06-interaction.js';
+import { pollLandingClearance } from './14-landing.js';
 import { aiFor } from './ai-strategies.js';
 import { maybeSpawnMissionShips, misnName, misns, spobById } from './08-missions.js';
 import { maybeSpawnPers } from './15-pers.js';
@@ -178,6 +179,9 @@ export class World {
         nearDist >= EV.JUMP_MIN_DIST;
       if (jumpReady && !S.jumpReady) playSnd(150, 0.5); // ding on entering jump range
       S.jumpReady = jumpReady;
+      // Landing radio: clear the pilot to land once they reach the pad with a
+      // request open (the "got close since initiating" case). (spec: "Landing")
+      pollLandingClearance();
       // New-pilot tutorial: once you've drifted far enough that the nearest planet
       // has left the radar (~2600 px, its half-range) — the point the nav arrow
       // shows — nudge toward the map/jump. Self-guards to fire once.
@@ -419,6 +423,7 @@ export function loadSystem(systId) {
   S.asteroidsPending = true;
   S.navTarget = null;
   S.shipTarget = null;
+  S.landing = null; // no landing request carries across a system change
   S.alertGrace = 45;
   S.prevHostiles = 0; // don't red-alert the ambient population
   preloadSprites(spinsNeededFor(S.SYSTEM_ID));

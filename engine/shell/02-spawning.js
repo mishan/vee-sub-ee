@@ -324,7 +324,7 @@ export function systemGovt() {
 // Does govt `g` police the CURRENT system for your crimes here? True when you're
 // a criminal in this system and g is its government, an ally of it, or a govt
 // that enforces its laws everywhere (flag 0x0002).
-function enforcesHere(g) {
+export function enforcesHere(g) {
   if (g < 128 || !isCriminalWith(S.SYSTEM_ID)) return false;
   const sg = systemGovt();
   if (g === sg || govtAllies(sg).includes(g) || govtAllies(g).includes(sg)) return true;

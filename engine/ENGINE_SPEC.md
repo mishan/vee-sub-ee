@@ -88,6 +88,61 @@ On takeoff the player is placed at
 `(spob.x, spob.y − 40)`, heading 0, **velocity 0** (launch stationary,
 not drifting). Landing repairs the ship (shields/armor to full).
 
+**Landing sequence (shell).** Pressing **L** talks to the spaceport. It runs as
+a two-step request → clearance → touchdown, tracked by `S.landing = { spob,
+cleared }` (null when no request is active). A **space station** uses "dock"
+wording, a **planet** uses "land" (the spöb `station` flag); everything below
+reads for a planet.
+
+- **Initiating** (first L for a planet — it isn't yet the active landing
+  target): select it as the nav target and open the channel. If the port
+  **denies** you (see below) it says so and no request is started. Otherwise a
+  request begins: if you're already within the landing radius the port clears
+  you (`cleared: true`); if you're farther out it acknowledges and puts you on
+  approach (`cleared: false`). The initiating press never touches down — it only
+  opens the conversation.
+- **On approach** (a request is active, not yet cleared): the moment you cross
+  into the landing radius the port clears you automatically — announced once —
+  setting `cleared: true`. This is the "has gotten close since initiating" case,
+  driven by a per-frame poll in `stepPlayer`.
+- **Touchdown** (L again once a request is active): if still denied, it's
+  refused; if still too far or moving faster than the landing speed cap, the
+  request is still open but the action is refused with the **error beep** — this
+  is the "engaged but not yet able to land" case. Touchdown **never skips
+  clearance**: if you're in range and slow but the request hasn't been cleared
+  yet (you pressed L the same frame you crossed into range, before the poll ran),
+  the port clears you now and you touch down on the next press. Otherwise you
+  land. Touchdown itself is silent (no beep — the planet's ambient loop takes
+  over).
+
+On **takeoff**, the shell announces `Taking off from <spöb> on <date>` (the
+in-game calendar date, `formatDate`), mirroring the arrival banner.
+
+Each **port reply** (acknowledge / clear / deny / welcome) plays the comm-reply
+beep `COMM_SND` (151) — the same beep a hailed ship's reply uses, so the port
+radio sounds like a ship hail. A **local refusal** (too far, too fast) instead
+plays the error beep `ERROR_SND` (153). (Opening a *hail* plays the distinct
+hailing-frequencies beep `HAIL_SND` 154.)
+
+**Denial by legal status.** A **governed** port (`spob.Govt ≥ 128`) refuses
+landing when its government is actively policing you here — i.e. you are a
+criminal in the current system (`isCriminalWith`) **and** that govt enforces
+here (the system's own govt, an ally, or a "laws everywhere" govt, flag
+`0x0002`) — reusing the same `enforcesHere` test that makes its warships hostile
+on sight. Ungoverned ports (`Govt < 128`) take anyone. The request is not
+started, so you can't touch down until your standing recovers or you leave.
+
+**Comm strings.** The clearance / denial wording is Ambrosia's,
+baked into the EV **application** (a CODE resource, not a STR# list). The build
+lifts it from the user's own app copy into `DATA.portComm` (`evexport`'s
+`extractPortComm`, best-effort, keyed by dock/land) — the same way all other
+copyrighted game text flows into the gitignored `evdata.json` / `flight.html`.
+The clean-room shell (`14-landing.js`) ships only neutral fallbacks, used when
+the app isn't supplied (e.g. the browser loader). The "begin your approach" line
+is always the shell's own — the original has no equivalent (it clears you and
+autopilots in). The **nav-target reticle** for a landable planet is drawn in
+`#17b1fc` (blue); a non-landable stellar target stays muted grey.
+
 **Refuelling is paid, and only automatic with the Auto-Refueller outfit.** Fuel
 at a spaceport costs `FUEL_UNIT_PRICE` (2 cr) per unit topped off — cheaper than
 the passing-ship `FUEL_PRICE`. Landing tops the tank off automatically **only if
@@ -528,11 +583,15 @@ ship destruction → **302** "ShipBreaksUp" when disintegration starts,
 sound** — classic flight is silent, and snd 223 "Engine", despite the
 name, is a weapon sound (the Forklift's, weap 191 Sound 23 → 200+23; the
 name describes the sound, not its role). Target-select beep **150**
-(cycling a target, and picking a planet to land on). **390** "Airlock" is
+(cycling a target, and picking a planet to land on). The comm beeps (snd names
+are just "Beep1..5"; roles confirmed by Misha): **151** `COMM_SND` = a comm/
+landing reply (a hailed ship's answer, and the spaceport's clearance/denial/
+welcome — so the two radios match, see "Landing"); **153** `ERROR_SND` = an
+action refused (too far / too fast to land); **154** `HAIL_SND` = hailing
+frequencies opening (`openHail`). **390** "Airlock" is
 the **boarding** sound (boarding/plundering a disabled ship — NOT
 landing, despite what its length suggested; Misha confirmed). Landing
-touchdown currently has no dedicated sound — none in the bank is clearly
-it. **710** "Voice Targ" is a 1.36 s fighter-command voice line, reserved
+touchdown itself has no dedicated sound. **710** "Voice Targ" is a 1.36 s fighter-command voice line, reserved
 for the (unimplemented) fighter-bay mechanic — not a UI blip. Hail dialog
 buttons beep with **153**. Red Alert **370** when the count of ships
 hostile to the player rises (grudge / bounty hunter / defense fleet),

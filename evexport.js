@@ -76,6 +76,62 @@ function exportAll(file, schemaDir, pluginFiles = []) {
   return { out, warnings };
 }
 
+/* The spaceport's own landing/docking comm lines (clearance and denial) are
+ * Ambrosia's wording, baked into the EV application — not a STR# list, so
+ * evexport's normal string path never sees them. Lift them
+ * from the user's own app copy at build time into `DATA.portComm`, exactly as the
+ * game's other copyrighted strings flow into DATA (evdata.json / flight.html are
+ * gitignored build artifacts). The clean-room shell ships only neutral fallbacks;
+ * this just upgrades the wording to the original when the app is supplied.
+ *
+ * Best-effort: the strings live in a CODE resource whose layout is
+ * version-specific, so each phrase is located by a short functional anchor and
+ * accepted only if it reads back as one clean, short printable run (up to the
+ * next NUL/control byte). Anything not found — or garbled — is simply omitted and
+ * the shell's fallback stands. */
+function extractPortComm(appPath) {
+  const { loadFork, macRomanToString } = require('./evrsrc.js');
+  let fork;
+  try {
+    fork = loadFork(appPath).fork;
+  } catch {
+    return null;
+  }
+  const isClean = (s) => /^[\x20-\x7e‘’“”–—]+$/.test(s);
+  const runFrom = (at) => {
+    let j = at;
+    while (j < fork.length && fork[j] >= 0x20) j++; // stop at NUL / control byte
+    return macRomanToString(fork.subarray(at, j));
+  };
+  // First clean, short run that begins with `anchor`. The phrases aren't uniformly
+  // terminated in the CODE segment — some are NUL-bounded, others run straight
+  // into the next string — so `sentence` mode clips a single-sentence phrase at
+  // its first period. `max` guards against look-alikes (e.g. the long "Welcome to
+  // Escape Velocity…" tutorial line vs the short greeting).
+  const grab = (anchor, { max = 40, sentence = false } = {}) => {
+    const b = Buffer.from(anchor, 'latin1');
+    for (let i = fork.indexOf(b); i >= 0; i = fork.indexOf(b, i + 1)) {
+      let s = runFrom(i).trim();
+      if (sentence) {
+        const m = s.match(/^.*?\./); // up to the first period
+        if (m) s = m[0];
+      }
+      if (s && s.length <= max && isClean(s)) return s;
+    }
+    return null;
+  };
+  const pc = {};
+  const set = (k, anchor, opts) => {
+    const s = grab(anchor, opts);
+    if (s) pc[k] = s;
+  };
+  set('landDenied', 'Landing request denied.', { sentence: true });
+  set('dockDenied', 'Docking request denied.', { sentence: true });
+  set('landCleared', 'You are cleared to land.', { sentence: true });
+  set('dockCleared', 'You are cleared to dock.', { sentence: true });
+  return Object.keys(pc).length ? pc : null;
+}
+
 function main() {
   const args = process.argv.slice(2);
   const opt = (flag) => {
@@ -119,6 +175,16 @@ function main() {
       `merged ${pluginFiles.length} plugin(s): ${pluginFiles.map((f) => path.basename(f)).join(', ')}`,
     );
   if (semantic) require('./semantics.js').decorate(out);
+  // Spaceport comm strings from the EV application (best-effort; see
+  // extractPortComm). Lands in DATA for both -o and --flight.
+  if (appPath) {
+    try {
+      const pc = extractPortComm(appPath);
+      if (pc) out.portComm = pc;
+    } catch (e) {
+      console.error('⚠ port comm strings: ' + e.message);
+    }
+  }
   for (const w of warnings) console.error('⚠ ' + w);
   const counts = Object.entries(out.types)
     .map(([k, v]) => `${k}:${Object.keys(v).length}`)
