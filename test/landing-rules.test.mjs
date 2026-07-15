@@ -36,8 +36,27 @@ test('decideLanding: active request, in range but too fast → tooFast', () => {
   assert.equal(r.action, 'tooFast');
 });
 
-test('decideLanding: active request, in range and slow → land', () => {
-  const r = decideLanding({ active: true, denied: false, inRange: true, tooFast: false });
+test('decideLanding: active request, in range and slow but not yet cleared → clear', () => {
+  // Touchdown never skips clearance: pressing L the same frame you cross into
+  // range (before the clearance poll runs) announces clearance, not a landing.
+  const r = decideLanding({
+    active: true,
+    denied: false,
+    inRange: true,
+    tooFast: false,
+    cleared: false,
+  });
+  assert.equal(r.action, 'clear');
+});
+
+test('decideLanding: active request, in range, slow, and cleared → land', () => {
+  const r = decideLanding({
+    active: true,
+    denied: false,
+    inRange: true,
+    tooFast: false,
+    cleared: true,
+  });
   assert.equal(r.action, 'land');
 });
 

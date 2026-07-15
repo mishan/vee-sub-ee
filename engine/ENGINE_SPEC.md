@@ -108,8 +108,12 @@ reads for a planet.
 - **Touchdown** (L again once a request is active): if still denied, it's
   refused; if still too far or moving faster than the landing speed cap, the
   request is still open but the action is refused with the **error beep** — this
-  is the "engaged but not yet able to land" case; otherwise you land. Touchdown
-  itself is silent (no beep — the planet's ambient loop takes over).
+  is the "engaged but not yet able to land" case. Touchdown **never skips
+  clearance**: if you're in range and slow but the request hasn't been cleared
+  yet (you pressed L the same frame you crossed into range, before the poll ran),
+  the port clears you now and you touch down on the next press. Otherwise you
+  land. Touchdown itself is silent (no beep — the planet's ambient loop takes
+  over).
 
 Each **port reply** (acknowledge / clear / deny / welcome) plays the comm-reply
 beep `COMM_SND` (151) — the same beep a hailed ship's reply uses, so the port

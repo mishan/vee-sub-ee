@@ -99,9 +99,10 @@ export function pollLandingClearance() {
   }
 }
 
-/* L: request landing on the nearest landable planet, then — once the request is
- * active and you're cleared, in range and slow — touch down. The port explains
- * every refusal, like the original. */
+/* L: request landing on the current nav target when it's landable, otherwise the
+ * nearest landable planet; then — once the request is active and you're cleared,
+ * in range and slow — touch down. The port explains every refusal, like the
+ * original. */
 export function tryLand() {
   if (S.landedAt || S.jump) return;
   const p =
@@ -114,11 +115,13 @@ export function tryLand() {
   }
   S.navTarget = p;
 
+  const active = !!S.landing && S.landing.spob === p;
   const { action, cleared } = decideLanding({
-    active: !!S.landing && S.landing.spob === p,
+    active,
     denied: landingDenied(p),
     inRange: distTo(p) < EV.LAND_DIST,
     tooFast: Math.hypot(player.vx, player.vy) > EV.LAND_SPEED,
+    cleared: active && S.landing.cleared,
   });
   switch (action) {
     case 'deny':
@@ -137,6 +140,12 @@ export function tryLand() {
       return;
     case 'tooFast':
       portError(`You are moving too fast to ${landVerb(p)}.`);
+      return;
+    case 'clear':
+      // Reached the pad and slowed, but the clearance poll hasn't announced yet
+      // (same-frame press): clear now, so touchdown always follows clearance.
+      S.landing.cleared = true;
+      portSay(clearedText(p));
       return;
     case 'land':
       doLand(p);

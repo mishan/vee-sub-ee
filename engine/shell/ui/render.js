@@ -456,8 +456,8 @@ export function render() {
     drawSpin(ctx, spinOfSpob(p), x, y, 0);
     if (p === S.navTarget) {
       const ok = !p.$sem || p.$sem.canLand;
-      // Landable planet target → blue reticle (spec: "Landing"); a non-landable
-      // stellar target stays muted grey.
+      // Landable port target (planet or station) → blue reticle (spec: "Landing");
+      // a non-landable stellar target stays muted grey.
       drawBrackets(x, y, spriteHalf(spinOfSpob(p), 48), ok ? '#17b1fc' : 'rgba(150,160,180,.7)');
     }
   }

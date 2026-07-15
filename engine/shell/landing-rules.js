@@ -18,6 +18,7 @@
  * `denied`  — the port refuses (governed port policing a criminal here).
  * `inRange` — within the landing radius (LAND_DIST).
  * `tooFast` — moving faster than the landing speed cap (LAND_SPEED).
+ * `cleared` — the open request has already been cleared for touchdown.
  *
  * Returns { action, cleared? }:
  *   'deny'     — refused; no request is opened/kept.
@@ -26,13 +27,18 @@
  *                on approach. The opening press never touches down.
  *   'tooFar'   — request already open, still outside the radius.
  *   'tooFast'  — request open and in range, but moving too fast to set down.
+ *   'clear'    — in range and slow, but not yet cleared: announce clearance
+ *                rather than landing. Keeps request → clearance → touchdown in
+ *                order even if the player presses L the same frame they cross
+ *                into range, before the per-frame clearance poll has run.
  *   'land'     — cleared, in range, slow: touch down.
  */
-export function decideLanding({ active, denied, inRange, tooFast }) {
+export function decideLanding({ active, denied, inRange, tooFast, cleared }) {
   if (denied) return { action: 'deny' };
   if (!active) return { action: 'request', cleared: !!inRange };
   if (!inRange) return { action: 'tooFar' };
   if (tooFast) return { action: 'tooFast' };
+  if (!cleared) return { action: 'clear' };
   return { action: 'land' };
 }
 
