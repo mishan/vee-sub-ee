@@ -216,7 +216,10 @@ warping and resumes 2× on arrival (the toggle state is preserved, not cleared).
   5. Arrival: player is placed 700 px from the system center on the
      bearing back toward the origin system, same heading, velocity =
      maxSpeed along the inbound bearing; fuel −= 100. (700 keeps arrival
-     within sight of the inner planets; was 1800, which felt stranded.)
+     within sight of the inner planets; was 1800, which felt stranded.) The
+     shell announces `Entering the <system> system on <date>` (the
+     just-advanced in-game calendar date, `formatDate`) — the arrival banner
+     the takeoff message mirrors.
 
 ## Map knowledge (fog of war)
 

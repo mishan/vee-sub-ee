@@ -4,12 +4,14 @@ import {
   params,
   persGrudge,
   legal,
+  pilotBorn,
   ships,
   showMsg,
   spinOfShip,
   systs,
   wallet,
 } from './01-state.js';
+import { formatDate } from './missions-rules.js';
 import {
   chargeEscortUpkeep,
   fightersOut,
@@ -521,4 +523,5 @@ export function completeJump() {
   chargeEscortUpkeep(); // pay the fleet's salaries; the unpaid quit here
   warpSnd = null; // Warp Up ends naturally as the streak completes
   playSnd(130); // Warp Out
+  showMsg(`Entering the ${S.syst.name} system on ${formatDate(S.gameDay, pilotBorn)}.`);
 }
