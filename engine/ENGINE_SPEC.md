@@ -566,6 +566,14 @@ other and never make an AI take one of them as a foe.
 matching weapon). Space fires all primary weapons; Q cycles secondary
 (MiscFlags 0x0002) weapons, X fires the selected one.
 
+**Multiple copies fire faster, not in a volley.** Owning `n` of the same
+weapon does **not** fire `n` shots at once — like the original, the copies
+stagger round-robin, so each trigger fires **one** shot and the reload is
+`round(Reload / n)` (min 1 frame). `n` guns therefore fire at `n×` the rate
+(shorter spacing between rounds), and the fire **sound** plays once per shot, so
+it too speeds up with the count. Ammo-weapon copies draw one round per (faster)
+shot, so the ammo burn rate is unchanged.
+
 ## Asteroids
 
 Systems with a nonzero **`Asteroids`** field carry a drifting field of rocks. The
@@ -603,7 +611,8 @@ or break them; they are permanent cover for the life of the system visit.
 
 Sound IDs follow the classic files (names baked into the resources):
 weapon fire = snd **200 + wëap.Sound** (bible; −1 = silent), played once
-per weapon volley (not per barrel). Hyperspace: **128** "Warp Up" as the
+per shot — so with several copies of a weapon (which fire faster, see "Player
+loadout") the sound repeats at that faster rate. Hyperspace: **128** "Warp Up" as the
 streak begins, **130** "Warp Out" on arrival. Explosions: shot impact →
 **301** (MedExplosion), or **300** (HeavyExplosion) when ExplodType ≥ 1;
 ship destruction → **302** "ShipBreaksUp" when disintegration starts,

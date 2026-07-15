@@ -191,30 +191,28 @@ export function fire(e, target, primary) {
       if (w.rec.Sound >= 0) playSnd(200 + w.rec.Sound, attenuate(e.x, e.y));
       continue;
     }
-    let fired = false;
-    for (let i = 0; i < w.n; i++) {
-      if (pk) {
-        if ((e.pools[pk] || 0) < 1) break;
-        e.pools[pk]--;
-      }
-      let aim = e.heading;
-      if ((g === 1 || g === 2 || g === 4) && target)
-        aim = leadAim(e, target, EV.shotSpeedOf(w.rec));
-      if (g === 7 || g === 8) {
-        const base = g === 7 ? e.heading : EV.norm(e.heading + 180);
-        aim = target ? clampArc(leadAim(e, target, EV.shotSpeedOf(w.rec)), base, 45) : base;
-      }
-      aim = EV.norm(aim + (Math.random() * 2 - 1) * w.rec.Inaccuracy);
-      const shot = new EV.Projectile(w.rec, e, aim);
-      shot.owner = e;
-      shot.homing = g === 1 || g === 2 ? target : null;
-      world.shots.push(shot);
-      fired = true;
+    // Owning several copies of a gun fires FASTER, not in a simultaneous volley:
+    // classic EV staggers the copies round-robin, so N of them fire one shot each
+    // at N× the rate. We model that by firing a single shot and dividing the
+    // reload by the number owned — so the spacing between rounds (and the fire
+    // sound, played once per shot below) scales with the count.
+    if (pk) {
+      if ((e.pools[pk] || 0) < 1) continue; // out of ammo → nothing fires
+      e.pools[pk]--;
     }
-    if (fired) {
-      w.cool = w.rec.Reload;
-      if (w.rec.Sound >= 0) playSnd(200 + w.rec.Sound, attenuate(e.x, e.y));
+    let aim = e.heading;
+    if ((g === 1 || g === 2 || g === 4) && target) aim = leadAim(e, target, EV.shotSpeedOf(w.rec));
+    if (g === 7 || g === 8) {
+      const base = g === 7 ? e.heading : EV.norm(e.heading + 180);
+      aim = target ? clampArc(leadAim(e, target, EV.shotSpeedOf(w.rec)), base, 45) : base;
     }
+    aim = EV.norm(aim + (Math.random() * 2 - 1) * w.rec.Inaccuracy);
+    const shot = new EV.Projectile(w.rec, e, aim);
+    shot.owner = e;
+    shot.homing = g === 1 || g === 2 ? target : null;
+    world.shots.push(shot);
+    w.cool = Math.max(1, Math.round(w.rec.Reload / w.n)); // N copies → N× fire rate
+    if (w.rec.Sound >= 0) playSnd(200 + w.rec.Sound, attenuate(e.x, e.y));
   }
 }
 
