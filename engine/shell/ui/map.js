@@ -10,6 +10,7 @@ import { html } from './html.js';
 import { linkedSystems } from '../04-combat.js';
 import { govts } from '../08-missions.js';
 import { combatRating, govtOf, isCriminalWith, legalOf, legalStatus } from '../13-legal.js';
+import { computeVisibleSystems } from '../map-rules.js';
 
 const COMMODITY_NAMES = ['Food', 'Industrial', 'Medical', 'Luxury Goods', 'Metal', 'Equipment'];
 const COMMODITY_KEYS = ['food', 'industrial', 'medical', 'luxury', 'metal', 'equipment'];
@@ -142,18 +143,12 @@ function drawNebulae(g) {
   }
   g.restore();
 }
-// Systems on the map: explored ones plus their direct neighbours (the only ones
-// rendered — and thus the only ones you can click). Route contiguity is still
-// enforced in selectAt().
+// Systems on the map: explored ones, their direct neighbours, and every active
+// mission destination (always — even deep in the fog, as a disconnected guide
+// node; see map-rules.js). These are the only systems rendered, and thus the
+// only ones you can click; route contiguity is still enforced in selectAt().
 function visibleSystems() {
-  const vis = new Set();
-  for (const [id, s] of Object.entries(systs)) {
-    if (!explored.has(+id)) continue;
-    vis.add(+id);
-    for (let i = 1; i <= 16; i++)
-      if (s['Con' + i] >= 128 && systs[s['Con' + i]]) vis.add(s['Con' + i]);
-  }
-  return vis;
+  return computeVisibleSystems(systs, explored, missionDestSystems());
 }
 /* Centre on the player's system at a comfortable zoom that shows the neighbours. */
 function resetView() {
@@ -189,10 +184,10 @@ export function draw() {
 
   const route = S.route || [];
   const routeSet = new Set(route);
-  const linked = linkedSystems();
 
-  // Only explored systems and their direct neighbours are on the map at all;
-  // deeper unknown systems aren't shown (fog of war).
+  // Explored systems + their neighbours + active mission destinations are on the
+  // map; everything deeper stays hidden (fog of war). Mission destinations show
+  // even in the fog, as disconnected unlabeled guide nodes.
   const visible = visibleSystems();
 
   // links (fog: only where an endpoint is explored)
@@ -243,9 +238,14 @@ export function draw() {
     }
     if (routeSet.has(id) || id === S.jumpDest) ring(g, x, y, 7, '#4fd06a');
     if (id === sel) reticle(g, x, y, 9, '#4fd06a'); // selection: green targeting reticle
-    if (missionDest.has(id) && known) missionMark(g, x, y);
-    if (known || linked.includes(id)) {
-      g.fillStyle = known ? '#cfd6e4' : '#7a869c';
+    // Mission destinations get a marker even when unexplored — that's the whole
+    // point of the disconnected guide node (a deep-fog dest has no links/label,
+    // just this arrow, so the player knows which way to head).
+    if (missionDest.has(id)) missionMark(g, x, y);
+    // Labels only for systems you've actually visited — an unexplored system
+    // (neighbour or fog-of-war guide node) stays anonymous until you get there.
+    if (known) {
+      g.fillStyle = '#cfd6e4';
       g.font = '13px system-ui, sans-serif';
       g.fillText(s.name ?? id, x + 9, y + 4);
     }
@@ -354,10 +354,16 @@ function renderPanels() {
       <div class="mlabel">${label}</div>
       <div class="mval" style="${color ? `color:${color}` : ''}">${val}</div>
     </div>`;
-  const title = row(isDest ? 'Destination System' : 'Selected System', s.name ?? id);
+  // An unexplored system reveals no name (spec: "Map knowledge") — it reads as
+  // "Uncharted" until you've been there.
+  const title = row(
+    isDest ? 'Destination System' : 'Selected System',
+    known ? (s.name ?? id) : 'Uncharted',
+  );
   if (!known) {
+    const note = missionDestSystems().has(id) ? 'Mission destination' : 'Unexplored';
     infoEl.innerHTML = html`${title}
-      <div class="mrow"><div class="mval">Unexplored</div></div>`;
+      <div class="mrow"><div class="mval">${note}</div></div>`;
   } else if (!ports.length) {
     // no ports → uninhabited; no government/legal/trade to show
     infoEl.innerHTML = html`${title}
