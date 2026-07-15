@@ -447,7 +447,11 @@ export function render() {
   ctx.clearRect(0, 0, w, h);
   ctx.imageSmoothingEnabled = false;
 
-  const streak = S.jump && S.jump.phase === 'streak' ? S.jump.t : 0;
+  // Star-streaks scale with how far the ship is over cruise speed, so they build
+  // up naturally as the hyperspace run accelerates and vanish otherwise
+  // (spec: "Hyperjump"). No streaks during normal flight — speed can't exceed max.
+  const jspeed = Math.hypot(player.vx, player.vy);
+  const streak = S.jump && jspeed > player.maxSpeed ? Math.min(jspeed / player.maxSpeed, 8) : 0;
   drawStars(player.x, player.y, w, h, streak);
   const toScreen = (x, y) => [x - player.x + w / 2, y - player.y + h / 2];
 
@@ -571,24 +575,25 @@ export function render() {
     distTo(S.navTarget) >= EV.LAND_DIST
       ? null
       : S.navTarget;
-  document.getElementById('prompt').textContent =
-    S.jump && S.jump.phase === 'engage'
-      ? S.jump.t < EV.JUMP_WARMUP_FRAMES
+  document.getElementById('prompt').textContent = S.jump
+    ? S.jump.phase === 'brake'
+      ? 'Slowing to jump — Esc to abort'
+      : S.jump.phase === 'engage'
         ? 'Hyperdrive spinning up — Esc to abort'
         : 'Entering hyperspace…'
-      : boardable
-        ? 'Press B to board'
-        : near
-          ? (() => {
-              // "dock at" a station, "land on" a planet (spöb station flag).
-              const st = near.$sem && near.$sem.station;
-              const verb = st ? 'dock' : 'land';
-              const prep = st ? 'at' : 'on';
-              return landingDenied(near)
-                ? `${near.name} denies you ${st ? 'docking' : 'landing'}`
-                : speed > EV.LAND_SPEED
-                  ? `Slow down to ${verb} ${prep} ${near.name}`
-                  : `Press L to ${verb} ${prep} ${near.name}`;
-            })()
-          : '';
+    : boardable
+      ? 'Press B to board'
+      : near
+        ? (() => {
+            // "dock at" a station, "land on" a planet (spöb station flag).
+            const st = near.$sem && near.$sem.station;
+            const verb = st ? 'dock' : 'land';
+            const prep = st ? 'at' : 'on';
+            return landingDenied(near)
+              ? `${near.name} denies you ${st ? 'docking' : 'landing'}`
+              : speed > EV.LAND_SPEED
+                ? `Slow down to ${verb} ${prep} ${near.name}`
+                : `Press L to ${verb} ${prep} ${near.name}`;
+          })()
+        : '';
 }

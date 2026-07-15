@@ -17,7 +17,7 @@ import {
   recallFighters,
   spawnEscorts,
 } from './02-spawning.js';
-import { attenuate, masterVol, playSnd, sndEl, stopSnd } from './03-sound.js';
+import { ERROR_SND, attenuate, masterVol, playSnd, sndEl, stopSnd } from './03-sound.js';
 import { checkExpiredMissions, govts, onMissionShipDisabled } from './08-missions.js';
 import { PF } from './15-pers.js';
 import { applyGovtDelta } from './13-legal.js';
@@ -438,27 +438,45 @@ export function clearArrivalOfSpobs() {
   }
 }
 export let warpSnd = null;
-export function beginJump() {
-  if (S.jump || S.landedAt) return;
-  if (S.jumpDest == null || !linkedSystems().includes(S.jumpDest)) return;
-  if (!fuel.canJump()) {
-    showMsg('Not enough fuel to jump.');
-    return;
-  }
-  const near = nearestSpobInfo();
-  if (near.spob && near.dist < EV.JUMP_MIN_DIST) {
-    showMsg(`You are too close to ${near.spob.name} to engage your hyperdrive.`);
-    return;
-  }
-  S.jump = { destId: S.jumpDest, phase: 'engage', t: 0 };
-  // Warp Up (8.3s spin-up) — kept as a handle so it can be cut on abort;
-  // routed through masterVol like every other sound, and adjustable live.
+// A refused jump attempt: the error chime + the reason (spec: "Hyperjump").
+function jumpDenied(msg) {
+  showMsg(msg);
+  playSnd(ERROR_SND, 0.5);
+}
+// Start the Warp Up (8.3s spin-up) sound. Kept as a handle so it can be cut on
+// abort; routed through masterVol like every other sound, adjustable live.
+export function startWarpSound() {
   if (S.soundOn && masterVol > 0) {
     warpSnd = sndEl(128).cloneNode();
     warpSnd._baseVol = 1;
     warpSnd.volume = Math.min(masterVol, 1);
     warpSnd.play().catch(() => {});
   } else warpSnd = null;
+}
+export function beginJump() {
+  if (S.jump || S.landedAt) return; // already jumping / docked — nothing to do
+  if (S.jumpDest == null || !linkedSystems().includes(S.jumpDest)) {
+    jumpDenied('No hyperspace destination selected.');
+    return;
+  }
+  if (!fuel.canJump()) {
+    jumpDenied('Not enough fuel to jump.');
+    return;
+  }
+  const near = nearestSpobInfo();
+  if (near.spob && near.dist < EV.JUMP_MIN_DIST) {
+    jumpDenied(`You are too close to ${near.spob.name} to engage your hyperdrive.`);
+    return;
+  }
+  // If the ship is under way, brake to a stop first (silently), then spin up the
+  // hyperdrive; from a standstill the spin-up starts immediately.
+  if (Math.hypot(player.vx, player.vy) > player.accel) {
+    S.jump = { destId: S.jumpDest, phase: 'brake', t: 0 };
+  } else {
+    player.vx = player.vy = 0;
+    S.jump = { destId: S.jumpDest, phase: 'engage', t: 0 };
+    startWarpSound();
+  }
 }
 export function abortJump() {
   S.jump = null;

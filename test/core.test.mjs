@@ -117,12 +117,30 @@ test('warp cinematic lasts the length of the Warp Up sound (~8.3s)', () => {
   assert.ok(EV.JUMP_STREAK_FRAMES < EV.JUMP_WARMUP_FRAMES);
 });
 
-test('Ship.stepJumpEngage becomes ready once aligned and up to speed', () => {
-  const s = new Ship(SHUTTLE, 0, 0, 0);
+test('Ship.thrust honors a custom speed cap (the jump run raises it)', () => {
+  const s = new Ship({ Speed: 200, Accel: 9000, Maneuver: 4 }, 0, 0, 0); // accel 1, maxSpeed 2
+  for (let i = 0; i < 20; i++) s.thrust(5); // cap above maxSpeed
+  close(Math.hypot(s.vx, s.vy), 5); // clamps to the given cap, not maxSpeed
+});
+
+test('Ship.stepJumpEngage turns onto the bearing, then burns toward the cap', () => {
+  const s = new Ship(SHUTTLE, 0, 0, 90); // 90° off the bearing (0)
+  assert.equal(s.stepJumpEngage(0, 100), false); // still turning → not ready
   let ready = false;
-  for (let i = 0; i < 400 && !ready; i++) ready = s.stepJumpEngage(0);
-  assert.equal(ready, true);
-  assert.ok(Math.hypot(s.vx, s.vy) >= 0.95 * s.maxSpeed);
+  for (let i = 0; i < 400 && !ready; i++) ready = s.stepJumpEngage(0, 100);
+  assert.equal(ready, true); // aligned within a turn-step
+  for (let i = 0; i < 400; i++) s.stepJumpEngage(0, 100);
+  assert.ok(Math.hypot(s.vx, s.vy) > s.maxSpeed); // a high cap accelerates past cruise
+});
+
+test('Ship.stepJumpBrake kills momentum and reports when stopped', () => {
+  const s = new Ship({ Speed: 200, Accel: 9000, Maneuver: 180 }, 0, 0, 0); // turns instantly
+  s.vx = 3; // moving, above the ~stopped threshold (accel = 1)
+  s.vy = 0;
+  let stopped = false;
+  for (let i = 0; i < 50 && !stopped; i++) stopped = s.stepJumpBrake();
+  assert.equal(stopped, true);
+  assert.ok(Math.hypot(s.vx, s.vy) <= s.accel);
 });
 
 test('Ship.placeAtArrival positions on the inbound bearing at ARRIVE_DIST', () => {

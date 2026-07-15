@@ -187,7 +187,7 @@ addEventListener('keydown', (e) => {
     if (hailOpen) closeHail();
     else if (activeView) closeService();
     else if (S.mapOpen) closeMap();
-    else if (S.jump && S.jump.phase === 'engage') abortJump();
+    else if (S.jump && (S.jump.phase === 'brake' || S.jump.phase === 'engage')) abortJump();
     else if (S.landedAt) takeOff();
     else if (S.shipTarget) {
       S.shipTarget = null;
