@@ -189,8 +189,9 @@ warping and resumes 2× on arrival (the toggle state is preserved, not cleared).
      **distance > 800 px from every spöb** (JUMP_MIN_DIST, approximation
      of classic's "too close to a stellar object" rule) — both to engage
      and to enter hyperspace. A **refused attempt** — no destination
-     selected, not enough fuel, or too close to a spöb — plays the **error
-     chime** (`ERROR_SND`) with the reason, and no jump starts.
+     selected, destination not within jump range, not enough fuel, or too
+     close to a spöb — plays the **error chime** (`ERROR_SND`) with the
+     specific reason, and no jump starts.
   2. **Brake** (only if the ship is moving on engage): the autopilot points
      retrograde and burns to a near-stop first — the original slows before
      it engages the hyperdrive — silently (no Warp Up yet). From a
@@ -201,13 +202,17 @@ warping and resumes 2× on arrival (the toggle state is preserved, not cleared).
      from cruise (maxSpeed) up to `(1+JUMP_BOOST)×`** over the spin-up,
      back-loaded (`p²`), so the ship charges slowly then accelerates hard —
      it does **not** plateau at cruise the way it used to.
-  4. It enters hyperspace once (a) aligned within one turn-step, (b)
-     **JUMP_WARMUP_FRAMES (440 @ 60 Hz) have elapsed** since engaging, and
-     (c) clear of stellars. Then the **JUMP_STREAK_FRAMES (60) final dash**
-     plays at the peak speed ceiling and cuts to arrival (440 + 60 = 500 ≈
-     the 8.3 s Warp Up). Star-streaks are drawn from the ship's *actual*
-     over-cruise speed, so they build through the dash and are absent
-     otherwise. Aborting engage (Esc) cuts the Warp Up sound.
+  4. It enters hyperspace once (a) aligned within one turn-step and (b)
+     **JUMP_WARMUP_FRAMES (440 @ 60 Hz) have elapsed** since engaging. The
+     no-jump ring is **only checked at initiation**, not during the sequence:
+     once engaged, a jump proceeds to completion even if the ship drifts back
+     inside the ring (matching the original — no further delay). Then the
+     **JUMP_STREAK_FRAMES (60) final dash** plays at the peak speed ceiling and
+     cuts to arrival (440 + 60 = 500 ≈ the 8.3 s Warp Up). Star-streaks are
+     drawn from the ship's *actual* over-cruise speed, so they build through the
+     dash and are absent otherwise. Aborting engage (Esc) cuts the Warp Up sound
+     and **clamps the ship back to cruise speed** (the rising cap can leave it
+     over-cruise).
   5. Arrival: player is placed 700 px from the system center on the
      bearing back toward the origin system, same heading, velocity =
      maxSpeed along the inbound bearing; fuel −= 100. (700 keeps arrival

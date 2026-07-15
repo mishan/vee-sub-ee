@@ -199,7 +199,9 @@ export class World {
       if (tutorialActive && !tutSeen.has('drift') && nearDist > 2600) tutorial('drift');
       if (S.jump && this.player.deathT >= 0) abortJump(); // no jumping out of a fireball
       if (S.jump && S.jump.phase === 'brake') {
-        // Kill any momentum first (spec), then spin up the hyperdrive.
+        // Kill any momentum first (spec), then spin up the hyperdrive. The
+        // no-jump-ring check is NOT repeated here: once a jump is engaged it
+        // proceeds even if the ship drifts into the ring, like the original.
         if (this.player.stepJumpBrake()) {
           this.player.vx = this.player.vy = 0;
           startWarpSound();
@@ -211,12 +213,10 @@ export class World {
           jumpCap(S.jump.t, this.player.maxSpeed),
         );
         S.jump.t++;
-        // spec: aligned AND drive spun up AND clear of stellars
-        if (
-          ready &&
-          S.jump.t >= EV.JUMP_WARMUP_FRAMES &&
-          nearestSpobInfo().dist >= EV.JUMP_MIN_DIST
-        )
+        // spec: aligned AND the drive has spun up. No stellar-distance check
+        // here — an engaged jump proceeds even if the ship drifts into the
+        // no-jump ring, like the original (the ring only gates *initiation*).
+        if (ready && S.jump.t >= EV.JUMP_WARMUP_FRAMES)
           S.jump = { destId: S.jump.destId, phase: 'streak', t: 0 };
       } else if (S.jump && S.jump.phase === 'streak') {
         // Final dash: the speed ceiling is near its peak here, so the ship
