@@ -3,6 +3,7 @@ import { html } from './html.js';
 import { HIRE_ROSTER, MAX_ESCORTS, hireFee, shipClassDesc, upkeepOf } from '../02-spawning.js';
 import { holds } from '../04-combat.js';
 import { cargoUsed } from '../07-trade.js';
+import { shopGrid } from './shops.js';
 import { cargoNeededToAccept } from '../mission-cargo.js';
 import { refreshView } from './dialog.js';
 import {
@@ -108,27 +109,119 @@ export function renderMissionBoard(loc, topHtml = '') {
      <div style="margin-top:10px"><button class="svc" data-action="close">Done (Esc)</button></div>`;
 }
 
-/* The bar hosts two boards — the mission BBS and the hire-escort dialog —
- * toggled by a pair of tabs (spec: "Escorts for hire"). */
-S.barTab = 'missions';
-export function barTabs() {
-  const t = (k, label) =>
-    html`<button class="svc" data-action="barTab" data-arg="${k}"${S.barTab === k ? ' disabled' : ''}>${label}</button>`;
-  return html`<div style="margin:6px 0 2px">${t('missions', 'Missions')} ${t('hire', 'Hire Escorts')}</div>`;
-}
+/* The Spaceport Bar (spec: "Spaceport bar"). Unlike the mission computer it has
+ * no browsable mission list: on entry each available bar mission is offered as a
+ * modal briefing with Accept / Not interested (the queue is filled in
+ * openService); once the offers are dealt with, the bar shows the hire-escorts
+ * board. */
+S.barOffers = null; // queue of mission ids still to offer this visit
 export function renderBar() {
-  return S.barTab === 'hire' ? renderHireBoard() : renderMissionBoard(1, barTabs());
+  return S.barOffers && S.barOffers.length ? renderBarOffer(S.barOffers[0]) : renderHireBoard();
 }
 export function renderComputer() {
   return renderMissionBoard(0);
 }
 
+/* One bar patron's job offer: the briefing text + Accept / Not interested, shown
+ * one at a time as the player enters the bar (like the original). */
+function renderBarOffer(id) {
+  const p = S.landedAt;
+  const m = misns[id];
+  const offer = getOffer(id, p);
+  const brief =
+    descText(m.BriefText, offer) ||
+    descText(m.QuickBrief, offer) ||
+    'A patron offers you a job, but says little about it.';
+  const pay =
+    m.PayVal > 0
+      ? `${m.PayVal.toLocaleString('en-US')} cr`
+      : m.PayVal <= -20128 && m.PayVal >= -20255
+        ? 'an outfit'
+        : 'see briefing';
+  const goalTxt =
+    ['Destroy the ships', null, 'Board', 'Escort', 'Observe', 'Rescue', 'Drive off the ships'][
+      m.ShipGoal
+    ] || null;
+  const destId = offer.travelStel != null ? offer.travelStel : offer.returnStel;
+  const destShown =
+    destId != null
+      ? `${stelName(destId)}${systOfSpob(spobById(destId)) ? ' (' + systOfSpob(spobById(destId)).name + ')' : ''}` +
+        (destId === p.id ? ' — return here' : '')
+      : 'no fixed destination';
+  const more = S.barOffers.length - 1;
+  return html`<h2>Spaceport Bar</h2><div class="meta">${p.name}</div>
+    <div class="shoppane" style="float:none;width:auto">
+      <h3>${misnName(m, offer)}</h3>
+      <div class="desc" style="max-height:190px;overflow-y:auto">${brief}</div>
+      <div class="row">Destination: <b>${destShown}</b></div>
+      ${offer.cargoName && offer.cargoQty ? html`<div class="row">Cargo: <b>${offer.cargoQty}t ${offer.cargoName}</b></div>` : ''}
+      ${m.ShipCount > 0 && goalTxt ? html`<div class="row">Objective: <b>${goalTxt}</b> (${m.ShipCount})</div>` : ''}
+      ${offer.deadline != null ? html`<div class="row">Deliver by: <b>${formatDate(offer.deadline)}</b> <span class="sub">(${m.TimeLimit} days)</span></div>` : ''}
+      <div class="row">Pay: <b>${pay}</b></div>
+      <div style="margin-top:12px">
+        <button class="svc" data-action="acceptOffer">Accept</button>
+        <button class="svc" data-action="declineOffer">Not interested</button>
+      </div>
+      ${more > 0 ? html`<div class="sub" style="margin-top:8px">${more} other patron${more > 1 ? 's' : ''} waiting to talk to you.</div>` : ''}
+    </div>
+    <div class="wallet">${wallet.credits.toLocaleString('en-US')} credits · cargo ${cargoUsed()}/${holds} tons · day ${S.gameDay}</div>`;
+}
+
+/* Accept the current bar offer (with the same cargo-space check the computer
+ * uses), then advance to the next patron. */
+export function acceptBarOffer() {
+  const id = S.barOffers[0];
+  if (id == null) return;
+  const need = cargoNeededToAccept(misns[id], getOffer(id, S.landedAt));
+  if (need > holds - cargoUsed()) {
+    showMsg('Not enough cargo space for this mission.');
+    return;
+  }
+  acceptMission(id, S.landedAt);
+  savePilot(S.landedAt.id);
+  S.barOffers.shift();
+  refreshView();
+}
+export function declineBarOffer() {
+  if (S.barOffers && S.barOffers.length) S.barOffers.shift();
+  refreshView();
+}
+
+/* Hire escorts, laid out like the shipyard (spec: "Escorts for hire"): a grid of
+ * hireable ships + a detail pane with the ship's stats, its escort/class
+ * description (dësc 2000+i) and a Hire button; the player's current fleet (with
+ * Dismiss) sits below. */
 export function renderHireBoard() {
   const p = S.landedAt;
   const totalUpkeep = escorts.reduce((n, e) => n + (e.upkeep || 0), 0);
+  const items = HIRE_ROSTER.filter((id) => ships[id]).map((id) => ({ id }));
+  if (S.selEscortId == null || !items.some((x) => x.id === S.selEscortId))
+    S.selEscortId = items.length ? items[0].id : null;
+
+  let pane = '';
+  if (S.selEscortId != null) {
+    const r = ships[S.selEscortId];
+    const fee = hireFee(r),
+      up = upkeepOf(r);
+    const full = escorts.length >= MAX_ESCORTS,
+      afford = wallet.canAfford(fee);
+    pane = html`<div class="shoppane">
+      <img src="evassets/graphics/PICT_${5000 + (S.selEscortId - 128)}.png" onerror="this.style.visibility='hidden'">
+      <h3>${r.name}</h3>
+      <div class="row">Hire fee: <b>${fee.toLocaleString('en-US')}</b> cr · <b>${up.toLocaleString('en-US')}</b> cr/jump</div>
+      <div class="row">Shield <b>${r.Shield}</b> · Armor <b>${r.Armor}</b></div>
+      <div class="row">Speed <b>${r.Speed}</b> · Accel <b>${r.Accel}</b> · Turn <b>${r.Maneuver}</b></div>
+      <div class="row">Guns <b>${r.MaxGun}</b> · Turrets <b>${r.MaxTur}</b></div>
+      <div class="desc">${shipClassDesc(S.selEscortId)}</div>
+      <div style="margin-top:10px">
+        <button class="svc" data-action="hire" data-arg="${S.selEscortId}" ${full || !afford ? 'disabled' : ''}>Hire${
+          full ? ' · fleet full' : !afford ? ' · can’t afford' : ''
+        }</button>
+      </div></div>`;
+  }
 
   const fleetItems = [];
-  if (!escorts.length) fleetItems.push(html`<div class="sub">You have no escorts yet.</div>`);
+  if (!escorts.length) fleetItems.push(html`<div class="sub">No escorts hired.</div>`);
   for (const e of escorts) {
     const r = ships[e.shipId],
       kind = e.upkeep ? `~${e.upkeep.toLocaleString('en-US')} cr/jump` : 'captured';
@@ -136,41 +229,12 @@ export function renderHireBoard() {
       <span>${e.name} <span class="sub">${r ? r.name : ''} · ${kind}</span></span>
       <button class="svc" style="padding:2px 8px" data-action="dismiss" data-arg="${e.id}">Dismiss</button></div>`);
   }
-  if (totalUpkeep)
-    fleetItems.push(
-      html`<div class="row sub" style="margin-top:6px">Payroll: ~${totalUpkeep.toLocaleString('en-US')} cr / jump</div>`,
-    );
-  const fleet = html`<div style="flex:1;min-width:210px;max-height:340px;overflow-y:auto">
-    <div class="meta" style="margin:0 0 4px">Your fleet (${escorts.length}/${MAX_ESCORTS})</div>${fleetItems}</div>`;
 
-  const hireItems = [];
-  for (const id of HIRE_ROSTER) {
-    const r = ships[id];
-    if (!r) continue;
-    const fee = hireFee(r),
-      up = upkeepOf(r);
-    const full = escorts.length >= MAX_ESCORTS,
-      afford = wallet.canAfford(fee);
-    const desc = shipClassDesc(id);
-    hireItems.push(html`<div class="row" style="border-bottom:1px solid #26304a;padding:6px 0">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-        <b>${r.name}</b>
-        <button class="svc" style="padding:2px 10px" data-action="hire" data-arg="${id}"${full || !afford ? ' disabled' : ''}>Hire</button>
-      </div>
-      <div class="sub">Fee ~${fee.toLocaleString('en-US')} cr · ~${up.toLocaleString('en-US')} cr/jump${
-        full ? ' · fleet full' : !afford ? ' · can’t afford' : ''
-      }</div>${
-        desc
-          ? html`<div class="sub" style="margin-top:3px;max-height:64px;overflow-y:auto">${desc}</div>`
-          : ''
-      }</div>`);
-  }
-  const hire = html`<div style="flex:1.3;min-width:240px;max-height:340px;overflow-y:auto">
-    <div class="meta" style="margin:0 0 4px">Pilots for hire</div>${hireItems}</div>`;
-
-  return html`<h2>Spaceport Bar</h2><div class="meta">${p.name}</div>${barTabs()}
-     <div class="shop">${fleet}${hire}</div>
-     <div class="wallet">${wallet.credits.toLocaleString('en-US')} credits · payroll ${totalUpkeep.toLocaleString('en-US')} cr/jump</div>
+  return html`<h2>Spaceport Bar</h2>
+     <div class="meta">${p.name} · fleet ${escorts.length}/${MAX_ESCORTS}${totalUpkeep ? ` · payroll ${totalUpkeep.toLocaleString('en-US')} cr/jump` : ''}</div>
+     <div class="shop">${shopGrid(5000, items, S.selEscortId, 'selectEscort', (id) => ships[id].name)}${pane}</div>
+     <div style="margin-top:12px"><div class="meta" style="margin:0 0 4px">Your fleet</div>${fleetItems}</div>
+     <div class="wallet">${wallet.credits.toLocaleString('en-US')} credits</div>
      <div style="margin-top:10px"><button class="svc" data-action="close">Done (Esc)</button></div>`;
 }
 
