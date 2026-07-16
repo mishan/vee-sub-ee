@@ -52,6 +52,15 @@ const JUMP_MIN_DIST = 800; // no jumping this close to a spöb (approx.)
 // slowly then rockets away before the cut to arrival (spec: "Hyperjump").
 const JUMP_BOOST = 7;
 
+/* ---- afterburner (spec: "Afterburner") ---- */
+// While held, the afterburner drives the ship to a higher top speed and gets
+// there faster: the speed cap is AFTERBURNER_SPEED× maxSpeed and the burn uses
+// AFTERBURNER_ACCEL× the ship's accel. Both are engine constants — the classic
+// afterburner outfit's ModVal is "ignored" (bible), so the boost isn't in the
+// data. Tuned for feel (approximations).
+const AFTERBURNER_SPEED = 2,
+  AFTERBURNER_ACCEL = 3;
+
 /* ---- combat (spec: "Combat") ---- */
 const HOMING_TURN = 3; // deg/frame (approximation, see spec)
 const ROCKET_ACCEL_DIV = 15; // rocket reaches max speed in 15 frames
@@ -91,6 +100,23 @@ class Ship {
     this.thrusting = true;
   }
 
+  /* Afterburner burn along the heading (spec: "Afterburner"): a stronger thrust
+   * (AFTERBURNER_ACCEL× accel) toward a raised cap (AFTERBURNER_SPEED× maxSpeed),
+   * so the ship accelerates hard to a higher top speed while held. The shell
+   * gates it on owning an afterburner + fuel, and spends the fuel. */
+  afterburn() {
+    const a = this.accel * AFTERBURNER_ACCEL;
+    this.vx += Math.sin(rad(this.heading)) * a;
+    this.vy -= Math.cos(rad(this.heading)) * a;
+    const cap = this.maxSpeed * AFTERBURNER_SPEED;
+    const v = Math.hypot(this.vx, this.vy);
+    if (v > cap) {
+      this.vx *= cap / v;
+      this.vy *= cap / v;
+    }
+    this.thrusting = true;
+  }
+
   /* Turn toward `desired` (deg), clamped to the turn rate. Returns whether the
    * ship is now roughly aligned (within 1.5 turn-steps). */
   steerToward(desired) {
@@ -111,13 +137,16 @@ class Ship {
     this.y += this.vy;
   }
 
-  /* One frame of player control. controls: {left, right, retro, thrust}. */
+  /* One frame of player control. controls: {left, right, retro, thrust,
+   * afterburn}. The afterburner, when held, is the forward drive (a boosted
+   * thrust) — it supersedes the normal thrust for that frame. */
   stepPlayer(c) {
     this.thrusting = false;
     if (c.left) this.heading = norm(this.heading - this.turn);
     if (c.right) this.heading = norm(this.heading + this.turn);
     if (c.retro) this.steerToward(this.retrograde());
-    if (c.thrust) this.thrust();
+    if (c.afterburn) this.afterburn();
+    else if (c.thrust) this.thrust();
     this.integrate();
   }
 

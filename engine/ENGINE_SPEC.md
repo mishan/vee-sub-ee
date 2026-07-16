@@ -221,6 +221,25 @@ warping and resumes 2× on arrival (the toggle state is preserved, not cleared).
      just-advanced in-game calendar date, `formatDate`) — the arrival banner
      the takeoff message mirrors.
 
+## Afterburner
+
+Holding **Z** fires the afterburner: a boosted forward drive that overrides the
+normal thrust for that frame. In the core, `afterburn()` burns along the heading
+at `AFTERBURNER_ACCEL× accel` (3×) toward a raised cap of `AFTERBURNER_SPEED×
+maxSpeed` (2×), so the ship accelerates hard to double its cruise top speed while
+held. Both multipliers are engine constants tuned for feel — the classic
+Afterburner outfit's `ModVal` is **ignored** (bible), so the boost isn't in the
+data.
+
+The shell (`stepPlayer` wiring) only afterburns while the pilot **owns one and
+has fuel**, and it **spends `AFTERBURNER_FUEL` (≈1 unit) of hyperspace fuel per
+frame** (a jump's worth lasts ~100 frames; tunable). "Owns one" is
+`hasAfterburner()`: the **Afterburner outfit** (oütf ModType 15, `modType
+'afterburner'`), **or** the ship itself via ship `Flags` — `0x0040` = always has
+one, `0x0020` = has one once the pilot reaches an **advanced combat rating**
+(bible; the exact tier is unspecified, so index ≥ 5 / "Dangerous" is our cut).
+No classic-EV ship sets these flags, but plugins/Override do.
+
 ## Map knowledge (fog of war)
 
 The player starts in **Levo (sÿst 128)** knowing only that system. Each

@@ -46,6 +46,14 @@ export class Fuel {
     this.current = Math.max(0, this.current - this.jumpCost);
   }
 
+  // Spend an arbitrary amount (the afterburner drains fuel per frame), clamped
+  // at empty. Returns the amount actually spent.
+  burn(amount) {
+    const spent = Math.min(this.current, Math.max(0, amount));
+    this.current -= spent;
+    return spent;
+  }
+
   // Top off the tank (landing, the refuel service, buying/capturing a ship).
   refill() {
     this.current = this.max;
