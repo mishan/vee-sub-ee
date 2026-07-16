@@ -298,6 +298,7 @@ export function hitShip(victim, rec, heading, attacker) {
     beginDestruction(victim);
   } else if (result === 'disabled' && !victim.disabled) {
     victim.disabled = true;
+    victim.thrusting = false; // cut the engine flame the instant it's disabled
     if (attacker === player) commitCrime(victim.govt, penaltyOf(victim.govt, 'DisabPenalty'));
     if (victim.misnId != null && attacker === player) onMissionShipDisabled(victim);
   }

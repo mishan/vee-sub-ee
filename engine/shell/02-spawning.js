@@ -124,6 +124,15 @@ export function spawnAI(atEdge) {
   // a warship attacks on sight if you're a criminal in THIS system and its govt
   // enforces here — the local government, an ally, or a "laws everywhere" govt
   if (e.aiType >= 3 && enforcesHere(e.govt)) e.hostile = true;
+  // A "starts disabled" govt (Derelicts / Unexplored — bible govt flag) spawns as
+  // an inert, boardable hulk, never under power. Derelicts are ambient-only: they
+  // must already be in-system when you arrive, so they never warp *in* — skip them
+  // on the edge/arrival spawn path (Misha).
+  if (gf.includes('startsDisabled')) {
+    if (atEdge) return;
+    e.disabled = true;
+    e.thrusting = false;
+  }
   // Arrivals warp in from off-screen at speed and decelerate; the already-present
   // ambient population is just there (no warp-in).
   if (atEdge) warpIntoSystem(e, 0, 0);
