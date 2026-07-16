@@ -82,6 +82,12 @@ export function radarColor(govtId) {
   return hues[(govtId - 128) % hues.length];
 }
 
+// Govt names in the data are collective ("Merchants", "Pirates", "Derelicts");
+// the HUD labels a single target ship, so singularize the class ("Merchant",
+// "Pirate"). Heuristic: "…ies"→"…y", a trailing single "s"→drop it (but keep
+// "…ss" like "Express"); anything else (Confederation, Astex) is left alone.
+export const singularGovt = (name) => name.replace(/ies$/, 'y').replace(/([^s])s$/, '$1');
+
 export function drawFlame(ship, x, y) {
   if (!ship.thrusting) return;
   const a = EV.rad(ship.heading);
@@ -352,7 +358,7 @@ export function drawPanel(w, h) {
       );
     const govtName =
       S.shipTarget.govt >= 128 && DATA.types.govt[S.shipTarget.govt]
-        ? DATA.types.govt[S.shipTarget.govt].name
+        ? singularGovt(DATA.types.govt[S.shipTarget.govt].name)
         : 'Independent';
     panelText(
       tb.x + tb.w / 2,
@@ -365,7 +371,7 @@ export function drawPanel(w, h) {
       tb.x + tb.w / 2,
       tb.y + 98,
       S.shipTarget.bounty ? 'Bounty Hunter' : govtName,
-      S.shipTarget.bounty ? '#e06c75' : radarColor(S.shipTarget.govt),
+      S.shipTarget.bounty ? '#e06c75' : GREEN, // class text green, to match the panel
       'center',
     );
     // Status progression: Shields X% → Shields Down (shields gone, armour intact)

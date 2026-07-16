@@ -980,4 +980,9 @@ overridden by `CustPicID` when ≥ 0; fall back to the standard if the
 custom PICT is missing from the data. Per-ship PICTs (index = shïp − 128):
 shipyard detail 5000+i, **target-display schematic 3000+i** ("Target
 Pics"), **hail comm portrait 5300+i** ("Ship Comm Dialog"); shop menu
-sheets 5100 (ships) / 6100 (outfits), outfit detail 6000+i.
+sheets 5100 (ships) / 6100 (outfits), outfit detail 6000+i. Under the target
+schematic the panel shows the ship's name (white) and its **affiliation**: the
+govt name **singularized** for a single ship (collective data names like
+"Merchants"/"Pirates"/"Derelicts" → "Merchant"/"Pirate"/"Derelict"; already-
+singular names like "Confederation" are untouched) and drawn **green** to match
+the rest of the panel — or red "Bounty Hunter" for a hunter.
