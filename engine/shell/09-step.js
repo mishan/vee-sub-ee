@@ -362,7 +362,8 @@ export class World {
   }
 
   /* Projectiles vs ships and asteroids: each shot hits the first non-friendly
-   * ship in range, or is absorbed by an asteroid in its swept path. */
+   * ship in range, or is absorbed by an asteroid in its swept path — detonating
+   * (with any area-of-effect blast) at the impact point. */
   stepShots(everyone, friendly) {
     for (const shot of [...this.shots]) {
       const alive = shot.step(shot.homing);
@@ -370,23 +371,41 @@ export class World {
       for (const v of everyone) {
         if (v === shot.owner || v.deathT >= 0 || friendly(shot.owner, v)) continue;
         if (EV.shotHitsShip(shot, v, shipHalf(v))) {
-          hitShip(v, shot.rec, shot.heading, shot.owner);
-          if (shot.rec.ExplodType >= 0) spawnExplosion(shot.x, shot.y, shot.rec.ExplodType);
+          this.detonateShot(shot, shot.x, shot.y, everyone, friendly, v);
           hit = true;
           break;
         }
       }
-      // An asteroid in the shot's swept path absorbs it (no damage): cover works.
-      // The impact effect plays where the rock stopped it (the segment entry
-      // point), not at the shot's post-step position past the rock.
+      // An asteroid in the shot's swept path absorbs it: cover works. The impact
+      // (and any blast) plays where the rock stopped it (the segment entry point),
+      // not at the shot's post-step position past the rock.
       if (!hit && this.asteroids.length) {
         const pt = EV.shotAsteroidImpact(shot, this.asteroids);
         if (pt) {
-          if (shot.rec.ExplodType >= 0) spawnExplosion(pt.x, pt.y, shot.rec.ExplodType);
+          this.detonateShot(shot, pt.x, pt.y, everyone, friendly, null);
           hit = true;
         }
       }
       if (hit || !alive) this.shots.splice(this.shots.indexOf(shot), 1);
+    }
+  }
+
+  /* Detonate a shot at (bx,by): show its explosion and deal damage. A blast
+   * weapon (BlastRadius > 0) hits every eligible ship within the radius of the
+   * impact (radial impact kick, pushed away from the centre); a plain weapon
+   * damages only the ship it struck (`directTarget`, along the shot heading).
+   * The shooter and its allies are exempt either way (spec: "Blast"). */
+  detonateShot(shot, bx, by, everyone, friendly, directTarget) {
+    const rec = shot.rec;
+    if (rec.ExplodType >= 0) spawnExplosion(bx, by, rec.ExplodType);
+    if (rec.BlastRadius > 0) {
+      for (const v of everyone) {
+        if (v === shot.owner || v.deathT >= 0 || friendly(shot.owner, v)) continue;
+        if (EV.inBlastRadius(bx, by, v, rec.BlastRadius))
+          hitShip(v, rec, EV.bearing(v.x - bx, v.y - by), shot.owner);
+      }
+    } else if (directTarget) {
+      hitShip(directTarget, rec, shot.heading, shot.owner);
     }
   }
 

@@ -530,6 +530,7 @@ the shot heading as `Impact / (10 · victim Mass)` px/frame
 (approximation — bible says only "inversely proportional to mass");
 `ExplodType` −1 none / 0 small / 1 big / 2 huge → explosion spïns
 400/401/402; `ProxRadius` detonation distance (0 = contact);
+`BlastRadius` area-of-effect radius in px (0 = single-target);
 `MiscFlags` 0x0002 = secondary-trigger weapon.
 
 **Shot kinematics.** All shots inherit the shooter's velocity at launch
@@ -544,6 +545,16 @@ and accelerate along it by `Speed/100/15` per frame up to max; everything
 else flies ballistically. `life` decrements each frame; the shot expires
 at 0. A shot hits a ship (never its shooter) when
 `dist < max(ProxRadius, half the ship sprite)`.
+
+**Blast (area effect).** When a shot detonates — on hitting a ship, or against
+an asteroid — a weapon with `BlastRadius > 0` deals its full damage to *every*
+eligible ship whose centre is within `BlastRadius` px of the impact point, not
+only the ship it struck. Same damage formula as a direct hit, with a **radial**
+impact kick (pushed away from the blast centre). `BlastRadius == 0` keeps the
+single-target hit. The shooter and its allies are exempt, the same friendly-fire
+rule as direct hits. (A blast on a beam — the Particle/Tractor beams carry a 1 px
+BlastRadius — is subsumed by the beam's own single-ship hit and not modelled
+separately.)
 
 **Beams** (guidance 0, 3): no projectile — a ray of length `Speed` px
 (beam reuses the field) from the shooter's nose along its heading

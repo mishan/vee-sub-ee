@@ -436,6 +436,12 @@ function shotHitsShip(shot, ship, half) {
   return Math.hypot(ship.x - shot.x, ship.y - shot.y) < Math.max(shot.rec.ProxRadius, half);
 }
 
+/* Is a ship within a weapon's blast radius of the detonation point (bx,by)?
+ * Drives area-of-effect damage (spec: "Blast"); the shell applies the damage. */
+function inBlastRadius(bx, by, ship, radius) {
+  return Math.hypot(ship.x - bx, ship.y - by) <= radius;
+}
+
 const BEAM_HALF = 8; // beam collision half-width (px), before adding the ship's half-size term
 
 /* How far along a beam (fired from ox,oy toward the unit dir dx,dy, up to
@@ -495,6 +501,7 @@ export {
   ASTEROID_BOUND,
   ASTEROID_RADII,
   shotHitsShip,
+  inBlastRadius,
   beamHitDist,
   maxWeaponRange,
 };

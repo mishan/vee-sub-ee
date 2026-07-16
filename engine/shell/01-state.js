@@ -63,6 +63,7 @@ export const TEST_MODE = [
   'tab',
   'nav',
   'fire',
+  'firesec',
   'bar',
   'computer',
   'allmissions',

@@ -57,7 +57,8 @@ if (SAVED && SAVED.spob != null) {
 // Escorts only materialise when in flight; if we restored docked, takeOff()
 // spawns them (after it places the player on the launch pad).
 if (!S.landedAt) spawnEscorts();
-if (params.has('fire')) keys[' '] = true; // test affordance: hold the trigger
+if (params.has('fire')) keys[' '] = true; // test affordance: hold the primary trigger
+if (params.has('firesec')) keys['x'] = true; // ...and the secondary trigger (X)
 
 // Test/dev affordances (URL params): ?map=1 opens the map,
 // ?dest=<systId> preselects a destination, ?jump=1 engages the jump
