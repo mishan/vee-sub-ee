@@ -344,7 +344,11 @@ now gate on the tracked rating/record.
 Ship-type gates: Flags 0x2000 (not for cargo ships, player inherentAI
 1–2), 0x4000 (not for warships, 3–4), and `AvailShipType`
 (128–255 must fly / 1128–1255 must not / 2128–2255 must be govt).
-Only missions with a supported goal are offered.
+Only missions with a supported goal are offered. Finally, a mission whose
+**resolved travel destination is the spöb you're on** is **not** offered — a
+delivery/ferry (ReturnStel −1) whose `TravelStel` lands on the current planet
+(e.g. a random 20000+g destination that picked it) would be a trip to nowhere;
+goal / return-here missions have `TravelStel` −1 (→ null) and are unaffected.
 
 **Goals supported:** all ShipGoal types plus cargo/go-to. Cargo delivery
 (CargoType/CargoQty, PickupMode 0 = at accept / 1 = at TravelStel,

@@ -97,7 +97,15 @@ export function offeredMissions(p, loc) {
     // Attach the id before the check: missionAvailable keys its AvailRandom roll
     // on m.id, so a raw (id-less) record would collide all missions into one slot.
     const offer = { id: +id, ...m };
-    if (missionAvailable(offer, p, loc)) out.push(offer);
+    if (!missionAvailable(offer, p, loc)) continue;
+    // Don't offer a trip whose destination is the very spöb you're standing on:
+    // a delivery/ferry (ReturnStel −1) whose TravelStel resolves to `here` — e.g.
+    // a random 20000+g dest that happened to land on this planet — is trivial and
+    // was showing "Destination: <this planet>". Goal/return-here missions have
+    // TravelStel −1 (→ null), so they're unaffected. Uses the same resolved,
+    // cached destination the briefing shows (getOffer).
+    if (getOffer(+id, p).travelStel === p.id) continue;
+    out.push(offer);
   }
   // critical missions (Flags 0x1000) first, else by id
   out.sort((a, b) => (b.Flags & 0x1000) - (a.Flags & 0x1000) || a.id - b.id);
