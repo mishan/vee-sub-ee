@@ -13,6 +13,7 @@ import { enforcesHere, spawnEscorts } from './02-spawning.js';
 import { formatDate } from './missions-rules.js';
 import { COMM_SND, ERROR_SND, loopSnd, playSnd, stopAllLoops } from './03-sound.js';
 import { hasAutoRefueller, player, rebuildPlayerWeapons, refuelShip } from './04-combat.js';
+import { legalOf } from './13-legal.js';
 import { distTo, nearestLandable } from './06-interaction.js';
 import { missionLandingEvents } from './08-missions.js';
 import { loadSystem } from './09-step.js';
@@ -31,12 +32,18 @@ document.getElementById('takeoffBtn').addEventListener('click', () => takeOff())
  * comm-channel sound so the spaceport radio matches a ship hail. */
 S.landing = null; // { spob, cleared } while a landing request is active
 
-/* A governed port refuses landing when its govt is policing you here — you're a
- * criminal in this system and that govt enforces here — reusing the same
- * enforcesHere test that makes its warships hostile on sight. Ungoverned ports
- * (Govt < 128) take anyone. */
+/* A port refuses landing when either:
+ *  - its govt is policing you here — you're a criminal in this system and that
+ *    govt enforces here (reusing the same enforcesHere test that makes its
+ *    warships hostile on sight; ungoverned ports don't police), OR
+ *  - it's **restricted** by `MinCoolness`: the minimum legal record (in this
+ *    system) it'll let you land with. The bible: you're denied while your record
+ *    is *below* MinCoolness. Most ports set a very negative value (anyone lands);
+ *    a few Confederation strongholds (e.g. Ruby in NGC-6564) require +10, so a
+ *    low-standing pilot is turned away until they earn the government's trust. */
 export function landingDenied(p) {
-  return p.Govt >= 128 && enforcesHere(p.Govt);
+  if (p.Govt >= 128 && enforcesHere(p.Govt)) return true;
+  return legalOf(S.SYSTEM_ID) < (p.MinCoolness ?? -32768);
 }
 
 /* Docking (space station) vs landing (planet): the spöb `station` flag picks the

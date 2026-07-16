@@ -124,13 +124,23 @@ radio sounds like a ship hail. A **local refusal** (too far, too fast) instead
 plays the error beep `ERROR_SND` (153). (Opening a *hail* plays the distinct
 hailing-frequencies beep `HAIL_SND` 154.)
 
-**Denial by legal status.** A **governed** port (`spob.Govt ≥ 128`) refuses
-landing when its government is actively policing you here — i.e. you are a
-criminal in the current system (`isCriminalWith`) **and** that govt enforces
-here (the system's own govt, an ally, or a "laws everywhere" govt, flag
-`0x0002`) — reusing the same `enforcesHere` test that makes its warships hostile
-on sight. Ungoverned ports (`Govt < 128`) take anyone. The request is not
-started, so you can't touch down until your standing recovers or you leave.
+**Denial by legal status.** Landing is refused when either:
+
+- **Policing.** A **governed** port (`spob.Govt ≥ 128`) whose government is
+  actively policing you here — you are a criminal in the current system
+  (`isCriminalWith`) **and** that govt enforces here (the system's own govt, an
+  ally, or a "laws everywhere" govt, flag `0x0002`) — reusing the same
+  `enforcesHere` test that makes its warships hostile on sight. Ungoverned ports
+  (`Govt < 128`) never police.
+- **Restricted (`MinCoolness`).** The spöb's `MinCoolness` is the minimum legal
+  record (in the current system) it will let you land with; you're denied while
+  your record is **below** it (bible). Most ports set a very negative value
+  (anyone lands); a handful of Confederation strongholds — e.g. **Ruby** in
+  NGC-6564 — require +10, so a new/low-standing pilot is turned away until they
+  earn the government's trust.
+
+Either way the request isn't started, so you can't touch down until your
+standing recovers or you leave.
 
 **Comm strings.** The clearance / denial wording is Ambrosia's,
 baked into the EV **application** (a CODE resource, not a STR# list). The build
