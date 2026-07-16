@@ -49,7 +49,14 @@ export function resolveStel(code, here, ctx) {
   const spobById = (id) => spobs[id];
   const inhabited = () => allSpobs().filter((p) => p.$sem && !p.$sem.uninhabited && p.$sem.canLand);
   const uninhab = () => allSpobs().filter((p) => p.$sem && p.$sem.uninhabited);
-  const pick = (arr) => (arr.length ? arr[Math.floor(rng() * arr.length)].id : null);
+  // A *random* destination never lands on the spöb you're being offered the job at
+  // (the original never sent you "deliver to where you already are") — so exclude
+  // `here` from the pool. The explicit codes (−4 "here", a fixed spöb ID) bypass
+  // this by not going through pick().
+  const pick = (arr) => {
+    const pool = here ? arr.filter((p) => p.id !== here.id) : arr;
+    return pool.length ? pool[Math.floor(rng() * pool.length)].id : null;
+  };
   if (code === -1) return null; // no specific dest / any (caller decides)
   if (code === -2) return pick(inhabited());
   if (code === -3) return pick(uninhab());

@@ -354,11 +354,19 @@ now gate on the tracked rating/record.
 Ship-type gates: Flags 0x2000 (not for cargo ships, player inherentAI
 1–2), 0x4000 (not for warships, 3–4), and `AvailShipType`
 (128–255 must fly / 1128–1255 must not / 2128–2255 must be govt).
-Only missions with a supported goal are offered. Finally, a mission whose
-**resolved travel destination is the spöb you're on** is **not** offered — a
-delivery/ferry (ReturnStel −1) whose `TravelStel` lands on the current planet
-(e.g. a random 20000+g destination that picked it) would be a trip to nowhere;
-goal / return-here missions have `TravelStel` −1 (→ null) and are unaffected.
+Only missions with a supported goal are offered.
+
+**Destinations never resolve to "here."** A *random* `TravelStel`/`ReturnStel`
+code (−2 any inhabited, −3 any uninhabited, or a govt-relative 9999/15000/20000/
+25000+g pick) **excludes the spöb the mission is offered at** from its candidate
+pool (`resolveStel`), the way the original never sends you "deliver to where you
+already are." So a "Rush Delivery to <DST>" offered on Deneb III with a random
+20000+g destination picks *some other* world, never Deneb III itself. (The
+explicit codes bypass this: −4 is literally "here", and a fixed spöb ID is taken
+as given.) As a backstop, a mission whose resolved `TravelStel` still equals the
+current spöb — an explicit fixed/−4 destination — is **not** offered (a trip to
+nowhere); goal / return-here missions have `TravelStel` −1 (→ null) and are
+unaffected.
 
 **Goals supported:** all ShipGoal types plus cargo/go-to. Cargo delivery
 (CargoType/CargoQty, PickupMode 0 = at accept / 1 = at TravelStel,

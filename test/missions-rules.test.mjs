@@ -67,6 +67,17 @@ test('resolveStel: inhabited/uninhabited picks use the injected rng', () => {
   assert.equal(resolveStel(-2, null, { spobs, govts, rng: () => 0.999 }), 130);
 });
 
+test('resolveStel: a random destination excludes the spob being offered at', () => {
+  const ctx = { spobs, govts, rng: zero }; // picks the first candidate
+  // -2 would pick the first inhabited (128); with here=128 it's excluded → 129.
+  assert.equal(resolveStel(-2, { id: 128 }, ctx), 129);
+  // "not-govt-10" over {128(g10),129,130}: first non-10 is 129; here=129 → 130.
+  assert.equal(resolveStel(20000 + 10, { id: 129 }, ctx), 130);
+  // If excluding `here` empties the pool, resolve to null rather than back to here.
+  const onlyHere = { 128: { Govt: 10, $sem: { canLand: true } } };
+  assert.equal(resolveStel(-2, { id: 128 }, { spobs: onlyHere, govts, rng: zero }), null);
+});
+
 test('resolveStel: govt-relative ranges (self / ally / not / enemy)', () => {
   const ctx = { spobs, govts, rng: zero };
   assert.equal(resolveStel(9999 + 10, null, ctx), 128); // govt 10 → spob 128
