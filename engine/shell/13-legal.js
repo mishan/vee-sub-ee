@@ -144,8 +144,11 @@ export const RATING_STEPS = [
   [1, 1],
   [0, 0],
 ];
+// Numeric combat-rating tier (0 Harmless … 10 Ultimate), from total crew killed.
+export function combatRatingIndex() {
+  for (const [t, idx] of RATING_STEPS) if (legal.kills >= t) return idx;
+  return 0;
+}
 export function combatRating() {
-  for (const [t, idx] of RATING_STEPS)
-    if (legal.kills >= t) return DATA.strings[138].list[idx] || 'Harmless';
-  return 'Harmless';
+  return DATA.strings[138].list[combatRatingIndex()] || 'Harmless';
 }

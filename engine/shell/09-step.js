@@ -18,10 +18,12 @@ import { tutorial } from './ui/tutorial.js';
 import { maybeSpawnBountyHunter, spawnAI, spawnAsteroids } from './02-spawning.js';
 import { attenuate, playSnd, stopAllLoops } from './03-sound.js';
 import {
+  AFTERBURNER_FUEL,
   abortJump,
   completeJump,
   fire,
   fuel,
+  hasAfterburner,
   hitShip,
   mapBearingTo,
   nearestSpobInfo,
@@ -257,12 +259,18 @@ export class World {
           else if (diff < -this.player.turn * 0.5) cl = true;
         }
         if (touchCtl.thrust) cThrust = true;
+        // Afterburner (Z held): a boosted forward drive, only while owned and
+        // with fuel to burn — it spends AFTERBURNER_FUEL/frame (spec:
+        // "Afterburner").
+        const ab = keys['z'] && hasAfterburner() && fuel.value > 0;
         this.player.stepPlayer({
           left: cl,
           right: cr,
           retro: keys['arrowdown'] || keys['s'],
           thrust: cThrust,
+          afterburn: ab,
         });
+        if (ab) fuel.burn(AFTERBURNER_FUEL);
         this.player.regenShields(this.player.shieldMax, this.player.shieldRe);
         for (const w of this.player.weapons) if (w.cool > 0) w.cool--;
         if (keys[' '] || touchCtl.fire) fire(this.player, S.shipTarget, true);

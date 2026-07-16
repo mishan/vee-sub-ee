@@ -35,6 +35,15 @@ test('canJump / spendJump spend one jump and clamp at empty', () => {
   assert.equal(f.value, 0);
 });
 
+test('burn spends an arbitrary amount (afterburner), clamped at empty', () => {
+  const f = shuttle();
+  assert.equal(f.burn(30), 30); // returns the amount actually spent
+  assert.equal(f.value, 370);
+  assert.equal(f.burn(1000), 370); // clamped: spends only what's left
+  assert.equal(f.value, 0);
+  assert.equal(f.burn(5), 0); // empty → spends nothing
+});
+
 test('refill tops the tank back to max', () => {
   const f = shuttle();
   f.spendJump();

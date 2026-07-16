@@ -59,6 +59,21 @@ test('Ship.thrust pushes along heading and clamps to maxSpeed', () => {
   assert.equal(s.thrusting, true);
 });
 
+test('Ship.afterburn drives past maxSpeed toward the boosted cap', () => {
+  const s = new Ship({ Speed: 200, Accel: 9000, Maneuver: 4 }, 0, 0, 0); // accel 1, maxSpeed 2
+  s.afterburn();
+  assert.equal(s.thrusting, true);
+  for (let i = 0; i < 50; i++) s.afterburn(); // heading 0 (up) → velocity gains −y
+  close(Math.hypot(s.vx, s.vy), 4); // cap = AFTERBURNER_SPEED(2) × maxSpeed(2)
+  assert.ok(Math.hypot(s.vx, s.vy) > s.maxSpeed); // above normal cruise
+});
+
+test('Ship.stepPlayer: afterburn supersedes normal thrust', () => {
+  const s = new Ship({ Speed: 200, Accel: 9000, Maneuver: 4 }, 0, 0, 0);
+  for (let i = 0; i < 50; i++) s.stepPlayer({ thrust: true, afterburn: true });
+  close(Math.hypot(s.vx, s.vy), 4); // boosted cap, not the plain maxSpeed of 2
+});
+
 test('Ship.steerToward clamps to turn rate and reports alignment', () => {
   const s = new Ship(SHUTTLE, 0, 0, 0); // turn = 4
   assert.equal(s.steerToward(90), false); // 90° away → not aligned

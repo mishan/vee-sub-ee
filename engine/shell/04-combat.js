@@ -22,7 +22,7 @@ import {
 import { ERROR_SND, attenuate, masterVol, playSnd, sndEl, stopSnd } from './03-sound.js';
 import { checkExpiredMissions, govts, onMissionShipDisabled } from './08-missions.js';
 import { PF } from './15-pers.js';
-import { applyGovtDelta } from './13-legal.js';
+import { applyGovtDelta, combatRatingIndex } from './13-legal.js';
 import { loadSystem, world } from './09-step.js';
 import { Fuel } from './fuel.js';
 import { refuelCost as refuelCostOf } from './trade-rules.js';
@@ -67,6 +67,27 @@ export const hasAutoRefueller = () =>
     const o = DATA.types.outf[oid];
     return o && o.$sem && o.$sem.modType === 'autoRefueller';
   });
+
+/* ---- afterburner (spec: "Afterburner") ---- */
+// Fuel the afterburner drains per frame while held (~1 unit/frame — a jump's
+// worth of fuel lasts ~100 frames; tunable approximation).
+export const AFTERBURNER_FUEL = 1;
+// Combat-rating tier at which a ship flagged 0x0020 gains its afterburner. The
+// bible says only "advanced combat rating"; index ≥ 5 ("Dangerous") is our cut.
+export const AFTERBURNER_RATING = 5;
+// The pilot can afterburn if they own the Afterburner outfit (ModType 15), or
+// their ship carries one via ship Flags: 0x0040 = always, 0x0020 = once they
+// reach an advanced combat rating (bible).
+export const hasAfterburner = () => {
+  const owned = outfits.entries().some(([oid]) => {
+    const o = DATA.types.outf[oid];
+    return o && o.$sem && o.$sem.modType === 'afterburner';
+  });
+  if (owned) return true;
+  const f = ships[S.playerShipId].Flags || 0;
+  if (f & 0x0040) return true;
+  return !!(f & 0x0020) && combatRatingIndex() >= AFTERBURNER_RATING;
+};
 // Cost to top the tank off from its current level (0 when already full). The
 // per-unit math is the pure refuelCost in trade-rules.js (unit-tested).
 export const refuelCost = () => refuelCostOf(fuel.value, fuel.max, FUEL_UNIT_PRICE);
