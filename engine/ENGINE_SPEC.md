@@ -785,16 +785,24 @@ through harmlessly. Enemy fire hits escorts normally, and an escort that is
 destroyed is removed from the saved fleet **permanently** (no ambient
 replacement is scheduled). Escorts show as green radar blips.
 
-### Escorts for hire (shell; browser leg)
+### Spaceport bar (shell; browser leg)
 
-The **Spaceport Bar** carries two boards, toggled by tabs: the mission BBS
-(as before) and a **hire-escort** dialog. The dialog shows *Your fleet* (each
-escort with its type, per-jump salary or "captured", and a **Dismiss**
-button) alongside *Pilots for hire* — a small fixed roster with each hull's
-fee, upkeep, and its ship-class description (desc ID `2000 + (shipId - 128)`, from the
-data file). The roster is the four cheapest armed, purchasable (`Cost > 0`),
-non-mission-locked hulls, computed once from the ship table (so it's stable
-and data-driven rather than hard-coded).
+The **Spaceport Bar** has **no browsable mission list** (unlike the mission
+computer). On entering, its available missions (`offeredMissions(spöb, loc 1)`)
+are queued and offered **one at a time as accept/decline briefings** — each
+patron's job shows its name, briefing text, destination, cargo/objective, pay,
+and **Accept** / **Not interested**, like the original. Accepting runs the same
+cargo-space check the computer uses; either choice advances to the next patron.
+Once the offers are dealt with (or if there were none), the bar shows the
+**hire-escort** board.
+
+That board is laid out **like the shipyard**: a grid of hireable hulls + a detail
+pane with the selected ship's picture, stats, fee/upkeep, its **escort/class
+description** (`shipClassDesc`, desc ID `2000 + (shipId − 128)`), and a **Hire**
+button; the player's current fleet (each escort with type, per-jump salary or
+"captured", and a **Dismiss** button) sits below. The roster is the four cheapest
+armed, purchasable (`Cost > 0`), non-mission-locked hulls, computed once from the
+ship table (so it's stable and data-driven rather than hard-coded).
 
 Hiring pays a one-time **fee** and enlists a persistent escort that draws a
 per-jump **upkeep**; both are fractions of the hull's `Cost` (`HIRE_FEE_FRAC`

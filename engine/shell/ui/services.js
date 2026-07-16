@@ -12,7 +12,13 @@
 import { S } from '../01-state.js';
 import { View, activeView, refreshView } from './dialog.js';
 import { renderExchange, renderOutfitter, renderShipyard } from './shops.js';
-import { renderBar, renderComputer, doAcceptMission } from './missionboard.js';
+import {
+  renderBar,
+  renderComputer,
+  doAcceptMission,
+  acceptBarOffer,
+  declineBarOffer,
+} from './missionboard.js';
 import {
   trade,
   selectOutfit,
@@ -23,6 +29,7 @@ import {
   shipyardStock,
 } from '../07-trade.js';
 import { hireEscort, dismissEscort } from '../02-spawning.js';
+import { offeredMissions } from '../08-missions.js';
 
 /* Actions for the mission board / hire dialog (ui/missionboard renders its
  * buttons with data-action=…; the Dialog delegation routes them here). */
@@ -31,9 +38,11 @@ const boardActions = {
     S.selMisnId = +id;
     refreshView();
   },
-  accept: () => doAcceptMission(S.selMisnId),
-  barTab: (k) => {
-    S.barTab = k;
+  accept: () => doAcceptMission(S.selMisnId), // mission computer's list Accept
+  acceptOffer: () => acceptBarOffer(), // bar patron's offer
+  declineOffer: () => declineBarOffer(),
+  selectEscort: (id) => {
+    S.selEscortId = +id;
     refreshView();
   },
   close: () => closeService(),
@@ -73,6 +82,9 @@ export function openService(kind) {
   if (!S.landedAt || !(S.landedAt.$sem && S.landedAt.$sem[gate])) return;
   if (kind === 'outfitter' && !outfitterStock(S.landedAt).length) return;
   if (kind === 'shipyard' && !shipyardStock(S.landedAt).length) return;
+  // Entering the bar queues its available missions to offer one at a time (as
+  // accept/decline briefings) before the hire board shows (spec: "Spaceport bar").
+  if (kind === 'bar') S.barOffers = offeredMissions(S.landedAt, 1).map((o) => o.id);
   SERVICE_VIEWS[kind].open();
 }
 export function closeService() {
