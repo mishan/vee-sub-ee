@@ -343,6 +343,13 @@ export class World {
         s.warpIn = 0; // dropped to sub-light (or entered at rest) → hand to AI
       }
       if (s.disabled) {
+        // A disabled ship is powerless: no engine flame, and it coasts down
+        // instead of flying off at whatever speed it held when hit (spec:
+        // "Combat"). The light per-frame damping brings a fast hulk to a slow
+        // drift (also what lets you catch up and board it).
+        s.thrusting = false;
+        s.vx *= 0.98;
+        s.vy *= 0.98;
         s.integrate();
         continue;
       }

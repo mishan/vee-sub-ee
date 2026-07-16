@@ -135,5 +135,18 @@ export function maybeSpawnPers() {
   e.persFlags = pr.Flags;
   e.commQuote = pr.CommQuote;
   e.warpIn = 18;
+  // A derelict / "starts disabled" character (govt flag — the Derelicts govt is
+  // how classic EV's floating hulks are tagged) is an inert wreck that's simply
+  // already adrift here: disabled, powerless, and no dramatic warp-in (it must
+  // already be in-system on arrival/takeoff, never fly in — Misha).
+  const gf =
+    pr.Govt >= 128 && DATA.types.govt[pr.Govt] && DATA.types.govt[pr.Govt].$sem
+      ? DATA.types.govt[pr.Govt].$sem.flags
+      : [];
+  if (gf.includes('startsDisabled')) {
+    e.disabled = true;
+    e.thrusting = false;
+    e.warpIn = 0;
+  }
   world.ships.push(e);
 }

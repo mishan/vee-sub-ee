@@ -482,6 +482,14 @@ the player's ship and NPCs arrive in the original. The already-present
 initial population is scattered in-system with no warp-in. Bounty hunters
 warp in bearing on the player's position rather than the centre.
 
+**Derelicts / "starts disabled" govts.** A ship whose govt carries the
+`startsDisabled` flag (Derelicts, Unexplored) spawns as an **inert, boardable
+hulk** — `disabled` from the start, never under power. They are **ambient
+only**: they must already be in-system when you arrive or take off, so they are
+**never spawned on the edge/arrival path** (the warp-in and post-kill
+replacement spawns skip them); they only appear in a system's initial scattered
+population.
+
 **Escorts arrive with the player.** `spawnEscorts` runs the instant the
 player is placed on arrival (`completeJump`), and each escort **inherits the
 player's velocity**, so the fleet exits hyperspace moving together and
@@ -557,7 +565,11 @@ explodes — spïn 401 fireball, or 402 + sparks when DeathDelay ≥ 60
 `ShieldRe` frames — **except while disabled**: a disabled ship drifts
 with collapsed shields and stays a boarding target (the bible is silent
 on this; classic gameplay — e.g. mïsn rescue goals that require boarding
-a disabled ship — settles it).
+a disabled ship — settles it). A disabled ship is **powerless**: its engine
+flame is cut (the `thrusting` flag is cleared the instant it's disabled and
+kept clear), and it **coasts down** rather than flying off — velocity is damped
+~2%/frame so a fast hull settles to a slow drift (which is also what lets you
+catch up and board it).
 
 **Warship AI** (AIType 3/4 when hostile): steer toward the enemy; thrust
 while `dist > 260` px and aligned; inside 120 px keep thrusting (fly-by,
