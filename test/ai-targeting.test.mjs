@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nearest, aiEnemies, combatTarget, aiKind } from '../engine/shell/ai-targeting.js';
+import {
+  nearest,
+  aiEnemies,
+  combatTarget,
+  aiKind,
+  aiSecondaryInRange,
+} from '../engine/shell/ai-targeting.js';
 
 // A govt-relations interface (see aiEnemies): 128 & 129 are allies; 128 & 130
 // are enemies; 140 is xenophobic (attacks strangers). Ally/enemy are symmetric.
@@ -31,6 +37,19 @@ test('aiKind: picks the strategy from disposition, in precedence order', () => {
   assert.equal(aiKind({ aiType: 2, hostile: false }, true), 'warship'); // trader with a live foe
   assert.equal(aiKind({ aiType: 2, hostile: false }, false), 'trader'); // calm trader
   assert.equal(aiKind({ aiType: 1 }, false), 'trader'); // plain trader
+});
+
+test('aiSecondaryInRange: homing fires at full reach, unguided only up close', () => {
+  const reach = 1000;
+  // homing (torpedo/missile, guidance 1/2): anywhere within reach
+  assert.equal(aiSecondaryInRange(1, reach, 900), true);
+  assert.equal(aiSecondaryInRange(2, reach, 1000), true); // at the edge
+  assert.equal(aiSecondaryInRange(1, reach, 1200), false); // beyond reach
+  // unguided (rocket 6 / bomb 5 / dumb-fire -1): held until within half the reach
+  assert.equal(aiSecondaryInRange(6, reach, 900), false); // in reach but too far to commit
+  assert.equal(aiSecondaryInRange(6, reach, 500), true); // ≤ 0.5·reach → fire
+  assert.equal(aiSecondaryInRange(5, reach, 400), true);
+  assert.equal(aiSecondaryInRange(-1, reach, 600), false); // 0.6·reach still too far
 });
 
 test('nearest: closest eligible candidate, skipping self and the ineligible', () => {

@@ -593,7 +593,14 @@ catch up and board it).
 while `dist > 260` px and aligned; inside 120 px keep thrusting (fly-by,
 classic's charge-past behavior); fire all ready weapons whose range
 (`Speed/100 · Count`) covers the distance whenever within `2·turn`
-degrees of the firing solution. Traders under fire: wimpy (1) flees —
+degrees of the firing solution. "All weapons" means the primary guns
+**plus its secondaries** — an AI ship fires all of them, not a single
+selected slot the way the player picks one with **X**. It picks
+secondaries by range awareness: **homing** ordnance (guided torpedoes and
+missiles, guidance 1/2) launches at any distance within its reach, while
+**unguided** ordnance (rockets, bombs, dumb-fire) is held until the
+target is close — within ~half the weapon's reach — because it can't
+track and rockets start slow. Traders under fire: wimpy (1) flees —
 steer to the attack bearing + 180° and thrust; brave (2) turns warship
 against its attacker. **Hostility**: govt flag `alwaysAttacksPlayer` →
 hostile to the player on sight; `xenophobic` → hostile to everyone
