@@ -30,6 +30,21 @@ export function aiKind(s, hasFoe) {
   return 'trader';
 }
 
+/* Fraction of a weapon's reach an AI closes to before firing an *unguided*
+ * secondary (rocket/bomb/dumb-fire): it can't track and rockets start slow, so
+ * hold until the target is well inside range. Tuned (approximation). */
+const UNGUIDED_FIRE_FRAC = 0.5;
+
+/* Should an AI fire this secondary at the current target distance (spec: "Warship
+ * AI")? Homing weapons (guidance 1/2 — torpedoes, missiles) track, so they launch
+ * at any distance within their reach; unguided ordnance is short-range, held
+ * until the target is within UNGUIDED_FIRE_FRAC of the reach. `reach` is the
+ * weapon's px range (EV.weaponRange). */
+export function aiSecondaryInRange(guidance, reach, dist) {
+  if (guidance === 1 || guidance === 2) return dist <= reach; // homing → long range
+  return dist <= reach * UNGUIDED_FIRE_FRAC; // unguided → close in
+}
+
 /* Nearest candidate to `self` for which `eligible(o)` is true, or null. `self`
  * is skipped. Distance is straight-line; ties go to the earlier candidate. */
 export function nearest(self, candidates, eligible) {

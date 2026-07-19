@@ -18,7 +18,20 @@ import { S } from './01-state.js';
 import { isPort, spawnAI } from './02-spawning.js';
 import { fire } from './04-combat.js';
 import { govtAllies, govtEnemies, govts, onMissionEscortArrived } from './08-missions.js';
-import { aiKind, combatTarget as combatTargetOf, nearest } from './ai-targeting.js';
+import {
+  aiKind,
+  aiSecondaryInRange,
+  combatTarget as combatTargetOf,
+  nearest,
+} from './ai-targeting.js';
+
+/* Fire a ship's primary guns, then any ready secondary that suits the range —
+ * homing weapons at their full reach, unguided ordnance only up close (spec:
+ * "Warship AI"). `dist` is the current distance to the target. */
+function fireWeapons(s, target, dist) {
+  fire(s, target, true); // primary guns
+  fire(s, target, false, (w) => aiSecondaryInRange(w.rec.Guidance, EV.weaponRange(w.rec), dist));
+}
 
 class AI {
   // eslint-disable-next-line no-unused-vars
@@ -37,7 +50,7 @@ class EscortAI extends AI {
     );
     if (tgt && !S.gameOver && !S.landedAt) {
       const r = s.stepWarship(tgt.x, tgt.y);
-      if (r.aligned && r.dist < EV.maxWeaponRange(s)) fire(s, tgt, true);
+      if (r.aligned && r.dist < EV.maxWeaponRange(s)) fireWeapons(s, tgt, r.dist);
     } else {
       s.stepWarship(world.player.x, world.player.y); // shadow the player
     }
@@ -86,7 +99,7 @@ class WarshipAI extends AI {
       return;
     }
     const r = s.stepWarship(t.x, t.y);
-    if (r.aligned && r.dist < EV.maxWeaponRange(s)) fire(s, t, true);
+    if (r.aligned && r.dist < EV.maxWeaponRange(s)) fireWeapons(s, t, r.dist);
   }
 }
 

@@ -317,3 +317,10 @@ test('maxWeaponRange: beams reach Speed, projectiles shotSpeed·Count, bays excl
   assert.equal(EV.maxWeaponRange({ weapons: [beam, gun, bay] }), 300); // max of the real weapons
   assert.equal(EV.maxWeaponRange({ weapons: [] }), 0);
 });
+
+test('weaponRange: per-weapon reach — beam Speed, projectile shotSpeed·Count, bay 0', () => {
+  assert.equal(EV.weaponRange({ Guidance: 0, Speed: 200 }), 200); // beam
+  assert.equal(EV.weaponRange({ Guidance: 3, Speed: 150 }), 150); // turreted beam
+  assert.equal(EV.weaponRange({ Guidance: 1, Speed: 500, Count: 60 }), 300); // 5 · 60
+  assert.equal(EV.weaponRange({ Guidance: 99, Speed: 9999, Count: 9 }), 0); // fighter bay
+});
