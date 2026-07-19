@@ -199,10 +199,10 @@ export function fire(e, target, primary, weaponFilter) {
       // selSecondary) fire every ready secondary they carry (spec: "Warship AI").
       if (e === player && w !== e.selSecondary) continue;
     }
+    if (w.cool > 0) continue;
     // Optional per-weapon gate: the AI passes one so it holds unguided ordnance
     // until the target is close (weapon-range awareness); the player passes none.
     if (weaponFilter && !weaponFilter(w)) continue;
-    if (w.cool > 0) continue;
     const g = w.rec.Guidance;
     if (g === 99) {
       // fighter bay: launch a carried ship (player only)
