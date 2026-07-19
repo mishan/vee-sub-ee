@@ -530,6 +530,7 @@ the shot heading as `Impact / (10 · victim Mass)` px/frame
 (approximation — bible says only "inversely proportional to mass");
 `ExplodType` −1 none / 0 small / 1 big / 2 huge → explosion spïns
 400/401/402; `ProxRadius` detonation distance (0 = contact);
+`BlastRadius` area-of-effect radius in px (0 = single-target);
 `MiscFlags` 0x0002 = secondary-trigger weapon.
 
 **Shot kinematics.** All shots inherit the shooter's velocity at launch
@@ -544,6 +545,22 @@ and accelerate along it by `Speed/100/15` per frame up to max; everything
 else flies ballistically. `life` decrements each frame; the shot expires
 at 0. A shot hits a ship (never its shooter) when
 `dist < max(ProxRadius, half the ship sprite)`.
+
+**Blast (area effect).** The ship a shot strikes always takes the hit (along the
+shot heading), as with any weapon. A weapon with `BlastRadius > 0` *additionally*
+damages every **other** eligible ship whose centre is within `BlastRadius` px of
+the impact point — same damage formula, with a **radial** impact kick (pushed
+away from the blast centre). (The struck ship is damaged even when a small blast
+radius doesn't reach its centre from the edge-of-hull impact point; the radius
+only governs the fan-out to *other* ships.) When a shot detonates against an
+asteroid there's no struck ship, so a blast damages whatever ships are within the
+radius of that impact. `BlastRadius == 0` is a plain single-target hit. The
+shooter and its allies are exempt, the same friendly-fire rule as direct hits. (A blast on a beam — the Particle/Tractor beams carry a 1 px
+BlastRadius — is subsumed by the beam's own single-ship hit and not modelled
+separately.) The **explosion graphic scales with the blast**: its `ExplodType`
+sprite (400/401/402) is drawn enlarged so its diameter spans the blast radius —
+floored at the sprite's native size and capped — so a bigger-radius weapon shows
+a correspondingly bigger fireball.
 
 **Beams** (guidance 0, 3): no projectile — a ray of length `Speed` px
 (beam reuses the field) from the shooter's nose along its heading

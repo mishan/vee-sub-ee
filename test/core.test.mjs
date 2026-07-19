@@ -279,6 +279,22 @@ test('shotHitsShip: within the larger of the shot prox radius and the ship half'
   assert.equal(EV.shotHitsShip(shot, { x: 10, y: 0 }, 0), false); // exactly on the radius (strict <)
 });
 
+test('inBlastRadius: ship centre within (inclusive) the blast radius of the impact', () => {
+  assert.equal(EV.inBlastRadius(0, 0, { x: 20, y: 0 }, 25), true); // inside
+  assert.equal(EV.inBlastRadius(0, 0, { x: 30, y: 0 }, 25), false); // outside
+  assert.equal(EV.inBlastRadius(0, 0, { x: 25, y: 0 }, 25), true); // exactly on the edge (inclusive)
+  assert.equal(EV.inBlastRadius(100, 100, { x: 100, y: 100 }, 5), true); // at the impact point
+  assert.equal(EV.inBlastRadius(0, 0, { x: 3, y: 4 }, 5), true); // 3-4-5: distance 5 == radius
+});
+
+test('explosionScale: native for a plain hit, scaled to the blast (capped) for a big one', () => {
+  assert.equal(EV.explosionScale(0, 32, 3), 1); // no blast → native
+  assert.equal(EV.explosionScale(8, 32, 3), 1); // 16 px diameter < 32 sprite → native
+  assert.equal(EV.explosionScale(25, 32, 3), (2 * 25) / 32); // 50/32 = 1.5625× (Heavy Rockets)
+  assert.equal(EV.explosionScale(55, 32, 3), 3); // 110/32 = 3.4 → capped at 3 (Space Bomb)
+  assert.equal(EV.explosionScale(100, 32, 3), 3); // capped
+});
+
 test('beamHitDist: distance along the beam to a target, or Infinity on a miss', () => {
   // beam from the origin along +x (unit dir), up to length 500
   const hit = (tx, ty, half) => EV.beamHitDist(0, 0, 1, 0, 500, { x: tx, y: ty }, half);
