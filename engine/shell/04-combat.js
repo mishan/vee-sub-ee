@@ -237,10 +237,17 @@ export function fire(e, target, primary) {
   }
 }
 
-export function spawnExplosion(x, y, type) {
+// A big-blast weapon shows a correspondingly bigger fireball (spec: "Blast"):
+// pass its BlastRadius as `radius` and the sprite is scaled so its diameter spans
+// the blast, floored at the sprite's native size and capped so it can't fill the
+// screen. Ordinary hits/deaths pass no radius → native size (scale 1).
+const EXPLOSION_MAX_SCALE = 3;
+export function spawnExplosion(x, y, type, radius = 0) {
   const spin = 400 + Math.max(0, Math.min(type, 2));
   const meta = MANIFEST.spins[spin];
-  if (meta) world.explosions.push({ x, y, spin, f: 0, frames: meta.frames, tick: 0 });
+  if (!meta) return;
+  const scale = EV.explosionScale(radius, meta.frameW, EXPLOSION_MAX_SCALE);
+  world.explosions.push({ x, y, spin, f: 0, frames: meta.frames, tick: 0, scale });
 }
 /* Begin a ship's destruction: the fireball plays immediately over the ship
  * as it breaks up (was flash-then-boom, which looked backwards). The ship

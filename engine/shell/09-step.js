@@ -397,7 +397,9 @@ export class World {
    * The shooter and its allies are exempt either way (spec: "Blast"). */
   detonateShot(shot, bx, by, everyone, friendly, directTarget) {
     const rec = shot.rec;
-    if (rec.ExplodType >= 0) spawnExplosion(bx, by, rec.ExplodType);
+    // A blast weapon's fireball is scaled to its radius (bigger blast → bigger
+    // explosion); a plain hit (BlastRadius 0) draws at the sprite's native size.
+    if (rec.ExplodType >= 0) spawnExplosion(bx, by, rec.ExplodType, rec.BlastRadius);
     if (rec.BlastRadius > 0) {
       for (const v of everyone) {
         if (v === shot.owner || v.deathT >= 0 || friendly(shot.owner, v)) continue;

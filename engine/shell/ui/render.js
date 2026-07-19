@@ -543,16 +543,20 @@ export function render() {
     const s = sprites.get(ex.spin);
     if (!s || !s.ready) continue;
     const fi = Math.min(ex.f, meta.frames - 1);
+    // A blast explosion is drawn scaled (ex.scale ≥ 1) so a bigger blast radius
+    // shows a bigger fireball; ordinary explosions have scale 1 (native size).
+    const dw = meta.frameW * (ex.scale || 1),
+      dh = meta.frameH * (ex.scale || 1);
     ctx.drawImage(
       s.img,
       (fi % meta.xTiles) * meta.frameW,
       Math.floor(fi / meta.xTiles) * meta.frameH,
       meta.frameW,
       meta.frameH,
-      x - meta.frameW / 2,
-      y - meta.frameH / 2,
-      meta.frameW,
-      meta.frameH,
+      x - dw / 2,
+      y - dh / 2,
+      dw,
+      dh,
     );
   }
   drawPanel(w, h);

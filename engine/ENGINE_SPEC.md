@@ -554,7 +554,10 @@ impact kick (pushed away from the blast centre). `BlastRadius == 0` keeps the
 single-target hit. The shooter and its allies are exempt, the same friendly-fire
 rule as direct hits. (A blast on a beam — the Particle/Tractor beams carry a 1 px
 BlastRadius — is subsumed by the beam's own single-ship hit and not modelled
-separately.)
+separately.) The **explosion graphic scales with the blast**: its `ExplodType`
+sprite (400/401/402) is drawn enlarged so its diameter spans the blast radius —
+floored at the sprite's native size and capped — so a bigger-radius weapon shows
+a correspondingly bigger fireball.
 
 **Beams** (guidance 0, 3): no projectile — a ray of length `Speed` px
 (beam reuses the field) from the shooter's nose along its heading
