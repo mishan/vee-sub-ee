@@ -546,13 +546,16 @@ else flies ballistically. `life` decrements each frame; the shot expires
 at 0. A shot hits a ship (never its shooter) when
 `dist < max(ProxRadius, half the ship sprite)`.
 
-**Blast (area effect).** When a shot detonates — on hitting a ship, or against
-an asteroid — a weapon with `BlastRadius > 0` deals its full damage to *every*
-eligible ship whose centre is within `BlastRadius` px of the impact point, not
-only the ship it struck. Same damage formula as a direct hit, with a **radial**
-impact kick (pushed away from the blast centre). `BlastRadius == 0` keeps the
-single-target hit. The shooter and its allies are exempt, the same friendly-fire
-rule as direct hits. (A blast on a beam — the Particle/Tractor beams carry a 1 px
+**Blast (area effect).** The ship a shot strikes always takes the hit (along the
+shot heading), as with any weapon. A weapon with `BlastRadius > 0` *additionally*
+damages every **other** eligible ship whose centre is within `BlastRadius` px of
+the impact point — same damage formula, with a **radial** impact kick (pushed
+away from the blast centre). (The struck ship is damaged even when a small blast
+radius doesn't reach its centre from the edge-of-hull impact point; the radius
+only governs the fan-out to *other* ships.) When a shot detonates against an
+asteroid there's no struck ship, so a blast damages whatever ships are within the
+radius of that impact. `BlastRadius == 0` is a plain single-target hit. The
+shooter and its allies are exempt, the same friendly-fire rule as direct hits. (A blast on a beam — the Particle/Tractor beams carry a 1 px
 BlastRadius — is subsumed by the beam's own single-ship hit and not modelled
 separately.) The **explosion graphic scales with the blast**: its `ExplodType`
 sprite (400/401/402) is drawn enlarged so its diameter spans the blast radius —

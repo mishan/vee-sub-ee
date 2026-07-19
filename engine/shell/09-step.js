@@ -400,14 +400,19 @@ export class World {
     // A blast weapon's fireball is scaled to its radius (bigger blast → bigger
     // explosion); a plain hit (BlastRadius 0) draws at the sprite's native size.
     if (rec.ExplodType >= 0) spawnExplosion(bx, by, rec.ExplodType, rec.BlastRadius);
+    // The ship it struck always takes the hit (along the shot heading) — even for
+    // a small blast whose radius doesn't reach the ship's centre from the impact
+    // point at its edge.
+    if (directTarget) hitShip(directTarget, rec, shot.heading, shot.owner);
+    // A blast weapon additionally damages every *other* eligible ship within the
+    // radius, with a radial kick away from the blast centre.
     if (rec.BlastRadius > 0) {
       for (const v of everyone) {
-        if (v === shot.owner || v.deathT >= 0 || friendly(shot.owner, v)) continue;
+        if (v === directTarget || v === shot.owner || v.deathT >= 0 || friendly(shot.owner, v))
+          continue;
         if (EV.inBlastRadius(bx, by, v, rec.BlastRadius))
           hitShip(v, rec, EV.bearing(v.x - bx, v.y - by), shot.owner);
       }
-    } else if (directTarget) {
-      hitShip(directTarget, rec, shot.heading, shot.owner);
     }
   }
 
