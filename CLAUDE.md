@@ -11,8 +11,7 @@ branch.)
 ## Git workflow
 
 - Create a new branch for each piece of work; never commit directly to main.
-- Commit as Misha (`Misha Nasledov <misha@nasledov.com>`). Do NOT add
-  Co-authored-by tags or any AI attribution.
+- Do NOT add Co-authored-by tags or any AI attribution.
 - Review feedback on a branch goes in separate commits — don't amend or
   squash the commits under review.
 - Stacked branches are **rebased on top of each other, never merged** —
