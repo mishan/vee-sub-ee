@@ -17,7 +17,7 @@
  */
 'use strict';
 
-const SHELL = 've-shell-v1'; // bump when the loader app shell changes
+const SHELL = 've-shell-v2'; // bump when the loader app shell changes
 const GAME = 've-game'; // written by launch.js (the built game)
 const SCOPE = new URL(self.registration.scope); // …/loader/
 const GAME_PATH = new URL('game/', SCOPE).pathname; // …/loader/game/
@@ -81,7 +81,14 @@ self.addEventListener('fetch', (e) => {
 
   // The assembled game build: immutable per build, served from 've-game'.
   if (u.pathname.startsWith(GAME_PATH)) {
-    e.respondWith(fromCache(GAME, req).then((r) => r || fetch(req)));
+    // ignoreSearch: flight.html takes URL params (?syst=, ?land=1, …) but is
+    // cached once, without a query; an exact match would 404 those.
+    e.respondWith(
+      caches
+        .open(GAME)
+        .then((c) => c.match(req, { ignoreSearch: true }))
+        .then((r) => r || fetch(req)),
+    );
     return;
   }
 
