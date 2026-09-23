@@ -48,6 +48,9 @@
   #resume { display: none; align-items: center; gap: 14px; flex-wrap: wrap;
     background: #0c1c12; border: 1px solid #2f9c57; border-radius: 12px; padding: 16px 18px; margin: 0 0 18px; }
   #resume .reimport { color: #8aa0bf; font-size: 13px; margin-left: auto; }
+  #getgame { margin: 14px 0 0; color: #8aa0bf; font-size: 14px; }
+  #getgame summary { cursor: pointer; color: #cfe3ff; }
+  #getgame p { margin: 8px 0 0; }
   #plugins { margin: 0 0 18px; }
   #pluginList { list-style: none; margin: 10px 0 0; padding: 0; }
   #pluginList li { display: flex; align-items: center; gap: 10px; background: #0a1120;
@@ -66,7 +69,8 @@
 <body>
 <div class="wrap">
   <h1>Vₑ — Escape Velocity, recreated</h1>
-  <p class="sub">Drop your own copy of the classic Mac game and it's decoded right here in your browser — nothing is uploaded.</p>
+  <p class="sub">Drop your own copy of the classic Mac game and it's decoded right here in your browser — nothing is uploaded.
+    · <a href="https://github.com/mishan/vee-sub-ee" target="_blank" rel="noopener">Source</a></p>
   <button id="installBtn" class="play" style="display:none;margin-bottom:18px;padding:7px 14px;font-size:13px;background:#14243f;border-color:#2a3550" title="Install Vₑ as an app that opens offline">⤓ Install app</button>
 
   <div id="resume">
@@ -80,6 +84,19 @@
     <div class="hint">…or click to choose the file. Everything stays on your device.</div>
     <input id="file" type="file" accept=".sit,.sit.bin,application/octet-stream" hidden>
   </div>
+
+  <details id="getgame">
+    <summary>Don't have the game?</summary>
+    <p>Vₑ is only the engine — it ships none of Ambrosia's art, sound, or story, so you
+      bring your own copy of the original Mac game. The archived download on
+      <a href="https://macintoshgarden.org/games/escape-velocity" target="_blank" rel="noopener">Macintosh Garden</a>
+      works: grab <b>Escape_Velocity_1.0.4.sit</b> and drop it here as is (no need to
+      unpack it). Any StuffIt&nbsp;5 archive of the installed game folder works too,
+      including 1.0.5.</p>
+    <p>The <i>installer</i> and <i>updater</i> downloads won't load (they're a
+      proprietary installer format, not the game files). Escape Velocity&nbsp;Nova
+      and Override are different games.</p>
+  </details>
 
   <pre id="log"></pre>
 
@@ -266,7 +283,7 @@ async function load(file) {
     log('Parsing StuffIt 5 archive…');
     const entries = parseSit(sit);
     const res = {}; for (const e of entries) if (e.isResource) res[e.name] = e;
-    for (const n of ['EV Data', 'EV Graphics', 'EV Sounds', 'EV Titles']) if (!res[n]) throw new Error(`"${n}" not found — is this the Escape Velocity archive?`);
+    for (const n of ['EV Data', 'EV Graphics', 'EV Sounds', 'EV Titles']) if (!res[n]) throw new Error(`"${n}" not found — this needs an archive of the installed game folder (e.g. Escape_Velocity_1.0.4.sit), not an installer or updater. See "Don't have the game?" above.`);
 
     log('Decompressing forks (LZ+Huffman)…');
     const forks = {};
