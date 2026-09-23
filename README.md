@@ -118,6 +118,14 @@ around it — your data is decoded on your device and never touches a server.
 (This isn't legal advice; "abandonware" has no legal standing, and Ambrosia's
 closure didn't release the rights.)
 
+That said, EV hasn't been sold in years, and nobody expects you to pay for it:
+in October 2023 Andrew Welch, Ambrosia's former president, released
+[Decoder Ring](https://macintoshgarden.org/games/decoder-ring), a free keygen
+that generates valid licenses for every Ambrosia product, "for free
+distribution". That's why the loader points players at the archived download
+rather than a store. Vₑ itself never checks registration, since it reads only
+the game's data files.
+
 ## References
 
 Field-by-field record docs live in the community-archived **EV/Nova Bibles**
