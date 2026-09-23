@@ -81,7 +81,14 @@ self.addEventListener('fetch', (e) => {
 
   // The assembled game build: immutable per build, served from 've-game'.
   if (u.pathname.startsWith(GAME_PATH)) {
-    e.respondWith(fromCache(GAME, req).then((r) => r || fetch(req)));
+    // ignoreSearch: flight.html takes URL params (?syst=, ?land=1, …) but is
+    // cached once, without a query; an exact match would 404 those.
+    e.respondWith(
+      caches
+        .open(GAME)
+        .then((c) => c.match(req, { ignoreSearch: true }))
+        .then((r) => r || fetch(req)),
+    );
     return;
   }
 
