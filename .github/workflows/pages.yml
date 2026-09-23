@@ -1,0 +1,66 @@
+# Deploy the browser loader to GitHub Pages. The site is data-free: it holds only
+# our engine (the esbuild bundles), the loader, and the decoders/schemas it
+# fetches. Players bring their own .sit, decoded client-side (see loader/README).
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build engine + shell bundles
+        run: make engine/core.bundle.js engine/shell.bundle.js
+
+      # Stage exactly what the loader serves or fetches — an allowlist, so no
+      # stray file (and never any game data) can ride along.
+      - name: Stage site
+        run: |
+          mkdir -p _site/engine
+          cp index.html evrsrc.js semantics.js flight_template.html _site/
+          cp -r loader schemas _site/
+          rm -f _site/loader/verify.js _site/loader/evassets.js
+          cp engine/core.bundle.js engine/shell.bundle.js _site/engine/
+          touch _site/.nojekyll
+
+      - name: Check the site is data-free
+        run: |
+          bad=$(find _site \( -iname '*.rsrc' -o -iname '*.sit' -o -iname '*.bin' \
+            -o -name evassets -o -name flight.html -o -name galaxy.html -o -name evdata.json \) -print)
+          if [ -n "$bad" ]; then echo "Game data in the site: $bad"; exit 1; fi
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

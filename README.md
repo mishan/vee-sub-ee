@@ -7,9 +7,14 @@ backwards) is a from-scratch reimplementation of Ambrosia Software's classic
 
 ## Play it
 
-The easiest way needs no command line and no tools. Serve the repo over http
-(a service worker needs a secure context; `localhost` counts) and open the
-loader:
+**[Play in your browser →](https://mishan.github.io/vee-sub-ee/)** Drop your
+copy of the original game's `.sit` onto the page. Don't have one? The archived
+[Macintosh Garden](https://macintoshgarden.org/games/escape-velocity) download
+`Escape_Velocity_1.0.4.sit` works as is (the *installer*/*updater* downloads
+don't — they're a proprietary installer format, not the game files).
+
+To run it locally instead, serve the repo over http (a service worker needs a
+secure context; `localhost` counts) and open the loader:
 
 ```sh
 python3 -m http.server        # from the repo root
@@ -21,6 +26,10 @@ unpacking, resource decoding, QuickDraw graphics, sound, and building the
 engine — happens **in your browser**. Nothing is uploaded; your data never
 leaves the device. See [`loader/README.md`](loader/README.md) for how the
 in-browser pipeline works.
+
+The hosted site is deployed from `main` by `.github/workflows/pages.yml`, which
+builds the engine bundles and publishes an allowlist of engine/loader files — no
+game data, ever.
 
 Prefer the command line? `make` builds `flight.html` from a local copy of the
 data (see [Building](#building-from-source)).
