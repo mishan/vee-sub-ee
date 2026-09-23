@@ -22,9 +22,12 @@ ship sprites, the title art, decoded ship/system/character counts, a playable
 sound — and **▶ Launch the game** builds the engine from your data and plays it
 in the same tab.
 
-The bundled *installer* (`EV_Installer_1.0.5.bin`) is Installer VISE (`SVCT`),
-a proprietary format with no maintained open tooling — use the `.sit`, which is
-a StuffIt 5 archive of the installed game folder.
+Any StuffIt 5 archive of the installed game folder works: the 1.0.5 rip
+(method 13) and Macintosh Garden's `Escape_Velocity_1.0.4.sit` (method 15,
+"Arsenic") both load. The *installers* (`EV_Installer_1.0.5.bin`, the 1.0.x
+`_Install.sit`s) are Installer VISE (`SVCT`), a proprietary format with no
+maintained open tooling, and the `_Upd.sit` is a patcher — neither carries the
+game files.
 
 ## How it works
 
@@ -45,7 +48,7 @@ build (`evconvert.sh` + `evsprites.sh` + `evexport.js`) uses.
 
 | file | role |
 |---|---|
-| `evsit.js` | parse a StuffIt 5 archive; decompress its forks (method 13, "LZ+Huffman") |
+| `evsit.js` | parse a StuffIt 5 archive; decompress its forks (method 13 "LZ+Huffman", method 15 "Arsenic") |
 | `evpict.js` | QuickDraw PICT → RGBA |
 | `evsnd.js` | classic-Mac `snd ` → PCM |
 | `evsprite.js` | composite a sprite PICT + mask PICT into one transparent sheet |
@@ -109,6 +112,13 @@ this is a test-harness limitation, not a defect; a live tab persists normally.)
   header high-nibble 0), whose code lengths are RLE-encoded via a fixed
   meta-code, so the large static Huffman tables are not needed. Forks are stored
   as StuffIt entry-tree records; the resource fork precedes the data fork.
+- **StuffIt method 15** (`evsit.js`): "Arsenic" — an adaptive binary arithmetic
+  coder (26-bit, MSB-first) over Burrows–Wheeler blocks with move-to-front and
+  bijective zero-run coding, then bzip2-style RLE (four equal bytes + a repeat
+  count). Every fork of Macintosh Garden's 1.0.4 archive decodes with its stream
+  CRC-32 matching; its Sounds/Music/Titles forks are resource-for-resource
+  identical to the 1.0.5 rip's. Randomized blocks aren't modeled (none seen);
+  they fail loudly rather than decode wrong.
 
 ## First-run caching
 
@@ -155,4 +165,5 @@ cache the first import wrote.
 
 The StuffIt-5 method-13 format was reimplemented from the description in
 XADMaster / The Unarchiver (`XADStuffIt13Handle`, `XADPrefixCode`,
-`XADStuffIt5Parser`) — the format and its constants, not their code.
+`XADStuffIt5Parser`), and method 15 from `XADStuffItArsenicHandle` — the format
+and its constants, not their code.

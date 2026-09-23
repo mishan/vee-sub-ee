@@ -1,9 +1,11 @@
 /*
- * evsit.js — decompress StuffIt 5 method 13 ("LZ+Huffman") streams, pure JS.
+ * evsit.js — decompress StuffIt 5 method 13 ("LZ+Huffman") and method 15
+ * ("Arsenic") streams, pure JS.
  *
- * Lets the browser loader accept a dropped `.sit` directly: this is the
- * decompressor; a StuffIt-5 archive parser (entry tree → per-fork streams)
- * sits on top. EV's `.sit` uses method 13 exclusively, and every fork uses the
+ * Lets the browser loader accept a dropped `.sit` directly: these are the
+ * decompressors; a StuffIt-5 archive parser (entry tree → per-fork streams)
+ * sits on top. Copies of EV in the wild use one or the other (the 1.0.5 rip is
+ * method 13, Macintosh Garden's 1.0.4 is method 15). Method-13 forks all use the
  * *dynamic* table variant (header high-nibble 0), so the large static Huffman
  * tables are not needed here.
  *
@@ -230,6 +232,226 @@ function unstuff13(comp, expectedLen) {
   return out;
 }
 
+/* ---------------- StuffIt method 15 ("Arsenic") ----------------
+ * StuffIt 5's default compressor, used by e.g. the Macintosh Garden copy of EV:
+ * an adaptive binary arithmetic coder over a Burrows–Wheeler block transform
+ * with move-to-front and zero-run coding, then a bzip2-style RLE (four equal
+ * bytes are followed by a repeat count). Reimplemented from the format as
+ * documented by XADMaster (XADStuffItArsenicHandle) — the algorithm and its
+ * constants, not their code. The arithmetic coder reads bits MSB-first. */
+const ARS_BITS = 26,
+  ARS_ONE = 1 << (ARS_BITS - 1),
+  ARS_HALF = 1 << (ARS_BITS - 2);
+
+/* MSB-first bit reader; like BitLE, reading past the end throws. */
+class BitBE {
+  constructor(bytes) {
+    this.b = bytes;
+    this.p = 0;
+    this.bit = 7;
+  }
+  nextBit() {
+    if (this.p >= this.b.length)
+      throw new Error('StuffIt bitstream exhausted (truncated or corrupt data)');
+    const v = (this.b[this.p] >> this.bit) & 1;
+    if (--this.bit < 0) {
+      this.bit = 7;
+      this.p++;
+    }
+    return v;
+  }
+}
+
+/* Adaptive frequency model over symbols first..last. Each hit adds `inc`; when
+ * the total passes `limit` every frequency is halved (rounding up). */
+class ArsModel {
+  constructor(first, last, inc, limit) {
+    this.first = first;
+    this.inc = inc;
+    this.limit = limit;
+    this.freq = new Int32Array(last - first + 1);
+    this.reset();
+  }
+  reset() {
+    this.freq.fill(this.inc);
+    this.total = this.inc * this.freq.length;
+  }
+  bump(n) {
+    this.freq[n] += this.inc;
+    this.total += this.inc;
+    if (this.total > this.limit) {
+      this.total = 0;
+      for (let i = 0; i < this.freq.length; i++) {
+        this.freq[i] = (this.freq[i] + 1) >> 1;
+        this.total += this.freq[i];
+      }
+    }
+  }
+}
+
+class ArsDecoder {
+  constructor(bytes) {
+    this.r = new BitBE(bytes);
+    this.range = ARS_ONE;
+    this.code = 0;
+    for (let i = 0; i < ARS_BITS; i++) this.code = (this.code << 1) | this.r.nextBit();
+  }
+  symbol(m) {
+    const n = m.freq.length;
+    const step = Math.floor(this.range / m.total);
+    const target = Math.floor(this.code / step);
+    let cum = 0,
+      s = 0;
+    for (; s < n - 1; s++) {
+      if (cum + m.freq[s] > target) break;
+      cum += m.freq[s];
+    }
+    const low = step * cum;
+    this.code -= low;
+    if (cum + m.freq[s] === m.total) this.range -= low;
+    else this.range = m.freq[s] * step;
+    while (this.range <= ARS_HALF) {
+      this.range <<= 1;
+      this.code = (this.code << 1) | this.r.nextBit();
+    }
+    m.bump(s);
+    return s + m.first;
+  }
+  // `bits` binary symbols, assembled LSB-first.
+  bits(m, bits) {
+    let v = 0;
+    for (let i = 0; i < bits; i++) if (this.symbol(m)) v += 2 ** i;
+    return v;
+  }
+}
+
+// Standard CRC-32 (reflected, poly 0xEDB88320), checked against the stream's own.
+let CRC_TABLE = null;
+function crc32(u8, len) {
+  if (!CRC_TABLE) {
+    CRC_TABLE = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      CRC_TABLE[n] = c >>> 0;
+    }
+  }
+  let c = 0xffffffff;
+  for (let i = 0; i < len; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+/* Decompress one method-15 stream to `expectedLen` bytes. */
+function unstuff15(comp, expectedLen) {
+  const fail = (why) => {
+    throw new Error('StuffIt method 15: ' + why);
+  };
+  const d = new ArsDecoder(comp);
+  const initial = new ArsModel(0, 1, 1, 256);
+  const selector = new ArsModel(0, 10, 8, 1024);
+  const mtfModels = [
+    new ArsModel(2, 3, 8, 1024),
+    new ArsModel(4, 7, 4, 1024),
+    new ArsModel(8, 15, 4, 1024),
+    new ArsModel(16, 31, 4, 1024),
+    new ArsModel(32, 63, 2, 1024),
+    new ArsModel(64, 127, 2, 1024),
+    new ArsModel(128, 255, 1, 1024),
+  ];
+  if (d.bits(initial, 8) !== 0x41 || d.bits(initial, 8) !== 0x73) fail('bad signature');
+  const blockbits = d.bits(initial, 4) + 9;
+  const blocksize = 1 << blockbits;
+  let endOfBlocks = d.bits(initial, 1) === 1;
+  let streamCrc = null;
+
+  const out = new Uint8Array(expectedLen);
+  const block = new Uint8Array(blocksize);
+  const next = new Uint32Array(blocksize);
+  const mtf = new Uint8Array(256);
+  const counts = new Uint32Array(256);
+  let pos = 0,
+    last = -1,
+    run = 0;
+  const emit = (b) => {
+    if (pos >= expectedLen) fail('output overruns the declared length');
+    out[pos++] = b;
+  };
+
+  while (!endOfBlocks) {
+    for (let i = 0; i < 256; i++) mtf[i] = i;
+    const mtfDecode = (k) => {
+      const v = mtf[k];
+      mtf.copyWithin(1, 0, k);
+      mtf[0] = v;
+      return v;
+    };
+    const randomized = d.bits(initial, 1);
+    // The randomization table (for blocks the compressor judged degenerate) isn't
+    // modeled; no EV archive seen uses it, so refuse rather than corrupt output.
+    if (randomized) fail('randomized blocks are not supported');
+    let index = d.bits(initial, blockbits);
+    let n = 0;
+    for (;;) {
+      let sel = d.symbol(selector);
+      if (sel === 0 || sel === 1) {
+        // zero-run: bijective base-2 digits (sel 0 = 1, sel 1 = 2), LSB first
+        let weight = 1,
+          zeros = 0;
+        while (sel < 2) {
+          zeros += sel === 0 ? weight : 2 * weight;
+          weight *= 2;
+          sel = d.symbol(selector);
+        }
+        if (n + zeros > blocksize) fail('block overflow');
+        block.fill(mtfDecode(0), n, n + zeros);
+        n += zeros;
+      }
+      if (sel === 10) break;
+      const sym = sel === 2 ? 1 : d.symbol(mtfModels[sel - 3]);
+      if (n >= blocksize) fail('block overflow');
+      block[n++] = mtfDecode(sym);
+    }
+    if (index >= n) fail('bad transform index');
+    selector.reset();
+    for (const m of mtfModels) m.reset();
+    if (d.bits(initial, 1)) {
+      streamCrc = d.bits(initial, 32) >>> 0;
+      endOfBlocks = true;
+    }
+
+    // Inverse BWT: next[] links each position to its successor in the text.
+    counts.fill(0);
+    for (let i = 0; i < n; i++) counts[block[i]]++;
+    const start = new Uint32Array(256);
+    for (let c = 0, total = 0; c < 256; c++) {
+      start[c] = total;
+      total += counts[c];
+    }
+    for (let i = 0; i < n; i++) next[start[block[i]]++] = i;
+
+    // Walk the text, undoing the RLE: after four equal bytes, the next byte is
+    // a count of further repeats. The RLE state carries across blocks.
+    for (let i = 0; i < n; i++) {
+      index = next[index];
+      const b = block[index];
+      if (run === 4) {
+        for (let k = 0; k < b; k++) emit(last);
+        run = 0;
+      } else {
+        if (b === last) run++;
+        else {
+          run = 1;
+          last = b;
+        }
+        emit(b);
+      }
+    }
+  }
+  if (pos < expectedLen) fail('stream ended early (' + pos + '/' + expectedLen + ' bytes)');
+  if (streamCrc !== null && crc32(out, pos) !== streamCrc) fail('CRC mismatch');
+  return out;
+}
+
 /* Decode a StuffIt entry name. Names are MacRoman; use EVRSRC's decoder when it's
  * on the global (the loader exposes it) so non-ASCII names (e.g. the "ƒ" folder)
  * read correctly, else fall back to Latin-1. Only the ASCII fork names matter for
@@ -246,8 +468,8 @@ function sitName(sub) {
 /* ---------------- StuffIt 5 archive parser ----------------
  * Walk the entry tree and return one record per fork:
  *   { path, name, isResource, method, offset, compLength, length }
- * Reimplemented from the format documented by XADStuffIt5Parser. Only method 13
- * (uncompressed 0 also passes through) is decompressed by extractForks below. */
+ * Reimplemented from the format documented by XADStuffIt5Parser. Methods 13 and
+ * 15 (and uncompressed 0) are decompressed by extractFork below. */
 function parseSit(bytes) {
   const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
@@ -430,6 +652,7 @@ function extractFork(bytes, entry) {
     return comp.slice();
   }
   if (method === 13) return unstuff13(comp, length);
+  if (method === 15) return unstuff15(comp, length);
   throw new Error('unsupported StuffIt method ' + method);
 }
 
@@ -484,9 +707,10 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
 }
 
 if (typeof module !== 'undefined' && module.exports)
-  module.exports = { unstuff13, parseSit, extractFork };
+  module.exports = { unstuff13, unstuff15, parseSit, extractFork };
 if (typeof self !== 'undefined') {
   self.unstuff13 = unstuff13;
+  self.unstuff15 = unstuff15;
   self.parseSit = parseSit;
   self.extractFork = extractFork;
 }

@@ -17,7 +17,7 @@ const { loadFork, parseFork, decodeRecord, buildFork, resolveType } = require('.
 const { decodePict } = require('./evpict.js');
 const { decodeSnd } = require('./evsnd.js');
 const { compositeSprite } = require('./evsprite.js');
-const { parseSit, extractFork, unstuff13 } = require('./evsit.js');
+const { parseSit, extractFork, unstuff13, unstuff15 } = require('./evsit.js');
 const { buildData, buildManifest, routeAssets } = require('./evbuild.js');
 
 const ROOT = path.join(__dirname, '..');
@@ -208,6 +208,46 @@ function checkSit() {
   console.log(`.sit : ${exact}/${tested} forks decompress byte-exact (${pct(exact, tested)})`);
 }
 
+// Method 15 ("Arsenic"): Macintosh Garden's Escape_Velocity_1.0.4.sit, if present.
+// A different release, so compare resource by resource against the reference
+// forks (headers and changed resources legitimately differ): every fork must
+// decode with a matching stream CRC, and Sounds/Music/Titles are unchanged since
+// 1.0.4 so every resource in them must match byte for byte.
+function checkSit15() {
+  const sitPath = path.join(ROOT, 'EV_data', 'Escape_Velocity_1.0.4.sit');
+  if (!fs.existsSync(sitPath)) return;
+  const sit = new Uint8Array(fs.readFileSync(sitPath));
+  const forks = parseSit(sit).filter((e) => e.isResource && e.method === 15);
+  let decoded = 0,
+    same = 0,
+    total = 0;
+  for (const e of forks) {
+    let out;
+    try {
+      out = extractFork(sit, e);
+    } catch (err) {
+      console.log(`  ✗ ${e.name}: ${err.message}`);
+      continue;
+    }
+    decoded++;
+    const ref = D(e.name + '.rsrc');
+    if (!['EV Sounds', 'EV Music', 'EV Titles'].includes(e.name) || !fs.existsSync(ref)) continue;
+    const refTypes = parseFork(loadFork(ref).fork);
+    for (const t of parseFork(Buffer.from(out))) {
+      const rt = refTypes.find((x) => x.typeName === t.typeName);
+      for (const r of t.resources) {
+        total++;
+        const rr = rt && rt.resources.find((x) => x.id === r.id);
+        if (rr && Buffer.compare(r.data(), rr.data()) === 0) same++;
+      }
+    }
+  }
+  console.log(
+    `.sit15: ${decoded}/${forks.length} Arsenic forks decode (CRC ok); ` +
+      `${same}/${total} unchanged resources byte-exact (${pct(same, total)})`,
+  );
+}
+
 // buildData (browser build path) must match evexport (native build path)
 // byte-for-byte, so the loader ships the same game database. The only volatile
 // field is `generated`; source was aligned to path.basename ('EV Data.rsrc').
@@ -338,6 +378,13 @@ function checkHardening() {
   };
 
   // Truncated method-13 stream: must throw (exhausted / ended early), not spin.
+  // Method 15: garbage must fail the signature check; a truncated stream must throw.
+  must('unstuff15 throws on bad signature', () => unstuff15(new Uint8Array(64), 1000), true);
+  must(
+    'unstuff15 throws on truncated stream',
+    () => unstuff15(new Uint8Array([0x9a, 0x6e, 0xb3]), 1000),
+    true,
+  );
   must(
     'unstuff13 throws on truncated stream',
     () => unstuff13(new Uint8Array([0x00, 0xff, 0xff, 0xff]), 100000),
@@ -529,6 +576,7 @@ function checkShellAssembles() {
 
 checkSprites();
 checkSit();
+checkSit15();
 checkBuildData();
 checkHardening();
 checkPluginMerge();
