@@ -393,11 +393,10 @@
     const pluginForks = plugins;
     // Ask the browser to keep this origin's storage under pressure — the whole
     // first-run cache lives here, so persistence cuts "it forgot my game".
-    if (navigator.storage && navigator.storage.persist) {
-      try {
-        await navigator.storage.persist();
-      } catch {}
-    }
+    // Fire and forget: Firefox answers persist() with a permission prompt and
+    // the promise stays pending until the user responds, so awaiting it would
+    // stall the build (the Launch button appeared to do nothing).
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
     const schemasByType = {};
     // Every schema is required for correct DATA generation — fail fast (naming
     // the culprits) instead of silently building a partial game database.

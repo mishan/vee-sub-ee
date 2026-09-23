@@ -17,7 +17,7 @@
  */
 'use strict';
 
-const SHELL = 've-shell-v1'; // bump when the loader app shell changes
+const SHELL = 've-shell-v2'; // bump when the loader app shell changes
 const GAME = 've-game'; // written by launch.js (the built game)
 const SCOPE = new URL(self.registration.scope); // …/loader/
 const GAME_PATH = new URL('game/', SCOPE).pathname; // …/loader/game/
